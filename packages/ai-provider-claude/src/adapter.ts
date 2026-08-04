@@ -165,6 +165,7 @@ export class ClaudeCliAdapter implements CliAdapter {
       args,
       cwd: opts.cwd,
       envPatch: opts.envPatch,
+      startsAtInputBoundary: opts.mode.type !== "fresh" || !opts.prompt,
     };
   }
 

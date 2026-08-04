@@ -12,11 +12,14 @@ const log = logger.create("workbench-pty-lifecycle");
 
 export function registerWorkbenchPtyLifecycle(): void {
   addPtyLifecycleObserver({
+    sessionStarted(taskId) {
+      closeWorkbenchDrainBoundary(taskId);
+    },
     inputStarted(taskId) {
       closeWorkbenchDrainBoundary(taskId);
     },
-    async providerTurnCompleted(taskId) {
-      openWorkbenchDrainBoundary(taskId);
+    async providerTurnCompleted(taskId, _turnKey, executionId) {
+      openWorkbenchDrainBoundary(taskId, executionId);
       await recordWorkbenchProviderTurnCompleted(taskId).catch((error) => {
         log.warn("Failed to project provider turn completion", {
           taskId,

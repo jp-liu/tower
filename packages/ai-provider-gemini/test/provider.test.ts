@@ -56,6 +56,7 @@ describe("Gemini provider", () => {
     expect(plan.args).not.toContain("--append-system-prompt");
     expect(plan.initialInput).toContain("Tower system instructions (23 characters):\nTower rules\nsecond line");
     expect(plan.initialInput).toContain(`User prompt (${prompt.length} characters):\n${prompt}`);
+    expect(plan.startsAtInputBoundary).toBe(false);
   });
 
   it("maps resume and continue to Gemini 0.38 semantics without initial input", () => {
@@ -66,6 +67,8 @@ describe("Gemini provider", () => {
     expect(latest.args).toEqual(["--yolo", "--resume", "latest"]);
     expect(resume.initialInput).toBeUndefined();
     expect(latest.initialInput).toBeUndefined();
+    expect(resume.startsAtInputBoundary).toBe(true);
+    expect(latest.startsAtInputBoundary).toBe(true);
     expect(adapter.buildHelloProbe({ command: "/bin/gemini", cwd: "/work", prompt: "hello" })).toEqual({
       command: "/bin/gemini",
       args: ["--prompt", "hello", "--output-format", "json"],
@@ -80,6 +83,7 @@ describe("Gemini provider", () => {
     const adapter = new GeminiCliAdapter(host());
     const plan = adapter.buildSessionProcess({ prompt: "", cwd: "/work", mode: { type: "fresh" } });
     expect(plan.initialInput).toBeUndefined();
+    expect(plan.startsAtInputBoundary).toBe(true);
   });
 
   it("reports safe network query failures without exposing output", async () => {

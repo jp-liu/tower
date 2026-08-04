@@ -31,6 +31,7 @@ export interface TerminalExecutionBinding {
 
 export interface TerminalLaunch {
   processSpec: ReturnType<NonNullable<ResolvedCapabilityTarget["cli"]>["adapter"]["buildSessionProcess"]>;
+  startsAtInputBoundary: boolean;
   envOverrides: Record<string, string>;
   baseEnv: Record<string, string>;
   adapter: NonNullable<ResolvedCapabilityTarget["cli"]>["adapter"];
@@ -124,6 +125,9 @@ export async function buildTerminalLaunch(
   );
   return {
     processSpec,
+    // Third-party adapters predating this contract remain BUSY until their
+    // provider callback confirms a turn boundary.
+    startsAtInputBoundary: processSpec.startsAtInputBoundary === true,
     envOverrides: Object.fromEntries(
       Object.entries(processSpec.envPatch ?? {})
         .filter((entry): entry is [string, string] => typeof entry[1] === "string"),

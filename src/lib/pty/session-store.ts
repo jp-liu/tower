@@ -1,6 +1,7 @@
 import { PtySession } from "./pty-session";
 import { resolveSpawnTargetSync } from "@/lib/platform";
 import { recordSessionPid, clearSessionPid } from "./orphan-reaper";
+import { notifyPtySessionStarted } from "./lifecycle";
 
 // D-04: globalThis singleton — survives HMR/module re-evaluation in Next.js dev mode.
 // Without this, ws-server.ts (loaded once via instrumentation) and agent-actions.ts
@@ -23,7 +24,9 @@ export function createSession(
   onIdle?: () => void,
   idleThresholdMs?: number,
   initialInput?: string,
-  baseEnvOverride?: Record<string, string>
+  baseEnvOverride?: Record<string, string>,
+  startsAtInputBoundary = false,
+  executionId?: string,
 ): PtySession {
   // Kill any existing session for this taskId before creating a new one. We do
   // NOT clear its pid file here — recordSessionPid below overwrites it, which
@@ -44,8 +47,11 @@ export function createSession(
     onIdle,
     idleThresholdMs,
     baseEnvOverride,
+    startsAtInputBoundary,
+    executionId,
   );
   sessions.set(taskId, session);
+  notifyPtySessionStarted(taskId, startsAtInputBoundary);
   // Persist pid so a hard Tower crash can reap this group on next boot.
   void recordSessionPid(taskId, session.pid);
   if (initialInput !== undefined) session.writeInitialInput(initialInput);

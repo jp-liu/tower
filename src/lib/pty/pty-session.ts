@@ -5,6 +5,7 @@ import { planTerminalWrite } from "./terminal-submit";
 
 export class PtySession {
   readonly taskId: string;
+  readonly executionId: string | null;
   private readonly _pty: pty.IPty;
   killed = false;
   disconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -29,10 +30,7 @@ export class PtySession {
   private _pendingInputKeys = new Set<string>();
   private _acceptedInputKeys = new Set<string>();
   private static readonly INPUT_KEY_HISTORY_MAX = 256;
-  // Conservative by default: a newly spawned CLI may be booting or processing
-  // its positional prompt. Only a provider turn-complete callback may mark the
-  // live terminal as safe for autonomous Workbench input.
-  private _turnState: "BUSY" | "IDLE" = "BUSY";
+  private _turnState: "BUSY" | "IDLE";
 
   constructor(
     taskId: string,
@@ -44,12 +42,16 @@ export class PtySession {
     envOverrides?: Record<string, string>,
     onIdle?: () => void,
     idleThresholdMs?: number,
-    baseEnvOverride?: Record<string, string>
+    baseEnvOverride?: Record<string, string>,
+    startsAtInputBoundary = false,
+    executionId?: string,
   ) {
     this.taskId = taskId;
+    this.executionId = executionId ?? null;
     this._onData = onData;
     this._onIdle = onIdle ?? null;
     this._idleThresholdMs = Math.max(idleThresholdMs ?? 180_000, 180_000);
+    this._turnState = startsAtInputBoundary ? "IDLE" : "BUSY";
 
     // Build env: inherit full parent env, strip Claude nesting vars and Tower's
     // own data-root config, ensure PATH exists

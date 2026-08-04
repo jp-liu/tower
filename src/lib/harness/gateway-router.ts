@@ -269,6 +269,7 @@ export type GatewayRouteResult =
 type EnsureWorkbench = (taskId: string) => Promise<{
   mode: string;
   executionId: string | null;
+  startsAtInputBoundary?: boolean;
 }>;
 
 type DeliverySender = (input: Parameters<typeof sendViaHarnessGateway>[0]) => Promise<HarnessGatewaySendResult>;
@@ -1314,7 +1315,11 @@ async function completeDiscussionTurn(inboundId: string, response: string): Prom
 
 async function defaultEnsureWorkbench(taskId: string) {
   const result = await continueOrStartTaskExecution(taskId);
-  return { mode: result.mode, executionId: result.executionId };
+  return {
+    mode: result.mode,
+    executionId: result.executionId,
+    startsAtInputBoundary: result.startsAtInputBoundary,
+  };
 }
 
 async function requeueAbandonedWorkbenchEvent(input: {
@@ -1715,7 +1720,7 @@ export async function routeGatewayInbound(
   let workbench: { mode: string; executionId: string | null } | { error: string };
   try {
     workbench = await ensureWorkbench(workbenchTaskId);
-    activateWorkbenchCommandConsumer(workbenchTaskId, workbench.mode);
+    activateWorkbenchCommandConsumer(workbenchTaskId, workbench);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     workbench = { error: message };
@@ -2527,9 +2532,9 @@ export async function recoverQueuedGatewayWork(
         }
         const resumed = await ensureWorkbench(taskId);
         if (resumed.mode !== "already_running") {
-          // The resumed provider must confirm its first completed turn before
-          // queued work can be injected.
-          activateWorkbenchCommandConsumer(taskId, resumed.mode);
+          // Empty-input launches open immediately; startup prompts remain
+          // fenced until this execution's provider completion arrives.
+          activateWorkbenchCommandConsumer(taskId, resumed);
         } else {
           restoreBoundary(taskId);
         }
@@ -2592,10 +2597,7 @@ export async function recoverQueuedGatewayWork(
       }, sender);
       const resumed = await ensureWorkbench(taskId);
       if (resumed.mode !== "already_running") {
-        // A server restart loses process-local boundary state. A resumed PTY is
-        // still BUSY until its provider callback (or durable replay) confirms
-        // the first completed turn.
-        activateWorkbenchCommandConsumer(taskId, resumed.mode);
+        activateWorkbenchCommandConsumer(taskId, resumed);
       } else {
         // `already_running` can mean either an active turn or an idle TUI whose
         // process-local drain token was lost during a server/module restart.

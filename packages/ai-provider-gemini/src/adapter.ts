@@ -161,6 +161,7 @@ export class GeminiCliAdapter implements CliAdapter {
       cwd: options.cwd,
       envPatch: options.envPatch,
       initialInput,
+      startsAtInputBoundary: initialInput === undefined,
     };
   }
 

@@ -127,9 +127,13 @@ export async function POST(request: NextRequest) {
   // that guard is clear, publish the provider boundary to interested modules.
   if (ownsCurrentProviderTurn) {
     if (eventId) {
-      await notifyPtyProviderTurnCompleted(task.id, `${execution?.id ?? task.id}:${eventId}`);
+      await notifyPtyProviderTurnCompleted(
+        task.id,
+        `${execution?.id ?? task.id}:${eventId}`,
+        execution?.id,
+      );
     } else {
-      await notifyPtyProviderTurnCompleted(task.id);
+      await notifyPtyProviderTurnCompleted(task.id, undefined, execution?.id);
     }
   }
 

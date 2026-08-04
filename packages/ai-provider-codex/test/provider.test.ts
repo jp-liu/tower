@@ -62,6 +62,7 @@ describe("Codex provider", () => {
       "-c", `developer_instructions=${JSON.stringify(systemPrompt)}`,
       "--model", "gpt-5.5", "fix it",
     ]);
+    expect(fresh.startsAtInputBoundary).toBe(false);
     const resumed = adapter.buildSessionProcess({
       prompt: "ignored", cwd: "/work", mode: { type: "resume", sessionId: "s-1" }, systemPrompt,
     });
@@ -71,17 +72,21 @@ describe("Codex provider", () => {
       "resume", "s-1",
     ]);
     expect(resumed.args).not.toContain("--append-system-prompt");
+    expect(resumed.startsAtInputBoundary).toBe(true);
     expect(adapter.buildHelloProbe({ command: "/bin/codex", cwd: "/work", prompt: "hello" }))
       .toEqual({ command: "/bin/codex", args: ["exec", "hello"], cwd: "/work" });
   });
 
   it("uses resume --last and preserves a long quoted prompt without shell syntax", () => {
     const adapter = new CodexCliAdapter(host());
-    expect(adapter.buildSessionProcess({ prompt: "", cwd: "/work", mode: { type: "continue" } }).args)
-      .toEqual([
+    const continued = adapter.buildSessionProcess({ prompt: "", cwd: "/work", mode: { type: "continue" } });
+    expect(continued.args).toEqual([
         "--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hook-trust",
         "resume", "--last",
       ]);
+    expect(continued.startsAtInputBoundary).toBe(true);
+    expect(adapter.buildSessionProcess({ prompt: "", cwd: "/work", mode: { type: "fresh" } }).startsAtInputBoundary)
+      .toBe(true);
     expect(adapter.classifySessionFailure({
       mode: { type: "continue" }, exitCode: 1, output: "no rollout found for session",
     })).toMatchObject({ code: "SESSION_NOT_FOUND", retryableWithFresh: true });
@@ -89,6 +94,7 @@ describe("Codex provider", () => {
     const plan = adapter.buildSessionProcess({ prompt, cwd: "/work", mode: { type: "fresh" } });
     expect(plan.command).toBe("/bin/codex");
     expect(plan.args.at(-1)).toBe(prompt);
+    expect(plan.startsAtInputBoundary).toBe(false);
   });
 
   it("reports safe rate-limit query failures without exposing stderr", async () => {

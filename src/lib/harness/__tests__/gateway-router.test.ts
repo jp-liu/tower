@@ -1120,6 +1120,7 @@ describe("gateway inbound routing", () => {
     const ensure = vi.fn(async () => ({
       mode: "started" as const,
       executionId: "fresh-workbench",
+      startsAtInputBoundary: false,
     }));
     const routed = await routeGatewayInbound(
       inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Wake the new Workbench" }),
@@ -1133,6 +1134,29 @@ describe("gateway inbound routing", () => {
     expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(false);
   });
 
+  it.each(["continued", "started"] as const)(
+    "opens queued Gateway work when a %s Workbench has no startup provider input",
+    async (mode) => {
+      const ensure = vi.fn(async () => ({
+        mode,
+        executionId: `${mode}-workbench`,
+        startsAtInputBoundary: true,
+      }));
+      const routed = await routeGatewayInbound(
+        inbound({ project: alphaId, intent: "PROJECT_WORK", content: `Wake ${mode}` }),
+        ensure,
+        successfulSender(`om_${mode}_ready_ack`),
+      );
+      expect(routed.mode).toBe("project_work");
+      if (routed.mode !== "project_work") return;
+
+      expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId, `${mode}-workbench`)).toBe(true);
+      expect(await db.workbenchEvent.findFirst({
+        where: { dedupKey: `gateway-work:${routed.inboundId}` },
+      })).toMatchObject({ state: "PENDING" });
+    },
+  );
+
   it("recreates a missing durable event and resumes an unstarted Workbench", async () => {
     const routed = await routeGatewayInbound(
       inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Recover this queued request" }),
@@ -1143,12 +1167,16 @@ describe("gateway inbound routing", () => {
     if (routed.mode !== "project_work") return;
 
     await db.workbenchEvent.deleteMany({ where: { dedupKey: `gateway-work:${routed.inboundId}` } });
-    const ensure = vi.fn(async () => ({ mode: "continued", executionId: "recovered-exec" }));
+    const ensure = vi.fn(async () => ({
+      mode: "continued",
+      executionId: "recovered-exec",
+      startsAtInputBoundary: true,
+    }));
 
     await expect(recoverQueuedGatewayWork(ensure, 100, successfulSender(), undefined, { projectId: alphaId }))
       .resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
     expect(ensure).toHaveBeenCalledWith(routed.workbenchTaskId);
-    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId)).toBe(false);
+    expect(hasWorkbenchDrainBoundary(routed.workbenchTaskId, "recovered-exec")).toBe(true);
     expect(await db.workbenchEvent.findFirst({
       where: {
         parentTaskId: routed.workbenchTaskId,

@@ -12,6 +12,7 @@ import { getSession, markSessionTurnComplete } from "@/lib/pty/session-store";
 import { planTerminalWrite } from "@/lib/pty/terminal-submit";
 import { notifyWorkbenchBatchDispatched } from "./delivery-lifecycle";
 import {
+  getWorkbenchDrainBoundaryExecutionId,
   hasWorkbenchDrainBoundary,
   markWorkbenchDrainBoundary,
   scheduleAtWorkbenchDrainBoundary,
@@ -93,6 +94,7 @@ export type WorkbenchBatchDelivery = (batch: WorkbenchDrainBatch) => Promise<voi
 export type EnsureWorkbenchRunning = (taskId: string) => Promise<{
   mode: "already_running" | "continued" | "started";
   executionId: string | null;
+  startsAtInputBoundary?: boolean;
 }>;
 
 export interface WorkbenchReconcileResult {
@@ -972,6 +974,9 @@ export async function heartbeatWorkbenchBatch(
 export async function deliverWorkbenchBatchToParent(batch: WorkbenchDrainBatch): Promise<void> {
   const session = getSession(batch.parentTaskId);
   if (!session || session.killed) throw new Error("Parent terminal is not running");
+  if (batch.parentExecutionId && session.executionId !== batch.parentExecutionId) {
+    throw new Error("Parent terminal belongs to a different execution");
+  }
   const { body, submitKey } = planTerminalWrite(batch.prompt, true);
   if (body) session.write(body);
   if (submitKey) {
@@ -979,6 +984,9 @@ export async function deliverWorkbenchBatchToParent(batch: WorkbenchDrainBatch):
     const current = getSession(batch.parentTaskId);
     if (!current || current !== session || current.killed) {
       throw new Error("Parent terminal exited before batch submit");
+    }
+    if (batch.parentExecutionId && current.executionId !== batch.parentExecutionId) {
+      throw new Error("Parent terminal execution changed before batch submit");
     }
     current.write(submitKey);
   }
@@ -989,15 +997,27 @@ export async function drainReadyWorkbenchParent(
   deliver: WorkbenchBatchDelivery = deliverWorkbenchBatchToParent,
 ): Promise<void> {
   if (!hasWorkbenchDrainBoundary(parentTaskId)) return;
+  const boundaryExecutionId = getWorkbenchDrainBoundaryExecutionId(parentTaskId);
+  if (boundaryExecutionId) {
+    const currentExecution = await db.taskExecution.findFirst({
+      where: { taskId: parentTaskId, status: { in: ["RUNNING", "PAUSED"] } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (currentExecution?.id !== boundaryExecutionId) {
+      takeWorkbenchDrainBoundary(parentTaskId, boundaryExecutionId);
+      return;
+    }
+  }
   const pending = await db.workbenchEvent.count({
     where: { parentTaskId, state: "PENDING" },
   });
-  if (pending === 0 || !takeWorkbenchDrainBoundary(parentTaskId)) return;
+  if (pending === 0 || !takeWorkbenchDrainBoundary(parentTaskId, boundaryExecutionId)) return;
   const result = await drainWorkbenchEvents(parentTaskId, deliver);
   if (!result.delivered) {
     const session = getSession(parentTaskId);
     if (session && !session.killed) {
-      markWorkbenchDrainBoundary(parentTaskId);
+      markWorkbenchDrainBoundary(parentTaskId, boundaryExecutionId ?? null);
       scheduleReadyParentDrain(parentTaskId, "HIGH", 1000);
     }
   }
@@ -1016,8 +1036,8 @@ function scheduleReadyParentDrain(
   });
 }
 
-export function openWorkbenchDrainBoundary(parentTaskId: string): void {
-  markWorkbenchDrainBoundary(parentTaskId);
+export function openWorkbenchDrainBoundary(parentTaskId: string, executionId?: string | null): void {
+  markWorkbenchDrainBoundary(parentTaskId, executionId ?? null);
   scheduleReadyParentDrain(parentTaskId, "NORMAL");
 }
 
@@ -1099,18 +1119,22 @@ export async function restoreWorkbenchBoundaryFromProviderTranscript(parentTaskI
       sessionId: { not: null },
     },
     orderBy: { createdAt: "desc" },
-    select: { sessionId: true },
+    select: { id: true, sessionId: true },
   });
   if (!execution?.sessionId || !claudeTranscriptEndedAtTurnBoundary(execution.sessionId)) return false;
   if (!markSessionTurnComplete(parentTaskId)) return false;
-  openWorkbenchDrainBoundary(parentTaskId);
+  openWorkbenchDrainBoundary(parentTaskId, execution.id);
   return true;
 }
 
 async function defaultEnsureWorkbenchRunning(taskId: string) {
   const { continueOrStartTaskExecution } = await import("@/actions/agent-actions");
   const result = await continueOrStartTaskExecution(taskId);
-  return { mode: result.mode, executionId: result.executionId };
+  return {
+    mode: result.mode,
+    executionId: result.executionId,
+    startsAtInputBoundary: result.startsAtInputBoundary,
+  };
 }
 
 /**
@@ -1172,15 +1196,22 @@ export async function reconcilePendingWorkbenchEvents(
             result.busy++;
             continue;
           }
-        } else {
-          // A new CLI may still be booting or processing its startup prompt.
-          // Wait for its provider callback (or persisted completion replay)
-          // instead of inheriting the previous execution's turn boundary.
+        } else if (!resumed.startsAtInputBoundary || !resumed.executionId) {
+          // A CLI carrying startup input owns an active provider turn. Only its
+          // fenced provider callback (or persisted replay) may open the queue.
           await recordWorkbenchRuntime(parentTaskId, "STARTING", {
             executionId: resumed.executionId,
             blockedReason: "Waiting for the current execution's provider-confirmed turn boundary",
           });
           result.busy++;
+          continue;
+        } else {
+          openWorkbenchDrainBoundary(parentTaskId, resumed.executionId);
+          await recordWorkbenchRuntime(parentTaskId, "IDLE", {
+            executionId: resumed.executionId,
+            blockedReason: null,
+          });
+          result.woken++;
           continue;
         }
       }

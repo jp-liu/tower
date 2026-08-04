@@ -1,32 +1,38 @@
 type BoundaryState = {
-  ready: Set<string>;
+  ready: Map<string, string | null>;
   timers: Map<string, { timer: ReturnType<typeof setTimeout>; dueAt: number }>;
 };
 
 const globalBoundary = globalThis as typeof globalThis & {
-  __workbenchDrainBoundary?: BoundaryState;
+  __workbenchDrainBoundaryV2?: BoundaryState;
 };
 
-const state = globalBoundary.__workbenchDrainBoundary ?? {
-  ready: new Set<string>(),
+const state = globalBoundary.__workbenchDrainBoundaryV2 ?? {
+  ready: new Map<string, string | null>(),
   timers: new Map<string, { timer: ReturnType<typeof setTimeout>; dueAt: number }>(),
 };
-globalBoundary.__workbenchDrainBoundary = state;
+globalBoundary.__workbenchDrainBoundaryV2 = state;
 
-export function markWorkbenchDrainBoundary(taskId: string): void {
-  state.ready.add(taskId);
+export function markWorkbenchDrainBoundary(taskId: string, executionId: string | null = null): void {
+  state.ready.set(taskId, executionId);
 }
 
-export function hasWorkbenchDrainBoundary(taskId: string): boolean {
-  return state.ready.has(taskId);
+export function getWorkbenchDrainBoundaryExecutionId(taskId: string): string | null | undefined {
+  return state.ready.get(taskId);
 }
 
-export function takeWorkbenchDrainBoundary(taskId: string): boolean {
-  const ready = state.ready.delete(taskId);
+export function hasWorkbenchDrainBoundary(taskId: string, executionId?: string | null): boolean {
+  if (!state.ready.has(taskId)) return false;
+  return executionId === undefined || state.ready.get(taskId) === executionId;
+}
+
+export function takeWorkbenchDrainBoundary(taskId: string, executionId?: string | null): boolean {
+  if (!hasWorkbenchDrainBoundary(taskId, executionId)) return false;
+  state.ready.delete(taskId);
   const scheduled = state.timers.get(taskId);
   if (scheduled) clearTimeout(scheduled.timer);
   state.timers.delete(taskId);
-  return ready;
+  return true;
 }
 
 export function closeWorkbenchDrainBoundary(taskId: string): void {

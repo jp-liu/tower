@@ -70,6 +70,7 @@ export interface ActiveExecutionInfo {
 export interface TerminalExecutionResult extends TerminalTargetSnapshot {
   executionId: string;
   worktreePath: string | null;
+  startsAtInputBoundary: boolean;
 }
 
 const log = logger.create("agent-actions");
@@ -358,6 +359,7 @@ export async function resumePtyExecution(
     },
   });
 
+  let launch: TerminalLaunch;
   try {
     await db.task.update({
       where: { id: taskId },
@@ -367,7 +369,7 @@ export async function resumePtyExecution(
 
     const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-    const launch = await buildTerminalLaunch(fixedTarget, {
+    launch = await buildTerminalLaunch(fixedTarget, {
     prompt: "",
     cwd,
     mode: { type: "resume", sessionId: previousSessionId },
@@ -461,6 +463,8 @@ export async function resumePtyExecution(
       idleTimeoutSec * 1000,
       launch.processSpec.initialInput,
       launch.baseEnv,
+      launch.startsAtInputBoundary,
+      execution.id,
     );
   } catch (error) {
     await failTerminalPrestart({
@@ -474,6 +478,7 @@ export async function resumePtyExecution(
   return {
     executionId: execution.id,
     worktreePath: prevExec.worktreePath ?? baseCwd ?? null,
+    startsAtInputBoundary: launch.startsAtInputBoundary,
     ...fixedSnapshot,
   };
 }
@@ -585,6 +590,7 @@ export async function continueLatestPtyExecution(
     },
   });
 
+  let launch: TerminalLaunch;
   try {
     await db.task.update({
       where: { id: taskId },
@@ -594,7 +600,7 @@ export async function continueLatestPtyExecution(
 
     const usernameVal = await readConfigValue<string>("onboarding.username", "");
 
-    const launch = await buildTerminalLaunch(fixedTarget, {
+    launch = await buildTerminalLaunch(fixedTarget, {
     prompt: "",
     cwd,
     mode: { type: "continue" },
@@ -683,6 +689,8 @@ export async function continueLatestPtyExecution(
       idleTimeoutSec * 1000,
       launch.processSpec.initialInput,
       launch.baseEnv,
+      launch.startsAtInputBoundary,
+      execution.id,
     );
   } catch (error) {
     await failTerminalPrestart({
@@ -696,6 +704,7 @@ export async function continueLatestPtyExecution(
   return {
     executionId: execution.id,
     worktreePath: latestExec.worktreePath ?? baseCwd ?? null,
+    startsAtInputBoundary: launch.startsAtInputBoundary,
     ...fixedSnapshot,
   };
 }
@@ -720,6 +729,7 @@ export async function continueOrStartTaskExecution(
   connectionId: string | null;
   modelId: string | null;
   targetId: string | null;
+  startsAtInputBoundary: boolean;
 }> {
   // Already running? Respect the one-active-PTY-per-task constraint — don't restart.
   const { getSession } = await import("@/lib/pty/session-store");
@@ -736,6 +746,7 @@ export async function continueOrStartTaskExecution(
       connectionId: exec?.connectionId ?? null,
       modelId: exec?.modelId ?? null,
       targetId: exec?.targetId ?? null,
+      startsAtInputBoundary: session.isAtTurnBoundary,
     };
   }
 
@@ -1117,6 +1128,8 @@ export async function startPtyExecution(
             idleTimeoutSec * 1000,
             launch.processSpec.initialInput,
             launch.baseEnv,
+            launch.startsAtInputBoundary,
+            execution.id,
           );
         } catch {
           await db.taskExecution.updateMany({
@@ -1150,6 +1163,7 @@ export async function startPtyExecution(
   return {
     executionId: execution.id,
     worktreePath: resolvedWorktreePath ?? baseCwd ?? null,
+    startsAtInputBoundary: selected.launch.startsAtInputBoundary,
     ...selected.snapshot,
   };
 }

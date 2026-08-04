@@ -648,40 +648,147 @@ describe("Workbench durable coordinator", () => {
     resetWorkbenchDrainBoundariesForTests();
   });
 
-  it("restarts a missing Workbench but waits for its provider-confirmed boundary", async () => {
-    const { getSession } = await import("@/lib/pty/session-store");
+  it.each(["continued", "started"] as const)(
+    "drains pending work after a %s Workbench starts without provider input",
+    async (mode) => {
+      const { getSession } = await import("@/lib/pty/session-store");
+      const {
+        drainReadyWorkbenchParent,
+        enqueueWorkbenchEvent,
+        reconcilePendingWorkbenchEvents,
+      } = await import("@/lib/workbench/coordinator");
+      const { hasWorkbenchDrainBoundary } = await import("@/lib/workbench/boundary");
+      vi.mocked(getSession).mockReturnValue(undefined);
+      await prisma.taskExecution.updateMany({
+        where: { taskId: "parent" },
+        data: { status: "FAILED", endedAt: new Date() },
+      });
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('parent-exec-2', 'parent', 'RUNNING')`,
+      );
+      await enqueueWorkbenchEvent({
+        parentTaskId: "parent",
+        sourceTaskId: "child-a",
+        kind: "CHILD_REVIEW_REQUIRED",
+        dedupKey: `reconcile-ready-${mode}`,
+        payload: { childTaskId: "child-a", childTitle: "Child A" },
+      });
+      const ensure = vi.fn(async () => ({
+        mode,
+        executionId: "parent-exec-2",
+        startsAtInputBoundary: true,
+      }));
+
+      await expect(reconcilePendingWorkbenchEvents(ensure)).resolves.toEqual({
+        scanned: 1,
+        woken: 1,
+        busy: 0,
+        failed: 0,
+      });
+      expect(hasWorkbenchDrainBoundary("parent", "parent-exec-2")).toBe(true);
+
+      const deliveries: string[] = [];
+      await drainReadyWorkbenchParent("parent", async (batch) => {
+        deliveries.push(batch.prompt);
+      });
+      expect(deliveries).toHaveLength(1);
+      expect(await prisma.workbenchEvent.findFirst()).toMatchObject({ state: "PROCESSING" });
+      expect(await prisma.workbenchRuntime.findUnique({ where: { taskId: "parent" } }))
+        .toMatchObject({ executionId: "parent-exec-2", state: "BUSY" });
+    },
+  );
+
+  it.each(["continued", "started"] as const)(
+    "keeps a %s Workbench with startup input fenced until provider completion",
+    async (mode) => {
+      const { getSession } = await import("@/lib/pty/session-store");
+      const {
+        enqueueWorkbenchEvent,
+        reconcilePendingWorkbenchEvents,
+      } = await import("@/lib/workbench/coordinator");
+      const { hasWorkbenchDrainBoundary } = await import("@/lib/workbench/boundary");
+      vi.mocked(getSession).mockReturnValue(undefined);
+      await enqueueWorkbenchEvent({
+        parentTaskId: "parent",
+        sourceTaskId: "child-a",
+        kind: "CHILD_REVIEW_REQUIRED",
+        dedupKey: "reconcile-missing-parent",
+        payload: { childTaskId: "child-a", childTitle: "Child A" },
+      });
+      const ensure = vi.fn(async () => ({
+        mode,
+        executionId: "parent-exec-2",
+        startsAtInputBoundary: false,
+      }));
+
+      await expect(reconcilePendingWorkbenchEvents(ensure)).resolves.toEqual({
+        scanned: 1,
+        woken: 0,
+        busy: 1,
+        failed: 0,
+      });
+      expect(ensure).toHaveBeenCalledWith("parent");
+      expect(hasWorkbenchDrainBoundary("parent")).toBe(false);
+      expect(await prisma.workbenchRuntime.findUnique({ where: { taskId: "parent" } }))
+        .toMatchObject({
+          executionId: "parent-exec-2",
+          state: "STARTING",
+          pendingEvents: 1,
+        });
+    },
+  );
+
+  it("does not let an old execution boundary unlock the current Workbench", async () => {
     const {
+      drainReadyWorkbenchParent,
       enqueueWorkbenchEvent,
-      reconcilePendingWorkbenchEvents,
+      openWorkbenchDrainBoundary,
     } = await import("@/lib/workbench/coordinator");
     const { hasWorkbenchDrainBoundary } = await import("@/lib/workbench/boundary");
-    vi.mocked(getSession).mockReturnValue(undefined);
     await enqueueWorkbenchEvent({
       parentTaskId: "parent",
       sourceTaskId: "child-a",
       kind: "CHILD_REVIEW_REQUIRED",
-      dedupKey: "reconcile-missing-parent",
+      dedupKey: "stale-execution-boundary",
       payload: { childTaskId: "child-a", childTitle: "Child A" },
     });
-    const ensure = vi.fn(async () => ({
-      mode: "continued" as const,
-      executionId: "parent-exec-2",
-    }));
+    openWorkbenchDrainBoundary("parent", "parent-exec");
+    await prisma.$executeRawUnsafe(
+      `UPDATE "TaskExecution" SET "status" = 'COMPLETED', "endedAt" = CURRENT_TIMESTAMP WHERE "id" = 'parent-exec'`,
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('parent-exec-2', 'parent', 'RUNNING')`,
+    );
+    const deliver = vi.fn(async () => undefined);
 
-    await expect(reconcilePendingWorkbenchEvents(ensure)).resolves.toEqual({
-      scanned: 1,
-      woken: 0,
-      busy: 1,
-      failed: 0,
-    });
-    expect(ensure).toHaveBeenCalledWith("parent");
+    await drainReadyWorkbenchParent("parent", deliver);
+
+    expect(deliver).not.toHaveBeenCalled();
     expect(hasWorkbenchDrainBoundary("parent")).toBe(false);
-    expect(await prisma.workbenchRuntime.findUnique({ where: { taskId: "parent" } }))
-      .toMatchObject({
-        executionId: "parent-exec-2",
-        state: "STARTING",
-        pendingEvents: 1,
-      });
+    expect(await prisma.workbenchEvent.findFirst()).toMatchObject({ state: "PENDING" });
+  });
+
+  it("refuses to write a claimed batch into a replacement PTY execution", async () => {
+    const { getSession } = await import("@/lib/pty/session-store");
+    const { deliverWorkbenchBatchToParent } = await import("@/lib/workbench/coordinator");
+    const write = vi.fn();
+    vi.mocked(getSession).mockReturnValue({
+      killed: false,
+      executionId: "parent-exec-2",
+      write,
+    } as never);
+
+    await expect(deliverWorkbenchBatchToParent({
+      batchKey: "old-execution-batch",
+      generation: 1,
+      leaseToken: "lease",
+      parentTaskId: "parent",
+      parentExecutionId: "parent-exec",
+      eventIds: [],
+      events: [],
+      prompt: "must not be delivered",
+    })).rejects.toThrow("different execution");
+    expect(write).not.toHaveBeenCalled();
   });
 
   it("backs off a failed Workbench restart instead of retrying every scanner tick", async () => {

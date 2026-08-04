@@ -4,6 +4,11 @@ export interface CliProcessSpec {
   cwd?: string;
   envPatch?: Record<string, string | null>;
   initialInput?: string;
+  /**
+   * Session plans may declare that spawning the process does not start a
+   * provider turn. Hosts must treat an omitted value conservatively.
+   */
+  startsAtInputBoundary?: boolean;
 }
 
 export interface CliProcessRunOptions {

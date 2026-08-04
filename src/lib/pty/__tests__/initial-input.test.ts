@@ -34,4 +34,17 @@ describe("PTY initial input", () => {
 
     expect(writes).toEqual([prompt, "\r"]);
   });
+
+  it("starts at an input boundary only when the launch plan explicitly declares it", () => {
+    const busy = new PtySession("busy", "codex", [], "/work", () => {}, () => {});
+    const ready = new PtySession(
+      "ready", "codex", [], "/work", () => {}, () => {},
+      undefined, undefined, undefined, undefined, true,
+    );
+
+    expect(busy.isAtTurnBoundary).toBe(false);
+    expect(ready.isAtTurnBoundary).toBe(true);
+    ready.write("gateway work");
+    expect(ready.isAtTurnBoundary).toBe(false);
+  });
 });

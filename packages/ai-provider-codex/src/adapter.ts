@@ -195,6 +195,7 @@ export class CodexCliAdapter implements CliAdapter {
       args,
       cwd: opts.cwd,
       envPatch: opts.envPatch,
+      startsAtInputBoundary: opts.mode.type !== "fresh" || !opts.prompt,
     };
   }
 

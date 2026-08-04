@@ -3,6 +3,7 @@ import "server-only";
 import {
   childStopDedupKey,
   enqueueWorkbenchEvent,
+  openWorkbenchDrainBoundary,
   restoreWorkbenchDrainBoundary,
 } from "./coordinator";
 import {
@@ -30,12 +31,19 @@ export { childStopDedupKey };
 
 export function activateWorkbenchCommandConsumer(
   taskId: string,
-  mode: "already_running" | "continued" | "started" | string,
+  launch: {
+    mode: "already_running" | "continued" | "started" | string;
+    executionId: string | null;
+    startsAtInputBoundary?: boolean;
+  },
 ): boolean {
-  if (mode === "already_running") return restoreWorkbenchDrainBoundary(taskId);
-  // Starting or resuming a CLI is not a provider turn boundary. The process may
-  // still be booting or handling its startup prompt, so only the provider
-  // callback (including durable completion replay) may open the consumer.
+  if (launch.mode === "already_running") return restoreWorkbenchDrainBoundary(taskId);
+  if (launch.startsAtInputBoundary && launch.executionId) {
+    openWorkbenchDrainBoundary(taskId, launch.executionId);
+    return true;
+  }
+  // Unknown adapters and launches carrying startup input remain BUSY until the
+  // current execution's provider callback (including durable replay) arrives.
   return false;
 }
 

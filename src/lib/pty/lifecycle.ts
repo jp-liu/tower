@@ -1,6 +1,7 @@
 export type PtyLifecycleObserver = {
+  sessionStarted?: (taskId: string, startsAtInputBoundary: boolean) => void;
   inputStarted?: (taskId: string) => void;
-  providerTurnCompleted?: (taskId: string, turnKey?: string) => void | Promise<void>;
+  providerTurnCompleted?: (taskId: string, turnKey?: string, executionId?: string) => void | Promise<void>;
 };
 
 const lifecycleGlobal = globalThis as typeof globalThis & {
@@ -26,8 +27,18 @@ export function notifyPtyInputStarted(taskId: string): void {
   for (const observer of observers()) observer.inputStarted?.(taskId);
 }
 
-export async function notifyPtyProviderTurnCompleted(taskId: string, turnKey?: string): Promise<void> {
-  await Promise.all([...observers()].map((observer) => observer.providerTurnCompleted?.(taskId, turnKey)));
+export function notifyPtySessionStarted(taskId: string, startsAtInputBoundary: boolean): void {
+  for (const observer of observers()) observer.sessionStarted?.(taskId, startsAtInputBoundary);
+}
+
+export async function notifyPtyProviderTurnCompleted(
+  taskId: string,
+  turnKey?: string,
+  executionId?: string,
+): Promise<void> {
+  await Promise.all(
+    [...observers()].map((observer) => observer.providerTurnCompleted?.(taskId, turnKey, executionId)),
+  );
 }
 
 export function resetPtyLifecycleObserverForTests(): void {

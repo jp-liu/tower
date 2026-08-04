@@ -64,10 +64,15 @@ describe("Claude provider", () => {
       "--model", "sonnet",
       "fix 'quoted'\ntext",
     ]);
-    expect(adapter.buildSessionProcess({ prompt: "ignored", cwd: "/work", mode: { type: "resume", sessionId: "s-1" } }).args)
-      .toEqual(["--dangerously-skip-permissions", "--resume", "s-1"]);
-    expect(adapter.buildSessionProcess({ prompt: "ignored", cwd: "/work", mode: { type: "continue" } }).args)
-      .toEqual(["--dangerously-skip-permissions", "--continue"]);
+    expect(fresh.startsAtInputBoundary).toBe(false);
+    const resumed = adapter.buildSessionProcess({ prompt: "ignored", cwd: "/work", mode: { type: "resume", sessionId: "s-1" } });
+    expect(resumed.args).toEqual(["--dangerously-skip-permissions", "--resume", "s-1"]);
+    expect(resumed.startsAtInputBoundary).toBe(true);
+    const continued = adapter.buildSessionProcess({ prompt: "ignored", cwd: "/work", mode: { type: "continue" } });
+    expect(continued.args).toEqual(["--dangerously-skip-permissions", "--continue"]);
+    expect(continued.startsAtInputBoundary).toBe(true);
+    expect(adapter.buildSessionProcess({ prompt: "", cwd: "/work", mode: { type: "fresh" } }).startsAtInputBoundary)
+      .toBe(true);
     expect(adapter.buildHelloProbe({ command: "/bin/claude", cwd: "/work", prompt: "hello" })).toEqual({
       command: "/bin/claude",
       args: ["--print", "hello", "--output-format", "stream-json", "--verbose"],
