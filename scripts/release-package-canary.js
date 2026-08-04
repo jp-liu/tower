@@ -7,6 +7,7 @@ const { execFileSync } = require("node:child_process");
 
 const projectRoot = path.join(__dirname, "..");
 const REQUIRED_FILES = [
+  "LICENSE",
   "bin/tower.mjs",
   "bin/network.mjs",
   ".next/standalone/server.js",

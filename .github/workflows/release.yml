@@ -1,63 +1,214 @@
-name: Publish npm package
+name: Publish npm package and GitHub Release
 
 on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: "Exact package release to publish (for example @tower-org/cli@0.3.1)"
+        description: "Exact package release (for example @tower-org/cli@0.3.2)"
+        required: true
+        type: string
+      tag:
+        description: "Existing release tag on this exact commit (for example v0.3.2)"
         required: true
         type: string
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
-  group: npm-production
+  group: production-release
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: publish with provenance
-    runs-on: ubuntu-latest
-    environment: npm-production
+  prepare:
+    name: Existing gates and exact npm pack
+    runs-on: ubuntu-24.04
     steps:
-      - name: Require repository release enablement
-        env:
-          NPM_RELEASE_ENABLED: ${{ vars.NPM_RELEASE_ENABLED }}
-        run: test "$NPM_RELEASE_ENABLED" = "true"
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
         with:
           version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org/
           scope: tower-org
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Validate exact release confirmation
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Validate tag, commit, package version, and approval
         env:
-          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          TOWER_RELEASE_TAG: ${{ inputs.tag }}
+          TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
+        run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA"
+      - name: Run existing release gates
+        run: pnpm release:prepare
+      - name: Create the exact npm pack input
         run: |
-          expected="$(node -p "require('./package.json').name + '@' + require('./package.json').version")"
-          test "$RELEASE_CONFIRMATION" = "$expected"
-          printf 'TOWER_RELEASE_APPROVED=%s\n' "$expected" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/npm-pack"
+          npm pack --pack-destination "$RUNNER_TEMP/npm-pack"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-pack
+          path: ${{ runner.temp }}/npm-pack/*.tgz
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Publish scoped public package
+  portable:
+    name: Portable ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin
+            arch: arm64
+            runner: macos-14
+          - platform: darwin
+            arch: x64
+            runner: macos-15-intel
+          - platform: linux
+            arch: x64
+            runner: ubuntu-24.04
+          - platform: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - platform: windows
+            arch: x64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-pack
+          path: ${{ runner.temp }}/npm-pack
+      - name: Build native portable payload
+        env:
+          TOWER_RELEASE_COMMIT: ${{ github.sha }}
+        run: node scripts/build-portable-release.js --tarball "${{ runner.temp }}/npm-pack" --output "${{ runner.temp }}/portable" --platform "${{ matrix.platform }}" --arch "${{ matrix.arch }}"
+      - name: Extract portable payload (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p "$RUNNER_TEMP/extracted"
+          tar -xzf "$RUNNER_TEMP/portable/tower-portable-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" -C "$RUNNER_TEMP/extracted"
+      - name: Extract portable payload (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\extracted" | Out-Null
+          tar -xzf "$env:RUNNER_TEMP\portable\tower-portable-windows-x64.tar.gz" -C "$env:RUNNER_TEMP\extracted"
+      - name: Block npm and Prisma engine download hosts (Unix)
+        if: runner.os != 'Windows'
+        run: printf '127.0.0.1 registry.npmjs.org binaries.prisma.sh\n' | sudo tee -a /etc/hosts
+      - name: Block npm and Prisma engine download hosts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content "$env:SystemRoot\System32\drivers\etc\hosts" "`n127.0.0.1 registry.npmjs.org binaries.prisma.sh"
+      - name: Offline first-start and native smoke
+        run: node scripts/release-portable-smoke.js --root "${{ runner.temp }}/extracted"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Offline smoke on Node.js 24
+        run: node scripts/release-portable-smoke.js --root "${{ runner.temp }}/extracted"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/portable/tower-portable-${{ matrix.platform }}-${{ matrix.arch }}.*
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    name: Assemble checksums and release notes
+    needs: portable
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: portable-*
+          path: ${{ runner.temp }}/release-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-pack
+          path: ${{ runner.temp }}/release-input/npm-pack
+      - run: node scripts/assemble-release-assets.js --input "$RUNNER_TEMP/release-input" --output "$RUNNER_TEMP/release-assets" --commit "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: ${{ runner.temp }}/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Protected npm and GitHub Release publication
+    needs: assemble
+    runs-on: ubuntu-24.04
+    environment: npm-production
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Require repository release enablement
+        env:
+          NPM_RELEASE_ENABLED: ${{ vars.NPM_RELEASE_ENABLED }}
+        run: test "$NPM_RELEASE_ENABLED" = "true"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org/
+          scope: tower-org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-pack
+          path: ${{ runner.temp }}/npm-pack
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: ${{ runner.temp }}/release-assets
+      - name: Revalidate immutable release identity
+        env:
+          TOWER_RELEASE_TAG: ${{ inputs.tag }}
+          TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
+        run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA"
+      - name: Publish or verify npm package with provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm release:publish
+          TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
+          TOWER_RELEASE_TAG: ${{ inputs.tag }}
+          TOWER_RELEASE_COMMIT: ${{ github.sha }}
+        run: bash scripts/release.sh --publish --tarball "$RUNNER_TEMP/npm-pack/$(basename "$RUNNER_TEMP"/npm-pack/*.tgz)"
+      - name: Create or repair GitHub Release without overwriting conflicts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOWER_RELEASE_TAG: ${{ inputs.tag }}
+          TOWER_RELEASE_COMMIT: ${{ github.sha }}
+        run: node scripts/publish-github-release.js --assets "$RUNNER_TEMP/release-assets"

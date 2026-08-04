@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
+const { validatePortableDependencies } = require("./build-portable-release.js");
 
 const projectRoot = path.join(__dirname, "..");
 const EXPECTED_REGISTRY = "https://registry.npmjs.org/";
@@ -57,6 +58,9 @@ function assertReleaseConfiguration(options = {}) {
   if (JSON.stringify(root.bin) !== JSON.stringify({ tower: "bin/tower.mjs" })) {
     errors.push("package.json must expose only the stable tower binary");
   }
+  if (root.engines?.node !== ">=22.0.0") {
+    errors.push("package.json engines.node must require Node.js >=22.0.0");
+  }
   if (root.publishConfig?.access !== "public") {
     errors.push("package.json publishConfig.access must be public");
   }
@@ -65,6 +69,11 @@ function assertReleaseConfiguration(options = {}) {
   }
   if (root.publishConfig?.provenance !== true) {
     errors.push("package.json publishConfig.provenance must be true");
+  }
+  try {
+    validatePortableDependencies();
+  } catch (error) {
+    errors.push(error.message);
   }
 
   const legacyScope = "@" + "tower/";

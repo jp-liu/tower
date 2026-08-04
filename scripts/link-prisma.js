@@ -80,8 +80,30 @@ function getVisiblePackageDir(pkg) {
     : path.join(packageRoot, "node_modules", name);
 }
 
+function resolvePackageJsonPath(pkg) {
+  try {
+    return require.resolve(`${pkg}/package.json`, { paths: [packageRoot] });
+  } catch (error) {
+    let current;
+    try {
+      current = path.dirname(require.resolve(pkg, { paths: [packageRoot] }));
+    } catch {
+      throw error;
+    }
+    while (current !== path.dirname(current)) {
+      const candidate = path.join(current, "package.json");
+      if (fs.existsSync(candidate)) {
+        const manifest = JSON.parse(fs.readFileSync(candidate, "utf8"));
+        if (manifest.name === pkg) return candidate;
+      }
+      current = path.dirname(current);
+    }
+    throw error;
+  }
+}
+
 function collectAliasTargets(pkg) {
-  const pkgJsonPath = require.resolve(`${pkg}/package.json`, { paths: [packageRoot] });
+  const pkgJsonPath = resolvePackageJsonPath(pkg);
   const realPackageDir = path.dirname(pkgJsonPath);
   const visiblePackageDir = getVisiblePackageDir(pkg);
   const candidates = new Map();

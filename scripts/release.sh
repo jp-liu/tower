@@ -7,12 +7,14 @@ cd "$(dirname "$0")/.."
 
 REGISTRY="https://registry.npmjs.org/"
 PUBLISH=0
+PACKAGE_TARBALL=""
 
-for arg in "$@"; do
-  case "$arg" in
-    --publish) PUBLISH=1 ;;
-    --dry-run) PUBLISH=0 ;;
-    *) printf 'Unknown argument: %s\n' "$arg" >&2; exit 1 ;;
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --publish) PUBLISH=1; shift ;;
+    --dry-run) PUBLISH=0; shift ;;
+    --tarball) [ "$#" -ge 2 ] || { printf '%s\n' 'Release blocked: --tarball requires a path' >&2; exit 1; }; PACKAGE_TARBALL=$2; shift 2 ;;
+    *) printf 'Unknown argument: %s\n' "$1" >&2; exit 1 ;;
   esac
 done
 
@@ -43,6 +45,8 @@ fi
 step "Validate explicit publication approval"
 EXPECTED_APPROVAL="${PACKAGE_NAME}@${PACKAGE_VERSION}"
 [ "$APPROVAL" = "$EXPECTED_APPROVAL" ] || die "set TOWER_RELEASE_APPROVED=$EXPECTED_APPROVAL after final approval"
+[ -n "${TOWER_RELEASE_TAG:-}" ] || die "TOWER_RELEASE_TAG is required for publication"
+node scripts/release-context.js --tag "$TOWER_RELEASE_TAG" --confirmation "$APPROVAL"
 [ -z "$(git status --porcelain)" ] || die "the worktree must be clean before publication"
 
 REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
@@ -52,10 +56,19 @@ case "$REMOTE_URL" in
 esac
 
 if npm view "$EXPECTED_APPROVAL" version --registry "$REGISTRY" >/dev/null 2>&1; then
-  die "$EXPECTED_APPROVAL already exists on the public registry"
+  PUBLISHED_COMMIT="$(npm view "$EXPECTED_APPROVAL" gitHead --registry "$REGISTRY" 2>/dev/null || true)"
+  [ -n "${TOWER_RELEASE_COMMIT:-}" ] || die "TOWER_RELEASE_COMMIT is required to verify an existing npm publication"
+  [ "$PUBLISHED_COMMIT" = "$TOWER_RELEASE_COMMIT" ] || die "$EXPECTED_APPROVAL exists with gitHead ${PUBLISHED_COMMIT:-missing}, expected $TOWER_RELEASE_COMMIT"
+  printf '\nVerified existing npm publication %s at %s; continuing safe release repair.\n' "$EXPECTED_APPROVAL" "$PUBLISHED_COMMIT"
+  exit 0
 fi
 
 step "Publish scoped public package with provenance"
-npm publish --access public --provenance --registry "$REGISTRY"
+if [ -n "$PACKAGE_TARBALL" ]; then
+  [ -f "$PACKAGE_TARBALL" ] || die "release tarball not found: $PACKAGE_TARBALL"
+  npm publish "$PACKAGE_TARBALL" --access public --provenance --registry "$REGISTRY"
+else
+  npm publish --access public --provenance --registry "$REGISTRY"
+fi
 
-printf '\nPublished %s. Git tag, push, and GitHub Release remain separate approved operations.\n' "$EXPECTED_APPROVAL"
+printf '\nPublished %s. No tag or push was performed.\n' "$EXPECTED_APPROVAL"

@@ -29,6 +29,11 @@ npm install -g @tower-org/cli
 tower
 ```
 
+For a registry-free GitHub Release install, offline distribution, checksums,
+portable use, upgrades, rollback, services, and uninstall, follow the
+[official installation guide](https://tower-org.github.io/tower/en/guide/getting-started.html).
+The npm and GitHub Release channels are maintained in parallel.
+
 For source development:
 
 ```bash
