@@ -2,13 +2,16 @@
 
 import { useI18n } from "@/lib/i18n";
 import { listExtensionMetadata } from "@/lib/extensions/metadata";
+import { isGatewayAdapterExtension } from "@/lib/extensions/types";
 import { ExtensionCard } from "./extension-card";
 import { GatewayExtensionSettings } from "./gateway-extension-settings";
 import { CliPluginsSection } from "./cli-plugins-section";
 
 export function ExtensionsSection() {
   const { t } = useI18n();
-  const extensions = listExtensionMetadata().filter((ext) => !ext.id.startsWith("tower-agent-"));
+  const extensions = listExtensionMetadata();
+  const componentExtensions = extensions.filter((extension) => extension.kind === "tower-component");
+  const gatewayExtensions = extensions.filter(isGatewayAdapterExtension);
 
   return (
     <div className="space-y-5">
@@ -25,13 +28,15 @@ export function ExtensionsSection() {
           <p className="mt-0.5 text-xs text-muted-foreground">{t("settings.extensions.optionalComponentsDesc")}</p>
         </div>
         <div className="space-y-3">
-          {extensions.map((ext) => (
+          {componentExtensions.map((ext) => (
             <ExtensionCard key={ext.id} extension={ext} />
           ))}
         </div>
       </section>
 
-      <GatewayExtensionSettings />
+      {gatewayExtensions.length > 0 ? (
+        <GatewayExtensionSettings extensions={gatewayExtensions} />
+      ) : null}
     </div>
   );
 }

@@ -1,206 +1,202 @@
-# Tower 模块边界与终极无人值守首个增量 Technical Spec
+# Tower 模块边界与终极无人值守纵向闭环 Technical Spec
 
-> 状态：最终版；首个增量已实现并通过本地与 PR CI 验证
-> 定稿日期：2026-08-02
+> 状态：实现候选版；自动化门禁已完成，本地 UI 持久化闭环与真实 Operator 故障注入待交叉验收
+> 更新日期：2026-08-02
 > 回滚基线：`40cdf1a`
 > 上位章程：[`ultimate-unattended-computer-charter.md`](./ultimate-unattended-computer-charter.md)
 > 架构图解：[`ultimate-unattended-computer-architecture.md`](./ultimate-unattended-computer-architecture.md)
+> 验收方案：[`ultimate-unattended-computer-acceptance.md`](./ultimate-unattended-computer-acceptance.md)
 
-## 1. 目标
+## 1. 本次交付
 
-本增量同时推进两件事，但不把长期目标伪装成一次完成：
+本次交付在同一仓库、发布包和 SQLite 内完成一个可执行纵向闭环：
 
-1. 在同一仓库、同一进程和同一 SQLite 数据库内收口 Tower 模块边界；
-2. 复用 OpenClaw 原生 Task 状态，补上外部 Capability Job 的只读恢复查询。
+1. Tower Core、Execution、Workbench、Gateway/Capability、Unattended Goal 形成明确状态所有权；
+2. Tower UI 为一个 Goal 签发限时、限次数、限 capability 和限目标版本的 R2/R3 grant；
+3. task agent 通过版本化 `CapabilityRequest` 使用固定 OWNER Direct 消息或 OpenClaw Operator Job；
+4. OpenClaw Job 完成后回调 Tower，Tower再读取 OpenClaw 权威状态并幂等唤醒 Workbench；
+5. 回调丢失或进程重启时，低频扫描按 `jobRef` 只读对账；
+6. Goal 用持久 timer、预算、进展事实和 watchdog 决定继续、等待或阻塞。
 
-验收重点不是“目录看起来分开”，而是状态所有权和依赖方向改变：Core 不再直接拥有 unattended 运行态，
-Gateway 适配不向 Core 注入 OpenClaw 状态机，执行/任务状态变化只向 Goal 模块报告生命周期事实。
+“纵向闭环完成”不等于所有外部软件、渠道和 Operator 都已适配。更多 capability 只应增加 OpenClaw
+配置和 schema，不应扩张 Tower Core 模型。
 
 ## 2. 明确不做
 
 - 不拆 npm 包、服务、进程或数据库；
-- 不创建新的 Capability Registry、Job 系统或通用 Event Bus；
-- 不在 Tower 保存 OpenClaw 凭据、具体 Operator 路由或完整 Job 状态机；
-- 不实现尚未核验的通用 R2/R3 授权签发器；
-- 不把 `set_goal_mode` 当作外部副作用授权；
+- 不创建第二套 Capability Registry、通用 Job 系统或通用 Event Bus；
+- 不在 Tower 保存 OpenClaw 凭据、具体 Operator `agentId` 或完整 Job 状态机；
+- 不让 Agent 通过 Goal 文本、`set_goal_mode` 或自填字段获得 R2/R3 授权；
+- 不允许调用方指定 unattended OWNER 的真实渠道目标；
 - 不自动重试 `SIDE_EFFECT_UNKNOWN`；
-- 不修改用户本机 `~/.openclaw` 配置；
-- 不宣称通用 discovery、确定性 Job 提交和跨系统 completion event 已完成。
+- 不高频轮询 OpenClaw Job；
+- 不在安装或测试期间自动修改用户已有 OpenClaw Operator 映射。
 
-## 3. 模块边界
+## 3. 模块与依赖方向
 
-| 模块 | 拥有 | 可以依赖 | 禁止拥有 |
+| 模块 | 权威拥有 | 对外边界 | 禁止拥有 |
 |---|---|---|---|
-| Core | Workspace、Project、Task、Record/Note、Review | 通用基础设施 | 渠道凭据、Operator 路由、无人值守策略、外部 Job 状态机 |
-| Execution / Terminal | PTY、Provider、TaskExecution、终端生命周期 | Core application port | Gateway 路由、Goal 策略 |
-| Workbench | Batch/Event/Runtime、lease/fencing、ACK/resolve | Core ID、Execution 边界 | Goal 预算和外部渠道 |
-| Gateway | inbound/delivery/ask/reply、OpenClaw 适配 | Core application port、Workbench handoff | 项目真相、Goal reducer |
-| Unattended Goal | 运行态、生命周期 reducer；后续唤醒/预算策略 | Core task ID、Gateway 可用性、生命周期事实 | Operator 路由、平台凭据、PTY 实现 |
+| Core | Workspace、Project、Task、Version、Note/Asset、Review | Core ID 和应用 action | 渠道凭据、外部路由、Goal 策略 |
+| Execution / Terminal | PTY、Provider、TaskExecution、回合完成事实 | lifecycle notification | Gateway 路由、Goal reducer |
+| Workbench | Event、Batch、Runtime、lease/fencing、ACK/resolve | durable command/result | Goal 预算、外部凭据 |
+| Gateway / Capability | inbound/delivery/ask/reply、discovery/schema、grant、request/result correlation | `CapabilityRequest`、completion、read-only reconciliation | 项目真相、Goal 调度 |
+| Unattended Goal | runtime projection、timer、预算、watchdog、progress facts | lifecycle reducer、operation guard、Workbench wakeup | Operator 路由、平台凭据、PTY 实现 |
 
-当前物理目录仍是渐进式的。新增边界代码分别进入 `src/lib/unattended-goal/`、`src/lib/gateway/` 和对应
-MCP tool 文件；既有大文件不为追求目录纯度做一次性搬迁。
+模块仍共享 Prisma Client 和 SQLite，但共享数据库不授权跨模块直接读写。跨边界只传 Core ID、版本化契约
+和持久生命周期事实。`src/lib/workbench/event-contract.ts` 是可共享的事件类型与事务持久化原语，不包含
+调度器；真正的 Workbench coordinator 仍是 server-only。
 
-## 4. Unattended Goal 运行态
+## 4. 数据模型与迁移
 
-### 4.1 权威投影
+### 4.1 Goal 投影
 
-新增 `UnattendedGoalRuntime`：
+`UnattendedGoalRuntime` 是 Goal 的权威运行态，状态为 `ACTIVE / BLOCKED / ENDED`。它持久化：
 
-| 字段 | 语义 |
+- 激活、阻塞、结束时间和最近生命周期事实；
+- provider turn、连续失败、无进展轮次；
+- duration、child、concurrency、capability Job、token、cost 等预算；
+- `nextWakeAt`、wake reason/generation/published marker；
+- block reason/generation/published marker。
+
+`UnattendedGoalProgressFact` 用唯一 `dedupKey` 记录 provider turn、child 和 capability Job 的成功/失败事实。
+`Task.unattended` 暂时作为一轮回滚兼容影子，新写入始终由 Goal reducer 双写；Task 删除由 SQLite trigger
+清理无 Prisma relation 的 Goal 投影。
+
+### 4.2 Capability 数据
+
+`CapabilityGrant` 保存 UI 签发的限域授权：task、capability、risk、target kind/fingerprint、过期时间、
+`maxUses/usedCount` 和撤销时间。
+
+`CapabilityRequest` 保存最小恢复关联：
+
+- `requestId`、task、schema version、capability、lane、risk；
+- authorization ref、输入摘要和冻结后的输入；
+- Gateway、`jobRef`、state、revision；
+- result summary、evidence refs、last error；
+- Workbench result published marker；
+- completion callback token 的 SHA-256 hash，终态后清空。
+
+Tower 不保存 OpenClaw prompt、session key、Operator id、完整日志或凭据。
+
+### 4.3 迁移顺序
+
+| Migration | 内容 |
 |---|---|
-| `taskId` | Core Task 的不透明引用，也是模块主键 |
-| `state` | `ACTIVE` / `ENDED` |
-| `lastEventKind` | 最近一次权威生命周期事实 |
-| `activatedAt` | 本轮无人值守激活时间 |
-| `endedAt` | 本轮结束时间 |
-| `updatedAt` | 投影 revision 时间 |
+| `0029-unattended-goal-runtime` | Goal 投影、legacy backfill、Task delete trigger |
+| `0030-capability-runtime` | grant、request、状态枚举与索引 |
+| `0031-capability-result-wakeup` | Workbench capability result kind 与发布 marker |
+| `0032-unattended-goal-policy` | BLOCKED、预算、timer、progress facts |
+| `0033-capability-completion-callback` | 限域 completion callback token hash |
 
-该模型故意不声明 Prisma relation。删除 Task 时由迁移创建的 SQLite trigger 清理投影；这样既保持同库
-数据完整性，又不让 Core schema 反向拥有可选模块。
+所有迁移幂等，并由 release package canary 强制进入 npm 包。
 
-### 4.2 一轮兼容窗口
+## 5. Capability 契约
 
-`Task.unattended` 暂不删除，作为回滚到 `40cdf1a` 的兼容影子：
+### 5.1 Discovery
 
-- 迁移把历史 `Task.unattended = true` 回填为 `ACTIVE / LEGACY_BACKFILL`；
-- 新写入在一个事务内更新模块投影与兼容影子；
-- 读取优先模块投影，仅当投影不存在时回退旧字段；
-- standalone PreToolUse hook 继续读取 signal file，该文件只是模块投影的进程外镜像；
-- 下一个兼容窗口确认无回滚需求后，才单独评审移除旧字段和 fallback。
+`discover_gateway_capabilities` 返回：
 
-### 4.3 生命周期入口
+- contract `schemaVersion`；
+- capability、lane、risk、availability 和安全描述；
+- 完整 input/output JSON schema；
+- route revision；
+- 当前 task 可用 grant 的 opaque ref、过期时间和剩余次数。
 
-`src/lib/unattended-goal/runtime.ts` 是唯一状态入口。当前事件：
+Discovery 不返回 OWNER destination、Operator `agentId`、凭据或底层命令。Tower 和 OpenClaw 都在边界处
+按同一 schema 校验；输入不合法时在消费 grant 前 fail-fast。
 
-- `ACTIVATED`
-- `DEACTIVATED`
-- `TASK_LEFT_ACTIVE_LOOP`
-- `TERMINAL_STOPPED`
-- `TERMINAL_COMPLETED`
+### 5.2 Direct lane
 
-Task action、Terminal action 和 MCP tool 不再直接写 `Task.unattended`。生产者只报告事实，由 Goal 模块
-决定投影结果。普通 attended 任务结束时不创建无意义的 `ENDED` 行。
+首个 Direct capability 是 `human.message.send`：
 
-### 4.4 激活门禁
+- 只能发往已配置的 unattended OWNER home route；
+- 调用方不能提交 destination；
+- R2 grant 在 request 首次接受时原子消费；
+- `requestId` 重用返回同一结果，payload 变化被拒绝；
+- 平台确认送达为 `SUCCEEDED`；可能已送达但无法确认时为 `SIDE_EFFECT_UNKNOWN`；
+- 成功后复用既有 ask/park 生命周期，不能再重复调用 `push_to_human`。
 
-`set_goal_mode(on=true)` 仅在存在 active `openclaw` / `hermes` unattended target 时成功。原因是产品定义
-要求“没有 Gateway 就没有无人值守 Goal”；关闭操作即使 Gateway 已离线也必须可用。
+### 5.3 Job lane
 
-工具返回 `authorizationGranted: false`。它只记录运行承诺，不授予外部写、发布、删除、权限或系统设置。
-R2/R3 缺少可信限域 `authorizationRef` 时必须 `BLOCKED` 并询问 OWNER。
+OpenClaw 插件在自己的配置中维护 capability -> Operator `agentId`、risk 和 schema。Tower 只提交业务
+capability 和最小输入。插件以 `tower-capability:<requestId>` 作为 OpenClaw 原生幂等 key，立即返回
+`ACCEPTED + runId`；具体路由从不返回 Tower。
 
-## 5. MCP 能力面
+Job 创建前必须通过 Goal 预算守卫。Goal `BLOCKED` 后不再接受新 Job；`BLOCKED` 只保留一次或有限次数的
+OWNER Direct 通知能力。Goal `ENDED` 后旧 grant 不再 discovery，也不能创建任何新 R2/R3 请求。已经接受
+的 request 不因 grant 后续过期或撤销而丢失，仍按原 `requestId` 恢复。
 
-`src/mcp/tool-capabilities.ts` 按责任拆出两个原子组：
+## 6. 完成、恢复与乱序
 
-| group | tool | profile |
-|---|---|---|
-| `unattendedGoal` | `set_goal_mode` | `full`, `task` |
-| `gatewayCapability` | `get_capability_job_status` | `full`, `task` |
+OpenClaw `subagent_ended` hook 只回传 `requestId + runId`，不自报成功结果。回调 bearer token 每个 Job
+随机生成，Tower 只存 hash，且 URL 必须是 localhost 固定 completion path。Tower 验证 token 后调用
+`openclaw tasks show <jobRef> --json` 获取权威状态、revision 和时间戳。
 
-Assistant 只保留 Core + Terminal，不得到无人值守或 Gateway 工具。`task` profile 能在已配置扩展时启用
-Goal 和外部恢复；运行时配置门禁负责 fail-closed。此次不增加动态 MCP catalog，以免把模块开关扩成新的
-插件系统。
+完成结果进入 Workbench `CAPABILITY_RESULT_AVAILABLE`，dedup key 为 `requestId + revision`。写入终态使用
+条件更新，迟到的 `RUNNING` 不能覆盖终态。极快 Job 若在 submit response 持久化前完成，回调处理会先用
+相同幂等 key 修复 `jobRef`，随后立即只读对账，不等待扫描。
 
-## 6. OpenClaw Job 只读对账
+60 秒恢复扫描只处理：
 
-### 6.1 原生能力证据
+- `PENDING / ACCEPTED / RUNNING` 请求；
+- 已终态但 Workbench result marker 尚未写入的请求。
 
-2026-08-01 在 OpenClaw `2026.7.1-2` 上完成无副作用探针：
+扫描不猜测结果，不自动重放未知副作用。completion callback 是主路径，扫描只是重启和丢回调安全网。
 
-- `openclaw agent --agent o-tower --session-key ... --json` 成功返回 run；
-- run 最终输出 `TOWER_CAPABILITY_JOB_OK`；
-- `openclaw tasks show <runId> --json` 返回持久 Task，状态为 `succeeded`；
-- 返回值包含 `taskId`、`runId`、`status` 与 `lastEventAt`。
+## 7. Goal 循环
 
-因此恢复查询直接包装 `openclaw tasks show`，不在 Tower 新建外部 Job 表。
+Goal 的安全循环是：
 
-### 6.2 只读契约
+```text
+持久事件/timer 到期 -> Workbench claim -> provider turn
+-> provider-confirmed completion -> ACK/resolve 或新的等待事实
+-> 预算/进展评估 -> ACTIVE / BLOCKED / ENDED
+```
 
-`get_capability_job_status({ gateway: "openclaw", jobRef })`：
+唤醒来源包括 child result、Gateway result、OWNER reply、Capability Job result 和持久 timer。终端静默不是
+完成、失败或安全注入条件。
 
-- 接受 OpenClaw `taskId` 或 `runId`；
-- `execFile` 以参数数组调用 CLI，不经过 shell；
-- ref 只允许 1–256 个字母、数字、`:`、`.`、`_`、`-`；
-- 20 秒超时、1 MiB 输出上限；
-- 只返回安全摘要，不透传 task prompt、session key 或完整上下文；
-- 不创建、恢复、取消、重试或修改 OpenClaw Task。
+预算在创建 child、启动 child、提交 capability Job、provider turn 完成和 15 秒 watchdog 扫描时执行。
+达到 duration、turn、child、concurrency、连续失败、无进展或 Job 上限时，Goal 原子进入 `BLOCKED`，并向
+Workbench 写入一次 `GOAL_BLOCKED`。timer 到期同样在一个事务内写 `GOAL_TIMER_DUE` 和 published marker，
+避免 Goal 结束后迟到发布。
 
-标准化映射：
+## 8. 安全和失败规则
 
-| OpenClaw | Tower capability result |
-|---|---|
-| `queued` | `ACCEPTED` |
-| `running` | `RUNNING` |
-| `succeeded` | `SUCCEEDED` |
-| `failed` | `FAILED` |
-| `cancelled` | `CANCELLED` |
-| `timed_out` | `EXPIRED` |
-| `lost`、未知值 | `SIDE_EFFECT_UNKNOWN` |
+1. grant 只能由可信 Tower UI 签发，issuer 固定为 `TOWER_UI`；
+2. R2/R3 grant 与 task、capability、risk、target fingerprint、有效期和次数绑定；
+3. `set_goal_mode` 只写运行态，永远返回 `authorizationGranted: false`；
+4. Direct destination 和 Job Operator 都不由模型选择；
+5. callback 只接受 localhost 固定路径和至少 32 字节随机 token；
+6. schema 在 Tower 和 OpenClaw 各校验一次；
+7. `SIDE_EFFECT_UNKNOWN` 是终态，禁止自动 retry/fallback；
+8. 每个请求只走一条执行路径，迁移期不得新旧双执行。
 
-`revision` 当前取 OpenClaw `lastEventAt`，回退 `endedAt / startedAt / createdAt`。缺少权威时间戳时拒绝
-构造结果，避免用本地查询时间伪造 revision。`lost` 或未来未知状态可能已经产生外部副作用，因此保守进入
-`SIDE_EFFECT_UNKNOWN`，绝不自动重放。
+## 9. 交付与配置
 
-## 7. Bridge 与授权语义
+Tower Agent 安装器会把 `openclaw-capability` 插件复制到 OpenClaw extensions 并启用 entry。若用户已有
+`plugins.allow`，只追加 Tower plugin id；若没有 allowlist，不主动创建，避免意外禁用其他已发现插件。
+卸载时只删除 Tower 管理的 agent、workspace、plugin entry 和 allowlist 成员。
 
-`tower-bridge` 只负责外部 capability：
+Operator capability 由用户在 OpenClaw plugin config 中显式配置。空配置合法，只会 discovery 到 OWNER
+Direct；Tower 不猜测 `computer-operator`、`xiao-fei` 或任何同事机器上的 agent 名。
 
-- 真人消息继续使用 `tower-ask`；
-- Tower sibling task 继续使用 Tower 的 `resume_task_execution` / `send_task_terminal_input`；
-- 外部请求使用版本化 `CapabilityRequest` envelope；
-- 请求表达 capability、输入、风险和期望结果，不写具体 Agent；
-- 每个 `requestId` 只选一条执行路径；已接受或副作用未知时禁止回退旧路径重发。
+## 10. 验证与剩余门禁
 
-当前 envelope 先作为 Skill 契约存在。没有稳定的非 LLM 提交入口之前，不新增只被测试消费的 TypeScript
-`CapabilityClient` 抽象。后续入口确认后再让 schema 成为可执行边界。
+已完成的自动化和本机验证：
 
-## 8. 数据与清理
+- Prisma generate、TypeScript、ESLint、MCP bundle、Next production build；
+- capability contract/runtime/migration、Goal runtime/policy/migration、Workbench、PTY lifecycle、callback
+  route、installer/plugin 单元测试；
+- 请求去重、grant 消费、Goal 结束后旧 grant、BLOCKED OWNER 通知、终态乱序、submit/callback 竞态、
+  timer/end 竞态和 Workbench durable result 测试；
+- npm package canary，包含 0030-0033 和 OpenClaw plugin 文件；
+- OpenClaw `2026.7.1-2` 实际加载插件，`plugins inspect` 为 loaded，`plugins doctor` 无问题；
+- 全量 Vitest：255 个文件通过、6 个文件跳过，2266 条测试通过、27 条 todo；
+- draw.io 四页源文件校验通过；当前 Tower 架构页为 0 crossing、0 overlap、0 through-vertex，导出图已完成视觉检查。
 
-- `UnattendedGoalRuntime` 是长期运行态，Task 删除时同步清理；结束记录暂保留用于诊断；
-- Gateway inbound/delivery 生命周期继续使用现有压缩和维护机制，本增量不新增定时器；
-- OpenClaw Job 的详细保留与清理归 OpenClaw；Tower 只在未来保存项目所需的 `requestId/jobRef` 关联和摘要；
-- 双方不共享数据库，也不直接写对方表。
+代码合并仍以分支自 review 和 PR CI 为工程门禁，不作为本协议额外引入的运行时机制。
 
-## 9. 验证门禁
-
-### 9.1 自动化
-
-- migration：回填、重复执行、Task 删除 trigger；
-- reducer：旧字段 fallback、模块投影优先、激活事务、普通任务不产生 ended 行；
-- tool：无 Gateway 激活失败、配置存在时成功、Gateway 离线仍可关闭；
-- catalog：工具唯一分组、profile 边界与历史 full surface；
-- reconciliation：状态映射、revision、敏感字段不透传、缺失 revision 拒绝；
-- harness：模块投影覆盖兼容影子，并正确决定 work/unattended scope；
-- 全量 Vitest、TypeScript、ESLint、MCP build、Next production build。
-
-### 9.2 本机集成
-
-- OpenClaw 无副作用 run/task 探针；
-- `tasks show` 用 runId 查询成功；
-- 不修改 OpenClaw 路由和凭据；
-- draw.io XML 0 error / 0 warning，四页 PNG 完成两轮视觉自检。
-
-## 10. 后续阶段
-
-按下面顺序继续，每一步都先复用原生能力：
-
-1. 核验并定义 discovery 的 capability/schema/schemaRef/health 输出；
-2. 为 OWNER home-route Direct 消息补齐可信一次性授权或限域 unattended grant；
-3. 确认稳定的非 LLM Job 提交入口，无法满足时才做 OpenClaw 薄插件；
-4. 将 completion event 作为主路径接入 Workbench/Goal durable inbox；
-5. 保存最小 `requestId/jobRef/revision` 关联，使用本增量查询工具做低频恢复；
-6. 再实现 Goal 持久 timer、预算和 watchdog；
-7. 用一个真实 Operator 做故障注入和重启 E2E；
-8. 只有独立发布或部署收益明确时，评审拆包/拆库。
-
-## 11. 完成定义
-
-本增量完成不等于“终极无人值守电脑完成”。完成只表示：
-
-- Tower 模块边界已经有可执行所有权，不只是文档命名；
-- 没有 Gateway 时无法激活 unattended Goal；
-- Goal 状态不再由 Core Task 直接写入；
-- 外部 Job 恢复查询复用 OpenClaw 权威状态且不会产生副作用；
-- bridge 不再把本机 Operator 映射写死在 Tower；
-- 迁移、回滚兼容、单元测试、全量构建和图文已经同步。
+部署后第一项工作不是增加更多抽象，而是配置一个真实、低风险 Operator 做故障注入 E2E：正常完成、
+Tower 重启、OpenClaw 重启、回调丢失、迟到 RUNNING、取消/超时和 `SIDE_EFFECT_UNKNOWN`。该 E2E 不改变
+本 spec 的模块边界；失败时只修薄适配、状态映射或部署配置。

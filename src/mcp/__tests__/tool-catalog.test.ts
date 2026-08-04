@@ -29,13 +29,14 @@ const LEGACY_FULL_TOOL_NAMES = [
   "get_task_terminal_output", "send_task_terminal_input", "stop_task_execution",
   "resume_task_execution", "get_task_execution_status", "daily_summary", "daily_todo",
   "ask_project_knowledge", "manage_project_facts", "list_notify_targets", "push_to_human",
-  "relay_channel_reply", "route_gateway_message", "resolve_gateway_task_context",
+  "manage_gateway_channel_access", "relay_channel_reply", "route_gateway_message", "resolve_gateway_task_context",
   "continue_bound_task", "route_gateway_query", "read_gateway_project_context",
   "diagnose_gateway_request", "recover_gateway_request", "get_gateway_runtime_health",
   "provision_remote_project", "complete_gateway_discussion", "ack_workbench_batch",
   "heartbeat_workbench_batch", "resolve_workbench_batch", "confirm_gateway_task_created",
   "complete_gateway_work", "ask_human", "notify_human", "reply_to_ask",
-  "get_capability_job_status",
+  "discover_gateway_capabilities", "submit_capability_request",
+  "get_capability_request_status", "get_capability_job_status",
 ];
 const ASSISTANT_TOOL_NAMES = LEGACY_FULL_TOOL_NAMES
   .slice(0, 36)
@@ -44,7 +45,7 @@ const ASSISTANT_TOOL_NAMES = LEGACY_FULL_TOOL_NAMES
 describe("Tower tool catalog", () => {
   it("preserves the legacy full and Assistant surfaces", () => {
     expect(Object.keys(towerToolCatalog).sort()).toEqual([...LEGACY_FULL_TOOL_NAMES].sort());
-    expect(Object.keys(towerToolCatalog)).toHaveLength(58);
+    expect(Object.keys(towerToolCatalog)).toHaveLength(62);
     expect(Object.keys(assistantTowerToolCatalog)).toEqual(ASSISTANT_TOOL_NAMES);
     expect(towerToolCatalog.create_task).toBe(taskTools.create_task);
     expect(assistantTowerToolCatalog.create_task).toBe(taskTools.create_task);
@@ -52,6 +53,9 @@ describe("Tower tool catalog", () => {
     expect(towerToolCatalog.set_goal_mode).toBe(unattendedGoalTools.set_goal_mode);
     expect(towerToolCatalog.get_capability_job_status).toBe(
       gatewayCapabilityTools.get_capability_job_status,
+    );
+    expect(towerToolCatalog.submit_capability_request).toBe(
+      gatewayCapabilityTools.submit_capability_request,
     );
     expect(assistantTowerToolCatalog).not.toHaveProperty("set_goal_mode");
   });
@@ -66,11 +70,16 @@ describe("Tower tool catalog", () => {
     expect(toolNameGroups.core).toHaveLength(29);
     expect(toolNameGroups.terminal).toHaveLength(6);
     expect(toolNameGroups.unattendedGoal).toEqual(["set_goal_mode"]);
-    expect(toolNameGroups.gatewayCapability).toEqual(["get_capability_job_status"]);
-    expect(toolProfileNames.full).toHaveLength(58);
+    expect(toolNameGroups.gatewayCapability).toEqual([
+      "discover_gateway_capabilities",
+      "submit_capability_request",
+      "get_capability_request_status",
+      "get_capability_job_status",
+    ]);
+    expect(toolProfileNames.full).toHaveLength(62);
     expect(toolProfileNames.assistant).toHaveLength(35);
-    expect(toolProfileNames.task).toHaveLength(46);
-    expect(toolProfileNames.gateway).toHaveLength(25);
+    expect(toolProfileNames.task).toHaveLength(49);
+    expect(toolProfileNames.gateway).toHaveLength(26);
     expect(toolProfileNames["gateway-query"]).toEqual(gatewayQueryToolNames);
 
     for (const [profile, names] of Object.entries(toolProfileNames)) {

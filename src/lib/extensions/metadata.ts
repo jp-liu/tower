@@ -9,10 +9,13 @@
  */
 import { Search, FileCode, RadioTower, Bot } from "lucide-react";
 import type { ExtensionMetadata, ExtensionId } from "./types";
+import { getTowerAgentGatewayDescriptor, towerAgentManifest } from "./tower-agent-manifest";
 
 const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
   rg: {
     id: "rg",
+    kind: "tower-component",
+    capabilities: ["code-search"],
     name: "代码搜索 (ripgrep)",
     nameKey: "settings.extensions.rg.name",
     description: "基于 rg 的全文代码搜索",
@@ -24,6 +27,8 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
   },
   monaco: {
     id: "monaco",
+    kind: "tower-component",
+    capabilities: ["code-editor"],
     name: "代码编辑器 (Monaco)",
     nameKey: "settings.extensions.monaco.name",
     description: "VS Code 同款 Web 编辑器",
@@ -34,6 +39,9 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
   },
   "tower-agent-openclaw": {
     id: "tower-agent-openclaw",
+    kind: towerAgentManifest.kind,
+    gateway: "openclaw",
+    capabilities: getTowerAgentGatewayDescriptor("openclaw").capabilities,
     name: "Tower Agent (OpenClaw)",
     nameKey: "settings.extensions.towerAgentOpenClaw.name",
     description: "安装 Tower 助手 profile、MCP 与 skills 到 OpenClaw",
@@ -45,6 +53,9 @@ const EXTENSION_METADATA: Record<ExtensionId, ExtensionMetadata> = {
   },
   "tower-agent-hermes": {
     id: "tower-agent-hermes",
+    kind: towerAgentManifest.kind,
+    gateway: "hermes",
+    capabilities: getTowerAgentGatewayDescriptor("hermes").capabilities,
     name: "Tower Agent (Hermes)",
     nameKey: "settings.extensions.towerAgentHermes.name",
     description: "安装 Tower 助手 profile、MCP 与 skills 到 Hermes",

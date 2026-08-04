@@ -1,7 +1,39 @@
 import { z } from "zod";
-import { BRIDGE, GATEWAY_BRIDGE, GATEWAY_TASK_BRIDGE, GATEWAY_DIAGNOSTICS_BRIDGE, REMOTE_PROJECT_BRIDGE, fetch, relayChannelReply, resolveTaskForCurrentTerminal } from "./shared";
+import { BRIDGE, GATEWAY_ACCESS_BRIDGE, GATEWAY_BRIDGE, GATEWAY_TASK_BRIDGE, GATEWAY_DIAGNOSTICS_BRIDGE, REMOTE_PROJECT_BRIDGE, fetch, relayChannelReply, resolveTaskForCurrentTerminal } from "./shared";
 
 export const gatewayOwnerTools = {
+  manage_gateway_channel_access: {
+    description:
+      "OWNER-only management for the current gateway group. Tower resolves gateway, platform, chat, and verified " +
+      "sender from gatewayInboundId; never ask the user to provide an id. authorize grants all-workspace read-only " +
+      "access to group members; bind_workspace/bind_projects authorize and replace the scope; unbind returns to ALL; " +
+      "revoke denies non-owners. chatName is display-only and never participates in authorization.",
+    schema: z.object({
+      action: z.enum(["authorize", "bind_workspace", "bind_projects", "unbind", "revoke", "get"]),
+      gatewayInboundId: z.string().min(1).max(128),
+      workspace: z.string().min(1).max(512).optional(),
+      projects: z.array(z.string().min(1).max(512)).min(1).max(50).optional(),
+      chatName: z.string().min(1).max(160).optional(),
+    }),
+    handler: async (args: {
+      action: "authorize" | "bind_workspace" | "bind_projects" | "unbind" | "revoke" | "get";
+      gatewayInboundId: string;
+      workspace?: string;
+      projects?: string[];
+      chatName?: string;
+    }) => {
+      const res = await fetch(GATEWAY_ACCESS_BRIDGE, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(args),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok
+        ? data
+        : { error: (data as { error?: unknown }).error ?? "gateway channel access failed", status: res.status };
+    },
+  },
+
   relay_channel_reply: {
     description:
       "Compatibility bridge for a human reply from Feishu/WeChat/Hermes. It may answer a matching open " +
@@ -36,6 +68,7 @@ export const gatewayOwnerTools = {
       chatId: z.string().min(1).max(512),
       platformMessageId: z.string().min(1).max(512).describe("Unique id of this inbound platform message"),
       senderId: z.string().max(512).optional(),
+      chatName: z.string().max(160).optional().describe("Display-only group name from gateway context; never used as identity"),
       threadId: z.string().max(512).optional(),
       rootMessageId: z.string().max(512).optional(),
       replyToMessageId: z.string().max(512).optional().describe("Platform message id this inbound message replies to"),
@@ -53,6 +86,7 @@ export const gatewayOwnerTools = {
       chatId: string;
       platformMessageId: string;
       senderId?: string;
+      chatName?: string;
       threadId?: string;
       rootMessageId?: string;
       replyToMessageId?: string;

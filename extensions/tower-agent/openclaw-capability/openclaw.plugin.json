@@ -1,0 +1,55 @@
+{
+  "id": "tower-capability-bridge",
+  "name": "Tower Capability Bridge",
+  "description": "Maps structured Tower capability Jobs to private OpenClaw Operator profiles.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "capabilities": {
+        "type": "array",
+        "maxItems": 64,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "description", "agentId", "risk", "inputSchema"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*){2,7}$",
+              "maxLength": 128
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "agentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "risk": {
+              "type": "string",
+              "enum": ["R0", "R1", "R2", "R3"]
+            },
+            "inputSchema": {
+              "type": "object"
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "systemPrompt": {
+              "type": "string",
+              "maxLength": 4000
+            }
+          }
+        },
+        "default": []
+      }
+    }
+  }
+}

@@ -18,7 +18,7 @@ export const knowledgeTools = {
       // Fetch all projects (with workspace) optionally filtered by workspaceId
       const projects = await db.project.findMany({
         where: args.workspaceId ? { workspaceId: args.workspaceId } : undefined,
-        include: { workspace: true },
+        include: { workspace: true, group: true },
       });
 
       // Score each project
@@ -30,7 +30,12 @@ export const knowledgeTools = {
           workspaceId: project.workspaceId,
           workspaceName: project.workspace.name,
           confidence: scoreProject(
-            { name: project.name, alias: project.alias, description: project.description },
+            {
+              name: project.name,
+              alias: project.alias,
+              description: project.description,
+              groupName: project.group?.name,
+            },
             args.query
           ),
         }))

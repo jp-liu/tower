@@ -21,7 +21,7 @@ Tower 暴露 MCP Server 供外部 AI Agent 调用，通过 stdio 传输协议运
 - **知识库问答**：聚合仓库知识 markdown、事实卡、版本 commit、笔记回答项目问题
 - **笔记和资产**：管理项目笔记和资产文件（截图、上传）
 - **报告**：每日摘要、每日待办
-- **Harness 与网关路由**：无人值守消息、回灌回复、持久化渠道会话、项目解析、Workbench 排队与完成回传（详见 [Harness 模块](./harness)）
+- **Harness 与网关路由**：无人值守消息、限域 CapabilityRequest、回灌回复、持久化渠道会话、项目解析、Workbench 排队与完成回传（详见 [Harness 模块](./harness)）
 
 工具名称分组和 profile 归属以 `src/mcp/tool-capabilities.ts` 为唯一来源，文档不再维护容易漂移的手写总数。
 
@@ -63,6 +63,8 @@ MCP stdio 进程无法访问内存中的 PTY 会话，通过内部 HTTP 路由�
 - `POST /api/internal/terminal/[taskId]/stop` — 关闭终端会话（复用「停止」按钮逻辑）
 - `POST /api/internal/terminal/[taskId]/resume` — 启动/继续终端（默认复用「继续/重试」按钮逻辑，无历史则全新启动）
 - `POST/PATCH/PUT /api/internal/harness/gateway` — 网关入站路由、处理完成登记、讨论/任务结果可靠回传
+- `GET/POST /api/internal/harness/capabilities` — 能力发现、最小请求状态和确定性 Direct 提交
+- `POST /api/internal/harness/capabilities/completions` — OpenClaw Job 完成回调；限域 token + 权威只读对账后写入 Workbench
 - localhost 限定，仅允许本机访问
 
 ## 文件清单
@@ -85,7 +87,7 @@ MCP stdio 进程无法访问内存中的 PTY 会话，通过内部 HTTP 路由�
 | `project-tools.ts` | Project CRUD + 产品组（product group） |
 | `task-tools.ts` | Task CRUD + move + 默认项 + 版本 |
 | `unattended-goal-tools.ts` | 可选无人值守 Goal 运行态（不属于 Core、不授予外部权限） |
-| `gateway-capability-tools.ts` | 外部 Capability Job 只读状态对账 |
+| `gateway-capability-tools.ts` | 能力发现、限域 Direct 请求、Tower 最小结果查询与外部 Job 只读对账 |
 | `label-tools.ts` | Label CRUD + set_task_labels |
 | `search-tools.ts` | 全局搜索 |
 | `knowledge-tools.ts` | identify_project（项目识别） |

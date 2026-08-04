@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { getPrompts } from "@/actions/prompt-actions";
 import { ExecutionTimeline } from "./execution-timeline";
 import { TaskNotesPanel } from "./task-notes-panel";
+import { UnattendedGoalControl } from "./unattended-goal-control";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Task, TaskExecution } from "@prisma/client";
 import { useI18n } from "@/lib/i18n";
@@ -273,7 +274,7 @@ function TaskDetailPanelState({
 
   return (
     <div
-      className="flex h-full w-[600px] flex-shrink-0 flex-col border-l border-border bg-sidebar"
+      className="flex h-full w-[calc(100vw-3.5rem)] flex-shrink-0 flex-col border-l border-border bg-sidebar sm:w-[600px]"
       data-testid="task-detail-panel"
     >
       <TaskMetadata
@@ -296,8 +297,8 @@ function TaskDetailPanelState({
       />
 
       {/* Tab bar + View Details button */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-2">
-        <div className="flex gap-1">
+      <div className="flex flex-col items-stretch gap-2 border-b border-border px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-1">
           <button
             onClick={() => setActiveTab("terminal")}
             className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md ${
@@ -331,7 +332,10 @@ function TaskDetailPanelState({
             {t("taskPage.notes")}
           </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {taskStatus !== "DONE" && taskStatus !== "CANCELLED" && (
+            <UnattendedGoalControl taskId={task.id} />
+          )}
           {taskStatus === "IN_REVIEW" && (
             <Button
               size="sm"

@@ -139,6 +139,8 @@ async function install(): Promise<ExtensionResult> {
 
 export const ripgrepExtension: Extension = {
   id: "rg",
+  kind: "tower-component",
+  capabilities: ["code-search"],
   name: "代码搜索 (ripgrep)",
   nameKey: "settings.extensions.rg.name",
   description: "基于 rg 的全文代码搜索",

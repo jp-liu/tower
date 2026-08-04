@@ -254,15 +254,24 @@ handoff, diagnostics, scoped recovery, and remote project provisioning.
   `notify_human`
 - Gateway query: `route_gateway_query`, `read_gateway_project_context`,
   `complete_gateway_discussion`
-- Gateway owner: `relay_channel_reply`, `route_gateway_message`,
+- Gateway owner: `manage_gateway_channel_access`, `relay_channel_reply`, `route_gateway_message`,
   `resolve_gateway_task_context`, `continue_bound_task`,
   `diagnose_gateway_request`, `provision_remote_project`, `reply_to_ask`
 - Workbench: `ack_workbench_batch`, `resolve_workbench_batch`,
   `heartbeat_workbench_batch`, `confirm_gateway_task_created`,
   `complete_gateway_work`
 - Operations: `recover_gateway_request`, `get_gateway_runtime_health`
-- Gateway capability reconciliation: `get_capability_job_status` (read-only
-  OpenClaw Job status by native `taskId`/`runId`)
+- Gateway capability: `discover_gateway_capabilities`,
+  `submit_capability_request`, `get_capability_request_status`,
+  `get_capability_job_status`
+
+`submit_capability_request` supports deterministic `human.message.send` Direct
+requests and configured OpenClaw capability Jobs. Direct forces the unattended
+OWNER home route; Job routing stays private to the OpenClaw plugin. R2/R3
+requests require a Tower-UI-issued bounded grant. `requestId` is the durable
+idempotency key, completion wakes Workbench by `requestId + revision`, and
+`SIDE_EFFECT_UNKNOWN` is terminal. `get_capability_job_status` remains the
+read-only OpenClaw Job reconciliation path.
 
 `route_gateway_query` is the capability-scoped NON_OWNER entry and cannot
 create work. `resolve_gateway_task_context` is read-only. `continue_bound_task`

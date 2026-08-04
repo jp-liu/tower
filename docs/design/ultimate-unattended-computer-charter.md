@@ -687,6 +687,7 @@ Technical Spec 应按第 8 节的实现优先级验证当前 OpenClaw 原生能�
 
 - [`ultimate-unattended-computer-architecture.md`](./ultimate-unattended-computer-architecture.md)
 - [`ultimate-unattended-computer-technical-spec.md`](./ultimate-unattended-computer-technical-spec.md)
+- [`ultimate-unattended-computer-acceptance.md`](./ultimate-unattended-computer-acceptance.md)
 - [`o-tower-personal-assistant-security-and-operations.md`](./o-tower-personal-assistant-security-and-operations.md)
 - [`tower-modular-event-architecture-target.md`](./tower-modular-event-architecture-target.md)
 - [`tower-agent-extension.md`](./tower-agent-extension.md)

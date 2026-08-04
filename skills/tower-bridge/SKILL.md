@@ -1,27 +1,88 @@
 ---
 name: tower-bridge
-description: Submit a structured external capability request from a Tower task through the configured Gateway. Use for computer, browser, SaaS, document, spreadsheet, or other operator work outside Tower. Plain human messages use tower-ask; Tower sibling-task handoff stays in the tower skill.
+description: Route any action outside Tower through the configured Gateway, including messages to a named human or group, unattended OWNER messages, computer or browser operation, SaaS, documents, spreadsheets, and other operator work. Use when a Tower task must communicate with a real recipient or invoke an external capability; keep sibling Tower task handoff and Tower CRUD in the tower skill.
 ---
 
 # tower-bridge - external capability boundary
 
-Use this skill only when a Tower task needs a capability outside Tower. Tower
-owns the project goal and result; OpenClaw/Hermes owns channels, credentials,
-authorization enforcement, capability routing, and concrete Operator mapping.
+Use one bridge skill for every external side effect. Tower owns the task, goal,
+ask/park lifecycle, and project-relevant result. OpenClaw/Hermes owns channels,
+credentials, recipient resolution, capability routing, and concrete Operators.
 
-This is a semantic boundary, not a second Gateway. Do not install external MCPs
-into Tower and do not maintain a Tower-side map from capability names to agents.
+Do not install external MCPs into Tower or maintain a Tower-side map from
+capability names to agents.
 
-## Not this skill
+## Choose one request type
 
-- Real human/group message: use `tower-ask`.
-- Tower task or sibling terminal: use the `tower` skill with
-  `resume_task_execution` and `send_task_terminal_input`.
-- Ordinary project CRUD, status, notes, or review: use `tower`.
+### Human message
 
-## CapabilityRequest v1
+Normalize all outbound messages as `human.message.send`, then choose exactly
+one recipient mode:
 
-Form one request before dispatch. Keep it minimal and structured:
+| `recipientMode` | Trigger | Destination | Dispatch |
+|---|---|---|---|
+| `explicit` | The user explicitly names a person or group | `to` is required and comes only from the user's instruction | `list_notify_targets(scope: "work")`, then `push_to_human` |
+| `owner_home` | An unattended Goal needs its OWNER | Fixed configured OWNER route; `to` is forbidden | `discover_gateway_capabilities`, then one authorized `submit_capability_request` |
+
+Both modes also carry `message`, `expectReply`, and a stable idempotency key:
+use `dedupKey` for `push_to_human` and UUID `requestId` for
+`submit_capability_request`.
+
+#### Explicit recipient
+
+1. Call `list_notify_targets({ taskId, scope: "work" })`.
+2. Call:
+
+```text
+push_to_human({
+  taskId,
+  message,
+  scope: "work",
+  to,
+  expectReply,
+  dedupKey
+})
+```
+
+- `expectReply: true` sends, records an ask, and parks.
+- `expectReply: false` sends and records a notification.
+- If delivery fails, do not call `ask_human`; nobody received the question.
+- Preserve the returned `[[tower:task=<id>]]` correlation token.
+
+#### Unattended OWNER
+
+1. Call `discover_gateway_capabilities({ taskId })` and inspect
+   `human.message.send`.
+2. Submit one `DIRECT / R2` request with the UI-issued `authorizationRef`:
+
+```yaml
+schemaVersion: 1
+requestId: "<stable UUID>"
+capability: human.message.send
+lane: DIRECT
+risk: R2
+authorizationRef: "<from discovery>"
+inputs:
+  message: "<message>"
+  expectReply: true
+expectedOutput:
+  summary: true
+  evidence: []
+towerContext:
+  taskId: "<TOWER_TASK_ID>"
+constraints: []
+```
+
+Never put `to`, a platform destination, or an agent id in this envelope. The
+OWNER route is fixed outside the task. Do not duplicate the message through
+`push_to_human`, `ask_human`, `notify_human`, or a platform MCP.
+
+When `expectReply=true` succeeds, end the turn immediately. Tower parks the
+task and resumes it when the reply is durably bound.
+
+## Other external capabilities
+
+Form one `CapabilityRequest v1` before dispatch:
 
 ```yaml
 schemaVersion: 1
@@ -40,44 +101,20 @@ towerContext:
 constraints: []
 ```
 
-Rules:
-
-- `capability` describes the business action, never an agent, MCP namespace,
-  workspace path, shell command, or local installation detail.
-- Forward only the inputs required for the action. Do not forward the whole
-  terminal transcript or project history.
-- The model cannot invent `authorizationRef`. R2/R3 without a valid bounded
-  grant is `BLOCKED` and must be taken to the OWNER.
-- Goal mode is runtime state, not authorization.
-- Pick exactly one route before submission. Once accepted, timed out, or
-  possibly side-effecting, never fall back to another route with the same
-  action unless the authoritative status proves no submission occurred.
-
-## Lane selection
-
-Use `DIRECT` only for deterministic, short actions with an immediate provider
-receipt, such as sending already-generated text through a configured channel.
-Use `JOB` for multi-step Operator or GUI work. A timeout after a possible side
-effect is `SIDE_EFFECT_UNKNOWN`, never an automatic retry.
-
-## Dispatch
-
-1. Prefer a deterministic capability entry exposed by the configured Gateway.
-2. For human messaging, `tower-ask`/`push_to_human` is that deterministic entry.
-3. During migration, if the Gateway has no deterministic external-capability
-   entry, submit the structured envelope to its Tower conversation role as one
-   compatibility route. Do not address a concrete specialist from Tower.
-4. Capture the Gateway's `runId`/`taskId` as `jobRef` when it creates a Job.
-   OpenClaw's native `tasks show <jobRef> --json` is the read-only recovery
-   authority; do not mirror its full Job state in Tower.
-
-The compatibility route may perform one extra model turn. It remains only until
-the Gateway exposes a deterministic adapter for that capability. Never execute
-both routes for comparison.
+- Use only an advertised capability and its executable schema.
+- `capability` names a business action, never an agent, MCP namespace,
+  workspace path, command, or installation detail.
+- R2/R3 requires a valid bounded grant. The model cannot invent
+  `authorizationRef`; Goal mode alone is not authorization.
+- Use `DIRECT` only for deterministic short actions with an immediate receipt.
+  Use `JOB` for multi-step Operator or GUI work.
+- Pick one route before submission. Never execute a compatibility route and a
+  deterministic adapter for comparison.
 
 ## Result handling
 
-Normalize the result for the Tower task:
+Keep only the project-relevant summary, evidence references, `requestId`,
+`jobRef`, and latest revision:
 
 ```yaml
 requestId: "<same request id>"
@@ -88,16 +125,19 @@ evidence: []
 jobRef: "<Gateway-owned reference when lane=JOB>"
 ```
 
-Save only the project-relevant summary, evidence references, `requestId`,
-`jobRef`, and latest revision. Do not copy Gateway credentials, routes, full
-transcripts, or the complete external Job state into Tower.
+OpenClaw's native task status is the read-only recovery authority. Do not copy
+its credentials, full transcript, route, Operator identity, or complete Job
+state into Tower.
 
-## Hard rules
+## Boundaries
 
-- Never pretend an action was submitted or completed.
-- Never expose tokens, raw commands, temp paths, MCP namespaces, or agent IDs in
-  user-facing output.
-- Never translate an unknown side effect into a normal failure.
-- Never let a late `RUNNING` observation overwrite a terminal revision.
-- Never resume or mutate a Tower task merely because an external message was
-  bound to it.
+- Tower sibling task: use the `tower` skill with `resume_task_execution` and
+  `send_task_terminal_input`.
+- Tower CRUD, status, notes, or review: use the `tower` skill.
+- Never claim an action was submitted or completed without an authoritative
+  receipt or result.
+- Never expose tokens, destinations, local paths, commands, MCP namespaces, or
+  agent ids in user-facing output.
+- `SIDE_EFFECT_UNKNOWN` is terminal: do not retry or fall back.
+- A late `RUNNING` observation cannot overwrite a terminal revision.
+- Binding an external message to a Tower task never authorizes terminal resume.

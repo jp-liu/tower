@@ -97,7 +97,7 @@ complete receipt becomes `SENT_UNVERIFIED` and is not blindly resent.
 - **"records only ↔ persists before sending" = `ask_human` vs `push_to_human`**:
   the former is a state primitive; the latter is a durable outbox wrapper.
 
-`list_notify_targets` is the pre-send entry point: it reads the active channel for the current scope and returns **ready-to-follow send instructions** telling the agent which gateway to use and whether to park. The `tower-ask` / `tower-goal` skills internally call it first, then do what it says.
+`list_notify_targets` is the pre-send entry point: it reads the active channel for the current scope and returns **ready-to-follow send instructions** telling the agent which gateway to use and whether to park. The explicit-recipient message path in `tower-bridge` calls it first; unattended OWNER messages use the bounded CapabilityRequest path in the same skill.
 
 `route_gateway_message` is the OWNER entry point for Tower-related messages. Ordinary Q&A and external capabilities remain in OpenClaw and never call Tower. Old clients that send `DIRECT` receive `direct_not_supported` without a `GatewayInbound` row. Stateful routing persists and deduplicates first, then resolves reply/task binding → thread/session binding → explicit project → one identify_project match → sender's recent project → channel default. Project discussion replies use `complete_gateway_discussion`. Project work is only queued for the Workbench; the Workbench calls `confirm_gateway_task_created` after a real `create_task` result and `complete_gateway_work` after review.
 

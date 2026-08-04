@@ -81,6 +81,21 @@ Update is the reinjection flow. It refreshes `SOUL.md`, `AGENTS.md`, `TOOLS.md`,
 Tower MCP configuration, and the bundled `tower` skill from the currently
 running Tower package. Unmanaged fields in the OpenClaw agent entry are kept.
 
+### OWNER And Dynamic Group Access
+
+The settings page keeps platform OWNER IDs. OpenClaw uses the verified sender
+to expose OWNER management tools or the NON_OWNER query-only surface. Group
+ingress uses `groupPolicy=open` with `requireMention=true`, allowing a new group
+to reach the access decision without granting it Tower data access.
+
+An OWNER authorizes, binds, unbinds, or revokes the current group from inside
+that group. Versioned extension config `tower-agent.channel-access.v1` stores an
+explicit `ALL`, `WORKSPACE`, or `PROJECTS` scope. Tower rechecks that scope
+before every project read and discussion completion. The settings page shows
+the display name, authoritative chat ID, status, and resolved scope; the display
+name never participates in authorization. Legacy trusted-channel fields are
+imported once and no longer decide runtime access.
+
 ### 3. Restart The Gateway And Refresh Feishu Sessions
 
 Run the following in order:
@@ -304,10 +319,13 @@ openclaw status --all
 - Shared chats can be restricted with `harness.channelBindings`; do not assume a
   dedicated visual management page exists today.
 
-## tower-bridge And tower-ask
+## Unified tower-bridge
 
-`tower-ask` only sends or asks real humans, groups, and external communication
-channels. It does not hand work to `o-tower`, `xiao-fei`, or another agent.
+Use `tower-bridge` for every side effect outside Tower. Human and group messages
+are `human.message.send`: an explicitly named recipient uses `recipientMode:
+explicit` and `push_to_human`; an unattended OWNER message uses
+`recipientMode: owner_home`, the fixed OWNER route, and a bounded grant. The old
+`tower-ask` skill has been merged and is no longer installed separately.
 
 When a Tower task needs to send prepared content to `o-tower` so the gateway can
 route it through local extensions, use `tower-bridge`:
@@ -320,9 +338,10 @@ current task
 -> summarized result back to the current task or user
 ```
 
-`tower-bridge` is a routing skill. It does not install third-party MCPs and does
-not hold Feishu, mail, or knowledge-base credentials by default. It only hands
-content to the right execution owner.
+`tower-bridge` is the unified external-capability skill. It does not install
+third-party MCPs and does not hold Feishu, mail, or knowledge-base credentials
+by default. It hands a structured request to the right channel or execution
+owner.
 
 ## OpenClaw Sketch
 

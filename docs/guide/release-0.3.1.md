@@ -14,6 +14,7 @@ description: 可靠 Workbench 网关、个人机器人权限、无人值守服�
 - `Task=DONE`、最终回复意图和 Gateway 业务完成状态在同一数据库事务中提交。
 - 外部消息采用 at-least-once 投递；不确定的平台发送进入 `SENT_UNVERIFIED`，避免盲目重复发送。
 - OWNER 与 NON_OWNER 路由分离：非持有人只能查询已授权项目，不能创建任务、修改 Tower 数据或操作电脑。
+- 飞书群支持由 OWNER 在当前会话动态授权、绑定工作区或项目、解除绑定和撤销；扩展设置页展示群名、群 ID 与实际授权范围。
 - 支持远程 Git 项目的只读评审与经所有者授权的完整工作模式。
 - macOS LaunchAgent 与 Windows Scheduled Task 无人值守服务由用户自主安装、查看和移除。
 - 飞书任务排队、创建、完成和诊断消息采用结构化卡片。
@@ -28,8 +29,9 @@ description: 可靠 Workbench 网关、个人机器人权限、无人值守服�
 
 ## 发布验证
 
-- 全量 Vitest：235 个测试文件通过，2165 条测试通过。
+- 全量 Vitest：260 个测试文件通过，2300 条测试通过；6 个文件按环境跳过，27 条场景保留为 todo。
 - 生产构建、release gate、package canary、入口检查和 npm pack dry-run 通过。
+- release smoke 完成临时全局安装与启动，验证 34 个迁移、扩展能力计划、API、Summary、Assistant 和 Terminal。
 - Playwright 使用独立临时数据库和专用端口，不复用本机 3000 服务或用户数据。
 
 完整架构与运维资料见 [Workbench 可靠网关](/modules/workbench-gateway)、[Harness 无人值守](/modules/harness)、[无人值守服务](/guide/unattended-service) 和 [架构图](/guide/diagrams)。

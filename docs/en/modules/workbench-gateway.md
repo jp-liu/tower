@@ -30,12 +30,17 @@ preventing the ingress agent from bypassing review and creating duplicates.
 
 ### NON_OWNER
 
-Colleagues may only query projects in the workspace bound to a trusted channel:
+Colleagues receive read-only access only in groups authorized by an OWNER:
 
-- a missing workspace scope fails closed;
+- `ALL` covers every workspace/project; `WORKSPACE` and `PROJECTS` add mandatory filters;
+- unauthorized, revoked, and invalid scopes fail closed;
 - personal tasks, personal daily reports, and local paths are never returned;
 - tasks cannot be created, changed, started, or deleted;
 - unknown channels and unverifiable identities receive a permission error.
+
+The OWNER manages the current group through `manage_gateway_channel_access`.
+OpenClaw controls the sender-specific tool surface, while Tower performs the
+final data-scope check from the versioned extension configuration.
 
 ## Request classes
 

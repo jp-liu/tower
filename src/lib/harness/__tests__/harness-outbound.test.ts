@@ -103,6 +103,33 @@ describe("durable harness outbound", () => {
       .toMatchObject({ status: "RUNNING" });
   });
 
+  it("stops retrying when the gateway may have sent without a receipt", async () => {
+    const fixture = await taskFixture();
+    send.mockResolvedValue({
+      ok: false,
+      uncertain: true,
+      output: "gateway exited successfully without a platform message id",
+      resolvedDest: "oc_takeoff",
+    });
+
+    const result = await enqueueHarnessOutbound({
+      taskId: fixture.task.id,
+      gateway: "openclaw",
+      downstream: "feishu",
+      dest: "oc_takeoff",
+      scope: "unattended",
+      expectReply: false,
+      message: "One notification",
+      dedupKey: "uncertain-no-receipt",
+    });
+
+    expect(result).toMatchObject({ state: "SENT_UNVERIFIED", sent: true });
+    expect(await db.harnessOutbound.findUniqueOrThrow({ where: { id: result.outboundId } }))
+      .toMatchObject({ state: "SENT_UNVERIFIED", nextAttemptAt: null, attempts: 1 });
+    await recoverHarnessOutbounds();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it("turns a stale in-flight send into SENT_UNVERIFIED instead of duplicating it", async () => {
     const fixture = await taskFixture();
     const message = await db.harnessMessage.create({

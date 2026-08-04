@@ -46,6 +46,9 @@ export const toolCapabilityGroups = {
     "set_goal_mode",
   ],
   gatewayCapability: [
+    "discover_gateway_capabilities",
+    "submit_capability_request",
+    "get_capability_request_status",
     "get_capability_job_status",
   ],
   messaging: [
@@ -67,6 +70,7 @@ export const toolCapabilityGroups = {
     "complete_gateway_discussion",
   ],
   gatewayOwner: [
+    "manage_gateway_channel_access",
     "relay_channel_reply",
     "route_gateway_message",
     "resolve_gateway_task_context",

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { up } from "../../../../scripts/migrations/0029-unattended-goal-runtime";
+import { up as addGoalPolicy } from "../../../../scripts/migrations/0032-unattended-goal-policy";
 
 const clients: PrismaClient[] = [];
 const directories: string[] = [];
@@ -31,8 +32,8 @@ afterEach(async () => {
     rm(directory, { recursive: true, force: true })));
 });
 
-describe("0029 unattended goal runtime migration", () => {
-  it("backfills active runs, remains idempotent, and cleans projections with their task", async () => {
+describe("unattended goal migrations", () => {
+  it("backfills active runs, upgrades idempotently, and cleans module-owned rows with their task", async () => {
     const prisma = await database();
     await prisma.$executeRawUnsafe(
       `INSERT INTO "Task" ("id", "unattended") VALUES ('active', 1), ('attended', 0)`,
@@ -40,6 +41,8 @@ describe("0029 unattended goal runtime migration", () => {
 
     await up(prisma);
     await up(prisma);
+    await addGoalPolicy(prisma);
+    await addGoalPolicy(prisma);
 
     const rows = await prisma.$queryRawUnsafe<Array<{
       taskId: string;
@@ -54,10 +57,33 @@ describe("0029 unattended goal runtime migration", () => {
       lastEventKind: "LEGACY_BACKFILL",
     }]);
 
-    await prisma.$executeRawUnsafe(`DELETE FROM "Task" WHERE "id" = 'active'`);
-    const remaining = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-      `SELECT COUNT(*) AS "count" FROM "UnattendedGoalRuntime"`,
+    const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+      `PRAGMA table_info("UnattendedGoalRuntime")`,
     );
-    expect(Number(remaining[0]?.count)).toBe(0);
+    expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+      "blockedReason",
+      "maxDurationMs",
+      "maxProviderTurns",
+      "nextWakeAt",
+      "wakeGeneration",
+      "blockEventPublishedAt",
+    ]));
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "UnattendedGoalProgressFact" (
+        "id", "taskId", "kind", "outcome", "dedupKey"
+      ) VALUES ('fact-1', 'active', 'PROVIDER_TURN_COMPLETED', 'TURN', 'turn-1')
+    `);
+
+    await prisma.$executeRawUnsafe(`DELETE FROM "Task" WHERE "id" = 'active'`);
+    const [runtimeRows, factRows] = await Promise.all([
+      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT COUNT(*) AS "count" FROM "UnattendedGoalRuntime"`,
+      ),
+      prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT COUNT(*) AS "count" FROM "UnattendedGoalProgressFact"`,
+      ),
+    ]);
+    expect(Number(runtimeRows[0]?.count)).toBe(0);
+    expect(Number(factRows[0]?.count)).toBe(0);
   });
 });

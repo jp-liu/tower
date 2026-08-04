@@ -477,6 +477,13 @@ async function initDatabase() {
   log(`Data directory: ${TOWER_DIR}`);
   ensurePrismaClientGenerated();
 
+  // Prisma 6.19's schema engine no longer creates a missing SQLite file as
+  // part of `db push`; it exits with a generic "Schema engine error" instead.
+  // Create the private database file explicitly, matching the E2E bootstrap.
+  if (!existsSync(DB_PATH)) {
+    writeFileSync(DB_PATH, "", { flag: "wx", mode: 0o600 });
+  }
+
   log("Syncing database schema...");
   run(prismaBin, ["db", "push", "--skip-generate"]);
 

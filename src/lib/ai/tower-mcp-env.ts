@@ -5,6 +5,7 @@
  */
 export const TOWER_MCP_ENV_VARS = [
   "CALLBACK_URL",
+  "PORT",
   "TOWER_API_URL",
   "TOWER_HAS_PARENT",
   "TOWER_MCP_PROFILE",

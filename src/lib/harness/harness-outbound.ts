@@ -342,7 +342,7 @@ export async function dispatchHarnessOutbound(
     return rowResult(outbound.id, deduped);
   }
 
-  if (sent.ok || messageId) {
+  if (sent.ok || sent.uncertain || messageId) {
     await db.$transaction(async (tx) => {
       const current = await tx.harnessOutbound.findUniqueOrThrow({ where: { id: outbound.id } });
       if (current.state !== "SENDING" || current.claimToken !== claimToken) return;

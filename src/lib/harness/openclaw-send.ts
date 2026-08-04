@@ -56,7 +56,7 @@ export async function sendViaOpenClaw(
   input: OpenClawSendInput,
 ): Promise<
   | { ok: true; output: string; metadata: GatewaySendMetadata }
-  | { ok: false; output: string; metadata?: GatewaySendMetadata }
+  | { ok: false; output: string; metadata?: GatewaySendMetadata; uncertain?: boolean }
 > {
   const channel = input.downstream?.trim();
   const target = input.dest.trim();
@@ -123,7 +123,10 @@ export async function sendViaOpenClaw(
       const parsed = parseGatewaySendOutput(output);
       if (!parsed?.message_id) {
         lastOutput = `OpenClaw did not return a platform message id: ${output}`;
-        break;
+        // The CLI exited successfully after attempting a platform send. Without
+        // a receipt Tower cannot prove whether the platform accepted it, so the
+        // durable outbox must stop instead of retrying a possibly sent message.
+        return { ok: false, output: lastOutput, uncertain: true };
       }
       const metadata: GatewaySendMetadata = parsed;
       if (replyTo) {

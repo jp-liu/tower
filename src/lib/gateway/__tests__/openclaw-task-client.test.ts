@@ -1,12 +1,50 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
+  findOpenClawTaskInList,
+  openClawProcessEnv,
   normalizeOpenClawTaskStatus,
   parseOpenClawTaskOutput,
   parseOpenClawTaskSnapshot,
 } from "../openclaw-task-client";
 
+it("forces machine-readable OpenClaw output when the parent enables colors", () => {
+  const previous = process.env.FORCE_COLOR;
+  const previousVitest = process.env.VITEST;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const mutableProcessEnv = process.env as Record<string, string | undefined>;
+  process.env.FORCE_COLOR = "1";
+  process.env.VITEST = "true";
+  mutableProcessEnv.NODE_ENV = "test";
+  try {
+    const env = openClawProcessEnv({});
+    expect(env.FORCE_COLOR).toBeUndefined();
+    expect(env.NO_COLOR).toBe("1");
+    expect(env.CLICOLOR).toBe("0");
+    expect(env.VITEST).toBeUndefined();
+    expect(env.NODE_ENV).toBeUndefined();
+  } finally {
+    if (previous === undefined) delete process.env.FORCE_COLOR;
+    else process.env.FORCE_COLOR = previous;
+    if (previousVitest === undefined) delete process.env.VITEST;
+    else process.env.VITEST = previousVitest;
+    if (previousNodeEnv === undefined) delete mutableProcessEnv.NODE_ENV;
+    else mutableProcessEnv.NODE_ENV = previousNodeEnv;
+  }
+});
+
 describe("OpenClaw capability Job reconciliation", () => {
+  it("resolves a subagent runId through a task-list response", () => {
+    expect(findOpenClawTaskInList("run-1", {
+      count: 2,
+      tasks: [
+        { taskId: "task-2", runId: "run-2" },
+        { taskId: "task-1", runId: "run-1", status: "succeeded" },
+      ],
+    })).toMatchObject({ taskId: "task-1", runId: "run-1" });
+    expect(findOpenClawTaskInList("missing", { tasks: [] })).toBeNull();
+  });
+
   it.each([
     ["queued", "ACCEPTED"],
     ["running", "RUNNING"],

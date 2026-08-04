@@ -1,16 +1,29 @@
 {
   "id": "tower-agent",
   "version": 2,
+  "kind": "gateway-adapter",
   "name": "Tower Agent",
   "description": "Tower assistant profile package for OpenClaw and Hermes.",
   "gateways": {
     "openclaw": {
       "defaultProfile": "o-tower",
-      "defaultDisplayName": "小塔"
+      "defaultDisplayName": "小塔",
+      "capabilities": [
+        "gateway.profile",
+        "gateway.display-name",
+        "gateway.runtime-env",
+        "gateway.owner-policy",
+        "gateway.channel-access"
+      ]
     },
     "hermes": {
       "defaultProfile": "h-tower",
-      "defaultDisplayName": "小塔"
+      "defaultDisplayName": "小塔",
+      "capabilities": [
+        "gateway.profile",
+        "gateway.display-name",
+        "gateway.runtime-env"
+      ]
     }
   }
 }

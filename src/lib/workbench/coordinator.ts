@@ -17,6 +17,19 @@ import {
   scheduleAtWorkbenchDrainBoundary,
   takeWorkbenchDrainBoundary,
 } from "./boundary";
+import type {
+  EnqueueWorkbenchEventInput,
+  WorkbenchEventKind,
+  WorkbenchEventPayload,
+  WorkbenchEventPriority,
+} from "./event-contract";
+
+export type {
+  EnqueueWorkbenchEventInput,
+  WorkbenchEventKind,
+  WorkbenchEventPayload,
+  WorkbenchEventPriority,
+} from "./event-contract";
 
 const log = logger.create("workbench-coordinator");
 
@@ -28,41 +41,12 @@ export const WORKBENCH_PROCESSING_LEASE_MS = 5 * 60_000;
 export const WORKBENCH_MAX_BATCH_SIZE = 50;
 export const WORKBENCH_RECOVERY_BATCH_SIZE = 500;
 export const WORKBENCH_EVENTS_ENABLED_AT_KEY = "workbench.eventsEnabledAt";
+export const WORKBENCH_RECONCILE_FAILURE_BACKOFF_MS = 60_000;
 // Workbench batches are substantially larger than ordinary terminal messages.
 // Claude Code keeps treating a CR as pasted content while it is still ingesting
 // the preceding multi-line write, so the generic 80 ms bridge delay can leave the
 // whole request sitting in the editor without submitting it.
 const WORKBENCH_SUBMIT_DELAY_MS = 500;
-
-export type WorkbenchEventKind =
-  | "CHILD_REVIEW_REQUIRED"
-  | "CHILD_DECISION_REQUIRED"
-  | "CHILD_EXECUTION_FAILED"
-  | "GATEWAY_WORK_REQUEST";
-
-export type WorkbenchEventPriority = "NORMAL" | "HIGH";
-
-export interface WorkbenchEventPayload {
-  childTaskId: string;
-  childTitle: string;
-  childReply?: string;
-  question?: string;
-  executionId?: string;
-  exitCode?: number;
-  instruction?: string;
-  sourceReference?: { namespace: string; id: string };
-}
-
-export interface EnqueueWorkbenchEventInput {
-  parentTaskId: string;
-  sourceTaskId: string;
-  executionId?: string | null;
-  kind: WorkbenchEventKind;
-  priority?: WorkbenchEventPriority;
-  dedupKey: string;
-  reviewProducer?: "STOP_HOOK" | "COMPLETION_FALLBACK";
-  payload: WorkbenchEventPayload;
-}
 
 export interface WorkbenchEventRecord {
   id: string;
@@ -407,6 +391,19 @@ export async function enqueueChildExecutionResult(input: {
       exitCode: input.exitCode,
     },
   });
+  await import("@/lib/unattended-goal/policy").then(({ recordUnattendedGoalProgressFact }) =>
+    recordUnattendedGoalProgressFact({
+      taskId: task.parentTaskId!,
+      kind: failed ? "CHILD_FAILED" : "CHILD_SUCCEEDED",
+      dedupKey: `child-result:${input.executionId}:${input.status}`,
+    }),
+  ).catch((error) => {
+    log.warn("Failed to record child result for unattended Goal budget", {
+      parentTaskId: task.parentTaskId,
+      childTaskId: input.taskId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
   return { enqueued: true, deduped: result.deduped };
 }
 
@@ -435,6 +432,12 @@ function eventHeading(kind: WorkbenchEventKind): string {
       return "EXECUTION FAILED";
     case "GATEWAY_WORK_REQUEST":
       return "GATEWAY WORK REQUEST";
+    case "CAPABILITY_RESULT_AVAILABLE":
+      return "CAPABILITY RESULT";
+    case "GOAL_TIMER_DUE":
+      return "GOAL TIMER DUE";
+    case "GOAL_BLOCKED":
+      return "GOAL BLOCKED";
     default:
       return "REVIEW REQUIRED";
   }
@@ -469,10 +472,54 @@ export function buildWorkbenchBatchPrompt(
     return `${payload.instruction || "[External project work request]\nNo instruction was stored."}${protocol}`;
   }
 
+  if (events.length === 1 && events[0].kind === "CAPABILITY_RESULT_AVAILABLE") {
+    const payload = parsePayload(events[0]);
+    const uncertain = payload.status === "SIDE_EFFECT_UNKNOWN"
+      ? "The external action may already have produced a side effect. Do not retry or submit a fallback request automatically."
+      : null;
+    return [[
+      "[Tower external capability result]",
+      `Task: ${payload.childTitle} (${payload.childTaskId})`,
+      `Request: ${payload.requestId ?? "unknown"}`,
+      `Capability: ${payload.capability ?? "unknown"}`,
+      `Status: ${payload.status ?? "unknown"}`,
+      `Revision: ${payload.revision ?? "unknown"}`,
+      payload.jobRef ? `Job: ${payload.jobRef}` : null,
+      payload.summary ? `Summary: ${payload.summary}` : null,
+      payload.evidence?.length ? `Evidence: ${payload.evidence.join(", ")}` : null,
+      uncertain,
+      "Treat this persisted result as the wakeup fact for the current task/Goal. Continue from it idempotently; do not recreate the external request.",
+    ].filter(Boolean).join("\n"), protocol].join("");
+  }
+
+  if (events.length === 1 && events[0].kind === "GOAL_TIMER_DUE") {
+    const payload = parsePayload(events[0]);
+    return [[
+      "[Tower unattended Goal timer]",
+      `Task: ${payload.childTitle} (${payload.childTaskId})`,
+      `Scheduled check: ${payload.summary ?? "The persisted wakeup time is due"}`,
+      "Re-evaluate the Goal from current durable project, child-task, ask, and capability state. Do not assume that elapsed time means an external action failed, and do not recreate requests that already have a requestId.",
+    ].join("\n"), protocol].join("");
+  }
+
+  if (events.length === 1 && events[0].kind === "GOAL_BLOCKED") {
+    const payload = parsePayload(events[0]);
+    return [[
+      "[Tower unattended Goal blocked]",
+      `Task: ${payload.childTitle} (${payload.childTaskId})`,
+      `Reason: ${payload.summary ?? "A persistent budget or watchdog guard was reached"}`,
+      "Stop autonomous work. Preserve a concise progress and evidence summary, then notify the OWNER once through the bounded OWNER messaging path if a valid authorization remains. Never bypass an expired grant, recreate an external request, or report the Goal as complete.",
+    ].join("\n"), protocol].join("");
+  }
+
   const items = events.map((event, index) => {
     const payload = parsePayload(event);
     const detail = event.kind === "GATEWAY_WORK_REQUEST"
       ? (payload.instruction || "(no external work instruction)").slice(0, 8000)
+      : event.kind === "CAPABILITY_RESULT_AVAILABLE"
+        ? `Capability: ${payload.capability ?? "unknown"}; status: ${payload.status ?? "unknown"}; request: ${payload.requestId ?? "unknown"}; summary: ${(payload.summary || "(no summary)").slice(0, 1600)}`
+      : event.kind === "GOAL_TIMER_DUE" || event.kind === "GOAL_BLOCKED"
+        ? (payload.summary || "(no Goal detail)").slice(0, 1600)
       : event.kind === "CHILD_DECISION_REQUIRED"
       ? `Question: ${(payload.question || payload.childReply || "(no question text)").slice(0, 1600)}`
       : event.kind === "CHILD_EXECUTION_FAILED"
@@ -710,13 +757,18 @@ export async function drainWorkbenchEvents(
 
 export async function acknowledgeWorkbenchBatch(
   batchId: string,
-  parentTaskId: string,
+  parentTaskId: string | undefined,
   leaseToken: string,
 ): Promise<WorkbenchBatchTransitionResult> {
+  const boundParentTaskId = parentTaskId ?? (await db.workbenchBatch.findUnique({
+    where: { id: batchId },
+    select: { parentTaskId: true },
+  }))?.parentTaskId;
+  if (!boundParentTaskId) throw new Error(`Unknown Workbench batch: ${batchId}`);
   const result = await db.$transaction(async (tx) => {
     const batch = await tx.workbenchBatch.findUnique({ where: { id: batchId } });
     if (!batch) throw new Error(`Unknown Workbench batch: ${batchId}`);
-    if (batch.parentTaskId !== parentTaskId) {
+    if (batch.parentTaskId !== boundParentTaskId) {
       throw new Error(`Workbench batch ${batchId} belongs to a different parent task`);
     }
     if (batch.state === "RESOLVED") {
@@ -776,7 +828,7 @@ export async function acknowledgeWorkbenchBatch(
       noOp: false,
     };
   });
-  await recordWorkbenchRuntime(parentTaskId, "BUSY", {
+  await recordWorkbenchRuntime(boundParentTaskId, "BUSY", {
     activeBatchId: batchId,
     blockedReason: "Workbench acknowledged the batch and is processing it",
   });
@@ -785,13 +837,18 @@ export async function acknowledgeWorkbenchBatch(
 
 export async function resolveWorkbenchBatch(
   batchId: string,
-  parentTaskId: string,
+  parentTaskId: string | undefined,
   leaseToken: string,
 ): Promise<WorkbenchBatchTransitionResult> {
+  const boundParentTaskId = parentTaskId ?? (await db.workbenchBatch.findUnique({
+    where: { id: batchId },
+    select: { parentTaskId: true },
+  }))?.parentTaskId;
+  if (!boundParentTaskId) throw new Error(`Unknown Workbench batch: ${batchId}`);
   const result = await db.$transaction(async (tx) => {
     const batch = await tx.workbenchBatch.findUnique({ where: { id: batchId } });
     if (!batch) throw new Error(`Unknown Workbench batch: ${batchId}`);
-    if (batch.parentTaskId !== parentTaskId) {
+    if (batch.parentTaskId !== boundParentTaskId) {
       throw new Error(`Workbench batch ${batchId} belongs to a different parent task`);
     }
     if (batch.state === "RESOLVED") {
@@ -840,7 +897,7 @@ export async function resolveWorkbenchBatch(
       noOp: false,
     };
   });
-  await recordWorkbenchRuntime(parentTaskId, "BUSY", {
+  await recordWorkbenchRuntime(boundParentTaskId, "BUSY", {
     activeBatchId: null,
     blockedReason: "Batch resolved; provider turn is still in progress",
   });
@@ -870,15 +927,20 @@ export async function recordWorkbenchProviderTurnCompleted(parentTaskId: string)
 
 export async function heartbeatWorkbenchBatch(
   batchId: string,
-  parentTaskId: string,
+  parentTaskId: string | undefined,
   leaseToken: string,
 ): Promise<{ batchId: string; generation: number; state: "ACKED"; leaseExpiresAt: Date }> {
+  const boundParentTaskId = parentTaskId ?? (await db.workbenchBatch.findUnique({
+    where: { id: batchId },
+    select: { parentTaskId: true },
+  }))?.parentTaskId;
+  if (!boundParentTaskId) throw new Error(`Unknown Workbench batch: ${batchId}`);
   const heartbeatAt = new Date();
   const leaseExpiresAt = new Date(heartbeatAt.getTime() + WORKBENCH_PROCESSING_LEASE_MS);
   const updated = await db.workbenchBatch.updateMany({
     where: {
       id: batchId,
-      parentTaskId,
+      parentTaskId: boundParentTaskId,
       state: "ACKED",
       leaseToken,
       leaseExpiresAt: { gt: heartbeatAt },
@@ -1046,9 +1108,17 @@ async function defaultEnsureWorkbenchRunning(taskId: string) {
  */
 export async function reconcilePendingWorkbenchEvents(
   ensureWorkbench: EnsureWorkbenchRunning = defaultEnsureWorkbenchRunning,
+  now = new Date(),
 ): Promise<WorkbenchReconcileResult> {
+  const failedBefore = new Date(now.getTime() - WORKBENCH_RECONCILE_FAILURE_BACKOFF_MS);
   const parents = await db.workbenchEvent.findMany({
-    where: { state: "PENDING" },
+    where: {
+      state: "PENDING",
+      OR: [
+        { lastError: null },
+        { updatedAt: { lte: failedBefore } },
+      ],
+    },
     distinct: ["parentTaskId"],
     orderBy: { createdAt: "asc" },
     select: { parentTaskId: true },

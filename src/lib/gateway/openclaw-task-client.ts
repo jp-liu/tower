@@ -69,8 +69,21 @@ function asNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function openClawProcessEnv(overrides: Record<string, string>): NodeJS.ProcessEnv {
+export function openClawProcessEnv(overrides: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...overrides };
+  // Gateway/task calls are machine-readable JSON. Test runners and interactive
+  // parents commonly export FORCE_COLOR, which makes some OpenClaw releases
+  // wrap otherwise valid JSON in ANSI escapes. Force a stable non-TTY format.
+  delete env.FORCE_COLOR;
+  env.NO_COLOR = "1";
+  env.CLICOLOR = "0";
+  // Do not make the external CLI inherit Vitest's worker sentinel. OpenClaw's
+  // own runtime treats VITEST as an in-process test flag and may exit quietly.
+  for (const key of ["VITEST", "VITEST_MODE", "VITEST_POOL_ID", "VITEST_WORKER_ID"]) {
+    delete env[key];
+  }
+  const mutableEnv = env as Record<string, string | undefined>;
+  if (mutableEnv.NODE_ENV === "test") delete mutableEnv.NODE_ENV;
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
   const home = env.HOME || env.USERPROFILE || homedir();
   const supplemental = hostPlatform() === "win32"
@@ -145,6 +158,18 @@ export function parseOpenClawTaskOutput(output: string): unknown {
   }
 }
 
+export function findOpenClawTaskInList(requestedRef: string, value: unknown): unknown | null {
+  const root = value && typeof value === "object" && !Array.isArray(value)
+    ? value as { tasks?: unknown }
+    : null;
+  const rows = Array.isArray(value) ? value : Array.isArray(root?.tasks) ? root.tasks : [];
+  return rows.find((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const record = item as OpenClawTaskRecord;
+    return record.taskId === requestedRef || record.runId === requestedRef;
+  }) ?? null;
+}
+
 export async function readOpenClawCapabilityJob(
   jobRef: string,
   env: Record<string, string> = {},
@@ -156,14 +181,38 @@ export async function readOpenClawCapabilityJob(
   // Keep the optional adapter on Node-only dependencies so source stdio, the
   // bundled server, and the published CLI have the same module-loading path.
   const command = env.OPENCLAW_CLI_PATH || process.env.OPENCLAW_CLI_PATH || "openclaw";
-  const result = await execFileAsync(command, ["tasks", "show", ref, "--json"], {
+  const options = {
     timeout: 20_000,
     maxBuffer: 1024 * 1024,
     env: openClawProcessEnv(env),
     // npm-installed Windows CLIs are .cmd shims; the ref is already strictly
     // allow-listed above and every other argument is a fixed literal.
     shell: hostPlatform() === "win32",
-  });
+  };
+  let result;
+  try {
+    result = await execFileAsync(command, ["tasks", "show", ref, "--json"], options);
+  } catch (showError) {
+    // OpenClaw's subagent runtime returns a runId, while some CLI releases only
+    // accept taskId in `tasks show`. Resolve that opaque runId through the
+    // authoritative task list without guessing or starting another Job.
+    try {
+      const listed = await execFileAsync(command, ["tasks", "list", "--json"], options);
+      const streams = typeof listed === "string" ? [listed] : [listed.stdout, listed.stderr];
+      for (const stream of streams) {
+        if (!stream?.trim()) continue;
+        try {
+          const match = findOpenClawTaskInList(ref, parseOpenClawTaskOutput(stream));
+          if (match) return parseOpenClawTaskSnapshot(ref, match);
+        } catch {
+          // The other stream may contain the JSON response.
+        }
+      }
+    } catch {
+      // Preserve the original, more specific `tasks show` failure below.
+    }
+    throw showError;
+  }
   const streams = typeof result === "string"
     ? [result]
     : [result.stdout, result.stderr];

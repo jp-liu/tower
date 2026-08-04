@@ -177,19 +177,136 @@ model Task {
 // Core identifier rather than a Prisma relation: the module owns this lifecycle
 // and can move to another package/store without changing the Task model.
 model UnattendedGoalRuntime {
-  taskId        String                      @id
-  state         UnattendedGoalRuntimeState  @default(ACTIVE)
-  lastEventKind String
-  activatedAt   DateTime                    @default(now())
-  endedAt       DateTime?
-  updatedAt     DateTime                    @updatedAt
+  taskId                 String                     @id
+  state                  UnattendedGoalRuntimeState @default(ACTIVE)
+  lastEventKind          String
+  activatedAt            DateTime                   @default(now())
+  endedAt                DateTime?
+  blockedAt              DateTime?
+  blockedReason          String?
+  providerTurns          Int                        @default(0)
+  consecutiveFailures    Int                        @default(0)
+  noProgressTurns        Int                        @default(0)
+  lastProgressAt         DateTime?
+  maxDurationMs          Int                        @default(28800000)
+  maxProviderTurns       Int                        @default(100)
+  maxChildTasks          Int                        @default(50)
+  maxConcurrentChildren  Int                        @default(4)
+  maxConsecutiveFailures Int                        @default(3)
+  maxNoProgressTurns     Int                        @default(5)
+  maxCapabilityJobs      Int                        @default(20)
+  maxTokens              Int?
+  maxCostUsdCents        Int?
+  consumedTokens         Int?
+  consumedCostUsdCents   Int?
+  nextWakeAt             DateTime?
+  wakeReason             String?
+  wakeGeneration         Int                        @default(0)
+  wakePublishedAt        DateTime?
+  blockGeneration        Int                        @default(0)
+  blockEventPublishedAt  DateTime?
+  updatedAt              DateTime                   @updatedAt
 
   @@index([state, updatedAt])
+  @@index([state, nextWakeAt])
 }
 
 enum UnattendedGoalRuntimeState {
   ACTIVE
+  BLOCKED
   ENDED
+}
+
+// Module-owned idempotency ledger for durable progress facts. It is not a
+// fan-out event bus and intentionally carries no relation back into Core.
+model UnattendedGoalProgressFact {
+  id        String   @id @default(cuid())
+  taskId    String
+  kind      String
+  outcome   String
+  dedupKey  String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
+}
+
+// Trusted, bounded authorization issued by Tower's local control plane. The
+// capability runtime validates this opaque reference; task agents cannot mint
+// grants by enabling goal mode or writing authorization-shaped JSON.
+model CapabilityGrant {
+  id                String         @id @default(cuid())
+  taskId            String
+  capability        String
+  risk              CapabilityRisk
+  targetKind        String
+  targetFingerprint String
+  issuer            String
+  maxUses           Int
+  usedCount         Int            @default(0)
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([taskId, capability, expiresAt])
+  @@index([expiresAt, revokedAt])
+}
+
+// Tower stores only the request correlation and project-relevant result. The
+// external Job state machine, credentials, routes, and full transcript remain
+// owned by the Gateway/OpenClaw runtime.
+model CapabilityRequest {
+  requestId        String                 @id
+  taskId           String
+  schemaVersion    Int                    @default(1)
+  capability       String
+  lane             CapabilityLane
+  risk             CapabilityRisk
+  authorizationRef String?
+  inputDigest      String
+  inputsJson       String
+  state            CapabilityRequestState @default(PENDING)
+  gateway          String?
+  jobRef           String?
+  outboundId       String?
+  revision         String?
+  resultSummary    String?
+  evidenceJson     String?
+  lastError        String?
+  completedAt      DateTime?
+  resultEventPublishedAt DateTime?
+  callbackTokenHash String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@index([taskId, state, updatedAt])
+  @@index([state, updatedAt])
+  @@index([jobRef])
+  @@index([outboundId])
+}
+
+enum CapabilityLane {
+  DIRECT
+  JOB
+}
+
+enum CapabilityRisk {
+  R0
+  R1
+  R2
+  R3
+}
+
+enum CapabilityRequestState {
+  PENDING
+  ACCEPTED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  BLOCKED
+  CANCELLED
+  EXPIRED
+  SIDE_EFFECT_UNKNOWN
 }
 
 // Written in the same transaction as task creation, before the Workbench can
@@ -949,6 +1066,9 @@ enum WorkbenchEventKind {
   CHILD_DECISION_REQUIRED
   CHILD_EXECUTION_FAILED
   GATEWAY_WORK_REQUEST
+  CAPABILITY_RESULT_AVAILABLE
+  GOAL_TIMER_DUE
+  GOAL_BLOCKED
 }
 
 enum WorkbenchEventPriority {

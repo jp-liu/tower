@@ -16,7 +16,7 @@ async function resolveProjectId(
 
   const projects = await db.project.findMany({
     where: workspaceId ? { workspaceId } : undefined,
-    include: { workspace: true },
+    include: { workspace: true, group: true },
   });
   const scored = projects
     .map((p) => ({
@@ -24,12 +24,27 @@ async function resolveProjectId(
       name: p.name,
       alias: p.alias,
       workspaceName: p.workspace.name,
-      confidence: scoreProject({ name: p.name, alias: p.alias, description: p.description }, project),
+      groupId: p.groupId,
+      confidence: scoreProject({
+        name: p.name,
+        alias: p.alias,
+        description: p.description,
+        groupName: p.group?.name,
+      }, project),
     }))
     .filter((r) => r.confidence >= MIN_CONFIDENCE)
     .sort((a, b) => b.confidence - a.confidence);
 
   if (scored.length === 0) return {};
+  const matchedGroupIds = new Set(scored.map((item) => item.groupId).filter(Boolean));
+  if (
+    scored.length > 1
+    && matchedGroupIds.size === 1
+    && scored.every((item) => item.groupId)
+  ) {
+    const anchor = scored.find((item) => item.name.endsWith("-trace")) ?? scored[0];
+    return { projectId: anchor.projectId };
+  }
   // 唯一高分（拉开差距）直接用，否则让调用方选
   if (scored.length === 1 || scored[0].confidence - scored[1].confidence >= 0.2) {
     return { projectId: scored[0].projectId };

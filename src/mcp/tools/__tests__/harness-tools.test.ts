@@ -344,13 +344,27 @@ describe("Workbench durable batch tools", () => {
     );
   });
 
-  it("rejects resolution outside a bound Workbench terminal", async () => {
+  it("lets the signed bridge derive the parent from the unguessable batch lease when task env is absent", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ batchId: "wb-123", state: "RESOLVED", eventCount: 1, noOp: false }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
     await expect(harnessTools.resolve_workbench_batch.handler({
       batchId: "wb-123",
       leaseToken: "lease-123",
-    })).resolves.toEqual({
-      error: "resolve_workbench_batch must run inside the bound Workbench terminal",
+    })).resolves.toMatchObject({
+      state: "RESOLVED",
+      noOp: false,
     });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:3000/api/internal/workbench/batch",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ action: "resolve", batchId: "wb-123", leaseToken: "lease-123" }),
+      }),
+    );
   });
 });
 
