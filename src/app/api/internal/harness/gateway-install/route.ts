@@ -11,6 +11,7 @@ const bodySchema = z.object({
   accessPolicy: z.object({
     ownerIds: z.record(z.string(), z.array(z.string().trim().min(1).max(512))).optional(),
     trustedChannels: z.record(z.string(), z.array(z.string().trim().min(1).max(512))).optional(),
+    channelScopes: z.record(z.string(), z.record(z.string(), z.string().trim().min(1).max(512))).optional(),
   }).optional(),
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Loader2, ShieldCheck, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,36 +31,67 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
   const [durationMinutes, setDurationMinutes] = useState("480");
   const [maxUses, setMaxUses] = useState("20");
   const [selectedCapabilities, setSelectedCapabilities] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const mutationInFlight = useRef(false);
+
+  const loadControl = useCallback(async () => {
+    setLoading(true);
+    setLoadFailed(false);
+    try {
+      setState(await getUnattendedGoalControl(taskId));
+    } catch {
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [taskId]);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setLoadFailed(false);
     getUnattendedGoalControl(taskId)
       .then((value) => { if (!cancelled) setState(value); })
-      .catch(() => { if (!cancelled) setState(null); });
+      .catch(() => { if (!cancelled) setLoadFailed(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [taskId]);
 
   const active = Boolean(state?.active && state.ownerMessageGrant);
-  const apply = () => startTransition(async () => {
-    try {
-      if (active) {
-        await disableUnattendedGoalFromUi(taskId);
-      } else {
-        await enableUnattendedGoalFromUi({
+  const apply = () => {
+    // useTransition updates `pending` on the next render. Guard synchronously too,
+    // so two clicks in the same event turn cannot submit the mutation twice.
+    if (mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setUpdateError(null);
+    startTransition(async () => {
+      try {
+        if (active) {
+          await disableUnattendedGoalFromUi(taskId);
+        } else {
+          await enableUnattendedGoalFromUi({
             taskId,
             durationMinutes: Number(durationMinutes),
             maxUses: Number(maxUses),
             capabilities: [...selectedCapabilities],
           });
+        }
+        setState(await getUnattendedGoalControl(taskId));
+        setLoadFailed(false);
+        setDialogOpen(false);
+        toast.success(active ? t("unattended.disabled") : t("unattended.enabled"));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t("unattended.updateFailed");
+        setUpdateError(message);
+        toast.error(message);
+      } finally {
+        mutationInFlight.current = false;
       }
-      setState(await getUnattendedGoalControl(taskId));
-      setDialogOpen(false);
-      toast.success(active ? t("unattended.disabled") : t("unattended.enabled"));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("unattended.updateFailed"));
-    }
-  });
+    });
+  };
 
   const remaining = state?.ownerMessageGrant?.remainingUses ?? 0;
   const optionalCapabilities = state?.capabilities.filter((item) =>
@@ -77,22 +108,39 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
               className={active
                 ? "gap-1.5 text-emerald-500 hover:text-emerald-500"
                 : "gap-1.5 text-muted-foreground"}
-              onClick={() => setDialogOpen(true)}
-              disabled={pending || state === null}
+              onClick={() => loadFailed ? void loadControl() : setDialogOpen(true)}
+              disabled={pending || loading}
             />
           }
         >
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : active
+          {pending || loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : active
             ? <ShieldCheck className="h-3.5 w-3.5" />
             : <ShieldOff className="h-3.5 w-3.5" />}
-          {t(active ? "unattended.active" : "unattended.inactive")}
+          {t(loading
+            ? "unattended.loading"
+            : loadFailed
+              ? "unattended.retry"
+              : active
+                ? "unattended.active"
+                : "unattended.inactive")}
         </TooltipTrigger>
         <TooltipContent side="bottom">
-          {active ? t("unattended.remaining", { count: String(remaining) }) : t("unattended.enableHint")}
+          {loadFailed
+            ? t("unattended.updateFailed")
+            : active
+              ? t("unattended.remaining", { count: String(remaining) })
+              : t("unattended.enableHint")}
         </TooltipContent>
       </Tooltip>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (pending) return;
+          setDialogOpen(open);
+          if (!open) setUpdateError(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t(active ? "unattended.disableTitle" : "unattended.enableTitle")}</DialogTitle>
@@ -154,11 +202,24 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
               )}
             </div>
           )}
+          {updateError && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {updateError}
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={pending}>
               {t("common.cancel")}
             </Button>
-            <Button variant={active ? "destructive" : "default"} onClick={apply} disabled={pending}>
+            <Button
+              variant={active ? "destructive" : "default"}
+              onClick={apply}
+              disabled={pending}
+              aria-busy={pending}
+            >
               {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {t(active ? "unattended.disableAction" : "unattended.enableAction")}
             </Button>

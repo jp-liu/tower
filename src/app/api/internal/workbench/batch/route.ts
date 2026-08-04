@@ -14,19 +14,19 @@ const schema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("ack"),
     batchId: z.string().trim().min(1).max(128),
-    parentTaskId: z.string().trim().min(1).max(128),
+    parentTaskId: z.string().trim().min(1).max(128).optional(),
     leaseToken: z.string().trim().min(1).max(128),
   }).strict(),
   z.object({
     action: z.literal("heartbeat"),
     batchId: z.string().trim().min(1).max(128),
-    parentTaskId: z.string().trim().min(1).max(128),
+    parentTaskId: z.string().trim().min(1).max(128).optional(),
     leaseToken: z.string().trim().min(1).max(128),
   }).strict(),
   z.object({
     action: z.literal("resolve"),
     batchId: z.string().trim().min(1).max(128),
-    parentTaskId: z.string().trim().min(1).max(128),
+    parentTaskId: z.string().trim().min(1).max(128).optional(),
     leaseToken: z.string().trim().min(1).max(128),
   }).strict(),
 ]);

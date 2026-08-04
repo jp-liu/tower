@@ -5,7 +5,7 @@ export const messagingTools = {
   list_notify_targets: {
     description:
       "Read the ACTIVE notify channel of a given SCOPE from Tower's DB (harness.targets) and return " +
-      "READY-TO-FOLLOW send instructions for pushing a message to a human — used by the tower-ask / tower-goal " +
+      "READY-TO-FOLLOW send instructions for pushing a message to a human — used by the tower-bridge / tower-goal " +
       "skills. Two scopes: 'work' (you're at the keyboard — send to a group/colleague for discussion, don't " +
       "park) and 'unattended' (off-hours — reach you personally, park while waiting). Tower only records; the " +
       "agent does the actual send via its own platform MCP. Pass the current taskId so the [[tower:task=...]] " +
@@ -155,7 +155,7 @@ export const messagingTools = {
       "This ENDS your turn — do NOT keep working after calling it. The task is suspended " +
       "(its terminal is closed to save resources) and later resumed with the human's answer " +
       "as your next message. This tool only RECORDS + parks — to actually reach the human, first push the " +
-      "question via the tower-ask skill (call list_notify_targets for the active channel), then call this. " +
+      "question via the tower-bridge explicit-message path (call list_notify_targets for the active channel), then call this. " +
       "Otherwise it just waits visibly in the Tower /harness panel.",
     schema: z.object({
       taskId: z.string().optional().describe("The current task id (TOWER_TASK_ID); defaults to the terminal's TOWER_TASK_ID when present"),
@@ -201,7 +201,7 @@ export const messagingTools = {
       "Send a NON-BLOCKING progress update / heads-up to the human operator, then KEEP WORKING. " +
       "Unlike ask_human this does not park the task or end your turn — use it for milestones, " +
       "status reports, or FYI notes that need no reply. This tool only RECORDS — to actually reach the human, " +
-      "first push the note via the tower-ask skill (list_notify_targets for the active channel), then call this.",
+      "first push the note via the tower-bridge explicit-message path (list_notify_targets for the active channel), then call this.",
     schema: z.object({
       taskId: z.string().optional().describe("The current task id (TOWER_TASK_ID); defaults to the terminal's TOWER_TASK_ID when present"),
       message: z.string().min(1).max(4000).describe("The progress update for the human"),

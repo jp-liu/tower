@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import Ajv from "ajv";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 // The shipped OpenClaw plugin is plain ESM JavaScript so it can be copied into
 // OpenClaw without a Tower build step.
 import {
@@ -24,6 +26,18 @@ const validateSchema = ({ schema, value }: { schema: object; value: unknown }) =
 };
 
 describe("Tower OpenClaw capability plugin contract", () => {
+  it("shares pending callbacks across OpenClaw runtime scopes", () => {
+    const source = readFileSync(fileURLToPath(new URL(
+      "../../../../extensions/tower-agent/openclaw-capability/index.js",
+      import.meta.url,
+    )), "utf8");
+    const registry = source.indexOf("const callbacks = new Map();");
+    const registration = source.indexOf("export default definePluginEntry");
+    expect(registry).toBeGreaterThan(-1);
+    expect(registry).toBeLessThan(registration);
+    expect(source.slice(registration)).not.toContain("const callbacks = new Map();");
+  });
+
   it("keeps concrete Operator ids private during discovery", () => {
     const entries = normalizeCapabilityConfig({
       capabilities: [{

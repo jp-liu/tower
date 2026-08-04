@@ -27,10 +27,13 @@ import {
   submitOpenClawCapabilityJob,
   type OpenClawCapabilityDescriptor,
 } from "./openclaw-capability-client";
-import { readOpenClawCapabilityJob } from "./openclaw-task-client";
+import {
+  readOpenClawCapabilityJob,
+  type CapabilityJobSnapshot,
+} from "./openclaw-task-client";
 import { readOwnerHomeTarget } from "./capability-target";
 import { secureInternalEqual } from "@/lib/internal-api-signing";
-import { publishWorkbenchCommand } from "@/lib/workbench/command-inbox";
+import { persistWorkbenchCommand } from "@/lib/workbench/event-contract";
 import {
   assertUnattendedGoalOperationAllowed,
   recordUnattendedGoalProgressFact,
@@ -69,6 +72,8 @@ const TERMINAL_STATES = new Set([
   "SIDE_EFFECT_UNKNOWN",
 ]);
 const ACTIVE_REQUEST_STATES = ["PENDING", "ACCEPTED", "RUNNING"] as const;
+const COMPLETION_SETTLE_DELAY_MS = 250;
+const COMPLETION_SETTLE_READS = 4;
 
 function capabilityCallbackUrl(env: Record<string, string>): string {
   const base = env.TOWER_API_URL
@@ -133,37 +138,44 @@ async function publishCapabilityResultIfNeeded(
   });
   if (!task) return request;
   const revision = request.revision || request.updatedAt.toISOString();
-  await publishWorkbenchCommand({
-    parentTaskId: task.id,
-    sourceTaskId: task.id,
-    kind: "CAPABILITY_RESULT_AVAILABLE",
-    priority: request.state === "SUCCEEDED" ? "NORMAL" : "HIGH",
-    dedupKey: `capability-result:${request.requestId}:${revision}`,
-    payload: {
-      childTaskId: task.id,
-      childTitle: task.title,
-      requestId: request.requestId,
-      capability: request.capability,
-      status: request.state,
-      revision,
-      summary: request.resultSummary ?? undefined,
-      evidence: parseEvidence(request.evidenceJson),
-      jobRef: request.jobRef ?? undefined,
-    },
-  });
+  const dedupKey = `capability-result:${request.requestId}:${revision}`;
   await recordUnattendedGoalProgressFact({
     taskId: task.id,
     kind: request.state === "SUCCEEDED" ? "CAPABILITY_JOB_SUCCEEDED" : "CAPABILITY_JOB_FAILED",
-    dedupKey: `capability-result:${request.requestId}:${revision}`,
+    dedupKey,
   }, database);
-  await database.capabilityRequest.updateMany({
-    where: { requestId: request.requestId, resultEventPublishedAt: null },
-    data: {
-      resultEventPublishedAt: new Date(),
-      callbackTokenHash: null,
-    },
+  return database.$transaction(async (tx) => {
+    const current = await tx.capabilityRequest.findUniqueOrThrow({
+      where: { requestId: request.requestId },
+    });
+    if (current.resultEventPublishedAt) return current;
+    await persistWorkbenchCommand(tx, {
+      parentTaskId: task.id,
+      sourceTaskId: task.id,
+      kind: "CAPABILITY_RESULT_AVAILABLE",
+      priority: request.state === "SUCCEEDED" ? "NORMAL" : "HIGH",
+      dedupKey,
+      payload: {
+        childTaskId: task.id,
+        childTitle: task.title,
+        requestId: request.requestId,
+        capability: request.capability,
+        status: request.state,
+        revision,
+        summary: request.resultSummary ?? undefined,
+        evidence: parseEvidence(request.evidenceJson),
+        jobRef: request.jobRef ?? undefined,
+      },
+    });
+    await tx.capabilityRequest.updateMany({
+      where: { requestId: request.requestId, resultEventPublishedAt: null },
+      data: {
+        resultEventPublishedAt: new Date(),
+        callbackTokenHash: null,
+      },
+    });
+    return tx.capabilityRequest.findUniqueOrThrow({ where: { requestId: request.requestId } });
   });
-  return database.capabilityRequest.findUniqueOrThrow({ where: { requestId: request.requestId } });
 }
 
 function parseInputs(row: CapabilityRequest): Record<string, unknown> {
@@ -420,9 +432,24 @@ async function reconcileJob(
   const config = await readHarnessGatewayRuntimeConfig("openclaw");
   const gatewayEnv = config.env ?? {};
   const snapshot = await readOpenClawCapabilityJob(request.jobRef!, gatewayEnv);
+  return applyCapabilityJobSnapshot(request.requestId, snapshot, database);
+}
+
+/**
+ * Apply one authoritative, read-only OpenClaw task observation. Exposed so
+ * process-level recovery drills can inject delayed/out-of-order snapshots
+ * through the exact production state transition and Workbench transaction.
+ */
+export async function applyCapabilityJobSnapshot(
+  requestId: string,
+  snapshot: CapabilityJobSnapshot,
+  database: CapabilityDb = db,
+): Promise<CapabilityRequestSnapshot> {
+  const request = await database.capabilityRequest.findUnique({ where: { requestId } });
+  if (!request || request.lane !== "JOB") throw new Error("Capability Job request not found");
   const terminal = TERMINAL_STATES.has(snapshot.status);
   await database.capabilityRequest.updateMany({
-    where: { requestId: request.requestId, state: { in: [...ACTIVE_REQUEST_STATES] } },
+    where: { requestId, state: { in: [...ACTIVE_REQUEST_STATES] } },
     data: {
       state: snapshot.status,
       gateway: "openclaw",
@@ -434,7 +461,7 @@ async function reconcileJob(
       callbackTokenHash: terminal ? null : request.callbackTokenHash,
     },
   });
-  const updated = await database.capabilityRequest.findUniqueOrThrow({ where: { requestId: request.requestId } });
+  const updated = await database.capabilityRequest.findUniqueOrThrow({ where: { requestId } });
   return requestSnapshot(await publishCapabilityResultIfNeeded(updated, database));
 }
 
@@ -516,13 +543,19 @@ export async function reconcileCapabilityCompletion(
   }
   let result = await dispatchCapabilityRequest(request.requestId, database);
   // A very fast Operator can finish before Tower persists the submit response.
-  // The first dispatch is idempotent and repairs jobRef; reconcile immediately
-  // so the completion hook remains the primary path instead of waiting for the
-  // low-frequency recovery scan.
-  if (!TERMINAL_STATES.has(result.status) && result.jobRef) {
+  // The first dispatch is idempotent and repairs jobRef. OpenClaw can also emit
+  // subagent_ended a few hundred milliseconds before its task snapshot stores
+  // the terminal state, so use a short bounded read-only settle loop. This never
+  // resubmits the external action or creates a replacement Job.
+  for (
+    let read = 0;
+    read < COMPLETION_SETTLE_READS && !TERMINAL_STATES.has(result.status) && result.jobRef;
+    read++
+  ) {
     if (result.jobRef !== input.runId) {
       throw new Error("Capability completion callback does not match the accepted Job");
     }
+    await new Promise((resolve) => setTimeout(resolve, COMPLETION_SETTLE_DELAY_MS));
     result = await dispatchCapabilityRequest(request.requestId, database);
   }
   if (TERMINAL_STATES.has(result.status)) {

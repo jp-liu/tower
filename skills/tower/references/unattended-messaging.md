@@ -4,7 +4,7 @@ Tower records and resumes task conversations, and for configured Hermes/OpenClaw
 
 1. **Record** every ask/notify/done/failed (the `/harness` panel is the operations log).
 2. **park / resume** the task-execution lifecycle (external tools can't touch this).
-3. Submit unattended OWNER messages through a bounded CapabilityRequest; keep explicit work-recipient messages on `push_to_human`.
+3. Route both message modes through the `tower-bridge` skill: unattended OWNER messages use a bounded CapabilityRequest; explicit work-recipient messages use `push_to_human`.
 4. Define **this contract** for any agent/bridge (bot, OpenClaw, Hermes…) to follow.
 5. Persist project discussion/Workbench session bindings plus deduplicated inbound and retryable outbound envelopes.
 
@@ -17,11 +17,11 @@ Feishu/WhatsApp/Slack/etc. are downstream platforms, not Tower gateways. Tower s
 | Role | Who | Does what |
 |------|-----|-----------|
 | **tower-goal (unattended)** | A task that activated the `tower-goal` skill at run time | Work silently toward the goal; on stuck/done submit one authorized OWNER CapabilityRequest and park. Activation authorizes scheduling, not R2/R3 side effects. Tower UI must issue the bounded grant. |
-| **tower-ask (work outbound)** | The task agent (`tower-ask` skill) | For an explicitly named human/group, call `list_notify_targets` with `scope: work`, then `push_to_human` (send first, then record/park atomically). |
+| **tower-bridge / explicit message** | The task agent (`tower-bridge` skill) | For an explicitly named human/group, call `list_notify_targets` with `scope: work`, then `push_to_human` (durable outbox, send, then record/park). |
 | **bridge (inbound)** | A long-running MCP agent (bot / OpenClaw / …) | Own first-hop intent routing. Ordinary Q&A/external work stays outside Tower; Tower replies are resolved read-only before an explicit query, ask answer, delegation, or continuation action. |
 | **tower-bridge (external capability)** | The task agent (`tower-bridge` skill) | Submit a structured external capability request without choosing a concrete Operator. Unattended OWNER sends are the first DIRECT capability; sibling-task handoff stays in the `tower` skill. |
 
-> `tower-goal` / `tower-ask` / `tower-bridge` are **real callable skills** distributed with Tower into task-agent skill homes. Lowercase `bridge` is still this doc's name for the inbound gateway role.
+> `tower-goal` / `tower-bridge` are **real callable skills** distributed with Tower into task-agent skill homes. `tower-bridge` owns every external side effect, including human messages. Lowercase `bridge` is still this doc's name for the inbound gateway role.
 
 ---
 

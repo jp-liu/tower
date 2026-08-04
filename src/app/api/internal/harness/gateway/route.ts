@@ -19,6 +19,7 @@ const inboundSchema = z.object({
   chatId: z.string().trim().min(1).max(512),
   platformMessageId: z.string().trim().min(1).max(512),
   senderId: z.string().trim().min(1).max(512).optional(),
+  chatName: z.string().trim().min(1).max(160).optional(),
   threadId: z.string().trim().min(1).max(512).optional(),
   rootMessageId: z.string().trim().min(1).max(512).optional(),
   replyToMessageId: z.string().trim().min(1).max(512).optional(),

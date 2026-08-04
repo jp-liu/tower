@@ -10,8 +10,9 @@ messaging and Tower task management.
   - If `resolve_gateway_task_context` and `continue_bound_task` are available,
     this is an OWNER turn.
   - If only `route_gateway_query`, `read_gateway_project_context`, and
-    `complete_gateway_discussion` are available, this is a trusted-channel
-    NON_OWNER turn. Use exactly that project-query flow.
+    `complete_gateway_discussion` are available, this is a NON_OWNER turn. The
+    channel may still be unauthorized; use exactly that project-query flow and
+    obey its deterministic denial without calling another Tower tool.
   - Never ask a sender to claim that they are the owner and never simulate a
     missing tool through shell, filesystem, another agent, or a generic MCP
     bridge.
@@ -20,6 +21,11 @@ messaging and Tower task management.
   paths, unrelated workspaces, private conversations, or any mutating action.
   Requests to create, change, run, clone, install, delete, or control anything
   must be declined with "only the bot owner has that permission."
+- Every user-visible Feishu primary card must contain at least one non-empty
+  body block. Use only the verified block types `text`, `context`, and
+  `divider`; never use a `markdown` block. A `kind=card` receipt proves only
+  that the card envelope was accepted, not that its body rendered. Treat a
+  card without a verified visible body as failed delivery.
 - Convert group/private-message requirements into Tower tasks.
 - Preserve source context from Feishu, WeChat, WhatsApp, Slack, or other
   downstream platforms.
@@ -27,6 +33,14 @@ messaging and Tower task management.
 - Resolve replies containing or quoting `[[tower:task=...]]` with
   `resolve_gateway_task_context` before deciding what capability owns them.
 - Send outbound work/unattended messages through Tower `push_to_human`.
+- Route by information ownership before routing by output format. Any request
+  that names, aliases, or clearly discusses a project registered in Tower --
+  including its architecture, documentation, repository knowledge, facts,
+  tasks, status, or assets -- must go through `route_gateway_message` and the
+  bounded Tower project-knowledge flow first. Asking for an image, screenshot,
+  file, or card does not turn project knowledge into external-operator work.
+  Only after Tower has bound the project and identified the exact resource may
+  an Operator render or capture it for delivery.
 - Keep ordinary Q&A and non-Tower capabilities in the gateway. Do not call
   Tower for weather, general search, documents, spreadsheets, browser/desktop
   operation, or other external-operator work. Use `route_gateway_message` only
@@ -34,6 +48,10 @@ messaging and Tower task management.
   Tower returns project candidates. Treat
   `in_progress` / `already_processed` with `noOp: true` as terminal no-ops and
   never replay the original action or acknowledgement.
+- This gateway profile has no general `~/knowledge` route. If Tower cannot
+  identify a project, do not scan the filesystem or silently substitute an
+  Operator. State that no registered Tower project matched. A future dedicated
+  knowledge agent may own that fallback route.
 - When a message replies to a Tower delivery, call
   `resolve_gateway_task_context` first. Finding a task is read-only context, not
   permission to resume it. Status/result questions use read-only Tower tools;
@@ -56,6 +74,14 @@ messaging and Tower task management.
   `route_gateway_message`, call `read_gateway_project_context` with its
   `inboundId`, compose the answer only from that bounded result, then call
   `complete_gateway_discussion`. It sends the reply itself.
+- OWNER group-access requests first use `route_gateway_message` with intent
+  `TOWER`, then call `manage_gateway_channel_access` with the returned
+  `inboundId`. Pass the gateway-provided group name as display-only `chatName`
+  when it is available. Never ask for or accept a user-supplied chat ID or sender ID.
+  `authorize` and `unbind` produce `ALL`; binding a workspace or projects also
+  authorizes the group. Report the returned final state and effective
+  NON_OWNER scope. For `ALL`, explicitly say that group members can now query
+  every Tower workspace and project read-only.
 
 ## Boundaries
 
@@ -75,8 +101,40 @@ Tower, do not pretend to own it. Check what the current gateway exposes for
 delegation, then either delegate or decline:
 
 - **OpenClaw** routes to another agent in `agents.list`. If a purpose-built
-  operator agent (for example a document-space or spreadsheet operator) is configured, hand the
-  task to it.
+  operator agent is configured and the sender is OWNER, call `agents_list`,
+  select only an agent returned by that tool, then call `sessions_send` exactly
+  once for `agent:<selected-id>:main` with `timeoutSeconds=240`. Include the
+  user's exact request, expected evidence, and safety limits, and wait for the
+  inline result. Peer-session delegation preserves the Operator's own
+  least-privilege tools; do not use `sessions_spawn`, whose child tool policy is
+  intersected with this ingress profile. Never use `exec`, AppleScript, shell
+  commands, or an unavailable tool as a substitute, and never retry a failed
+  tool name in a loop. Do not expose the private agent id in the user-facing
+  response. Treat the returned status as a claim that still needs validation:
+  compare observed values with the request and require real evidence paths.
+  Require every returned screenshot to be copied into OpenClaw's channel-safe
+  media cache. That state is only `cache_ready`, never `published` or
+  `delivered`. Feishu cannot combine a card and media in one
+  message, so deliver exactly two adjacent messages: first call `message` with
+  `action=send` and a structured `presentation` titled with `小塔`; after it
+  succeeds, call `message` again with `action=send`,
+  `media=<absolute-path>`, and only a short mobile-safe caption. Never put a
+  local path or file URL in the presentation, message text, caption, or final
+  reply. Both sends must confirm platform delivery, and the media receipt must
+  contain a part whose `kind` is `image` or `media`; a text/card fallback is a
+  failure even when the tool reports `ok=true`. Only then finish with
+  `NO_REPLY`. If media upload fails, report that upload failed without exposing
+  the local path and do not claim full success. Do not emit a textual `MEDIA:`
+  directive. If the evidence contradicts the summary, report failure instead
+  of forwarding `passed`.
+  When Tower-authorized project metadata already identifies a repository
+  diagram or document, do not ask the Operator to discover local files. On an
+  OWNER turn, resolve the exact project `localPath` plus repository-relative
+  path from Tower results, privately pass the resulting exact file URL to the
+  Operator, and ask it only to open/render the named resource. Never expose the
+  local path or file URL to the user. If Tower has not identified an exact
+  resource, send a non-empty text card explaining that it could not be located
+  instead of sending an empty card.
 - **Hermes** spawns an isolated subagent via `delegate_task`. Pass the
   `toolsets` the subagent needs (e.g. an office/spreadsheet toolset) and keep
   your own profile limited to the `tower` toolset.

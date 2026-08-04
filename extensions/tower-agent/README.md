@@ -106,14 +106,14 @@ event. Project work is the only route that enters the durable Workbench event
 queue. The resident Workbench itself is infrastructure and is not the requested
 user task.
 
-## Owner and trusted-channel enforcement
+## Owner and dynamic channel enforcement
 
 The generated MCP subprocess also selects Tower's bounded `gateway` capability
 profile. This reduces discovery at the process boundary; `toolsBySender` remains
 the mandatory authorization boundary between OWNER and NON_OWNER callers.
 
-Tower's OpenClaw installer can write an `accessPolicy` with platform owner IDs
-and trusted channel IDs. OpenClaw enforces those identities before routing and
+Tower's OpenClaw installer writes platform OWNER IDs into the sender tool
+policy. OpenClaw enforces those identities before routing and
 uses per-agent `toolsBySender` to expose two surfaces on the same `o-tower`
 profile:
 
@@ -121,12 +121,15 @@ profile:
   remote-provisioning tools required by the personal assistant; direct
   task/project mutation and terminal-control tools remain unavailable at
   ingress;
-- trusted-channel NON_OWNER: `route_gateway_query`,
+- NON_OWNER: `route_gateway_query`,
   `read_gateway_project_context`, and `complete_gateway_discussion` only.
 
-Unknown DMs and groups do not route to o-tower. Removed groups are removed from
-the managed profile bindings on update, so stale authorization does not remain.
-Tower does not infer owner identity from prompts.
+Configured group platforms use `groupPolicy=open` with `requireMention=true` so
+new groups can reach the authorization decision. Tower stores dynamic group
+state in the versioned `tower-agent.channel-access.v1` extension config and
+enforces `ALL`, `WORKSPACE`, or `PROJECTS` before reading data. Unknown,
+revoked, and invalid-scope groups fail closed. Tower does not infer owner
+identity from prompts, group names, or message text.
 
 The owner-only surface also includes correlated request diagnostics, scoped
 recovery, redacted OpenClaw/Hermes health logs, and the remote Git project

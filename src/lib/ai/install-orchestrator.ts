@@ -27,13 +27,13 @@ import packageJson from "../../../package.json";
  * canonical names so a symlink per skill under ~/.claude/skills suffices.
  *   - tower       : task-management operator (bridge / assistant)
  *   - tower-goal  : run-time "unattended goal mode" for a working task terminal
- *   - tower-ask   : send-a-message-to-a-human primitive (used by tower-goal)
- *   - tower-bridge: route content to a gateway, sibling task, or operator agent
+ *   - tower-bridge: external messages, gateway capabilities, and operator work
  */
 const TOWER_SKILL_NAME = "tower";
-const TOWER_SKILL_NAMES = ["tower", "tower-goal", "tower-ask", "tower-bridge"];
+const TOWER_SKILL_NAMES = ["tower", "tower-goal", "tower-bridge"];
+const LEGACY_TOWER_SKILL_NAMES = ["tower-ask"];
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"];
-const TOWER_INTEGRATION_SCHEMA_VERSION = 3;
+const TOWER_INTEGRATION_SCHEMA_VERSION = 4;
 
 export function buildTowerIntegrationFingerprint(apiUrl: string): string {
   return [
@@ -91,6 +91,8 @@ export interface ProviderInstallReport {
   mcp?: InstallResult;
   hooks?: InstallResult;
   skill?: InstallResult;
+  /** Best-effort removal of Tower-managed skill names retired by this version. */
+  legacySkillCleanup?: InstallResult[];
   /** Convenience: true iff every attempted step succeeded. */
   ok: boolean;
 }
@@ -206,7 +208,7 @@ export function buildTowerMcpConfig(options: { profile?: McpToolProfile } = {}):
   const root = getPackageRoot().replace(/\\/g, "/");
   const dbUrl =
     process.env.DATABASE_URL || `file:${getTowerDbPath().replace(/\\/g, "/")}`;
-  // Pin TOWER_DATA_DIR alongside DATABASE_URL. The MCP process is spawned by the
+  // Pin the instance port and TOWER_DATA_DIR alongside DATABASE_URL. The MCP process is spawned by the
   // user's CLI (claude/codex) and does NOT inherit Tower's runtime env, so
   // without this getTowerDir() would fall back to ~/.tower at MCP runtime —
   // mismatching the registering server's data dir (dev: ~/.tower-dev, or a
@@ -214,8 +216,18 @@ export function buildTowerMcpConfig(options: { profile?: McpToolProfile } = {}):
   // to the wrong storage root. Storage relocation stays dynamic: getStorageDir()
   // still reads the pointer file under this data dir at runtime, so a custom
   // Settings path keeps working without re-registering the MCP server.
+  const towerPort = process.env.PORT
+    || (() => {
+      try {
+        return process.env.TOWER_API_URL ? new URL(process.env.TOWER_API_URL).port : "";
+      } catch {
+        return "";
+      }
+    })()
+    || "3000";
   const env = {
     DATABASE_URL: dbUrl,
+    PORT: towerPort,
     TOWER_DATA_DIR: getTowerDir(),
     ...(options.profile ? { TOWER_MCP_PROFILE: options.profile } : {}),
   };
@@ -394,6 +406,15 @@ export async function reconcileResolvedProviderIntegrations(
   const mcpConfig = buildTowerMcpConfig();
   const capabilities = resolved.manifest.capabilities.integrations;
   const includeProviderDetail = resolved.provider.builtin === true;
+  // `tower-ask` was folded into `tower-bridge`. Remove only through the
+  // provider adapter: Codex/Claude refuse to delete real user directories,
+  // while Gemini uses its own skill registry. Cleanup failure is reported but
+  // does not overwrite user data or block the remaining integration repair.
+  const legacySkillCleanup = desired.skills && adapter.skills
+    ? await Promise.all(LEGACY_TOWER_SKILL_NAMES.map((name) =>
+        installIntegration(`Legacy skill ${name}`, "symlink", () =>
+          adapter.skills!.uninstall({ name, scope: "user" }), includeProviderDetail)))
+    : undefined;
   const mcp = desired.mcp && adapter.mcp
     ? actualBefore.mcpInstalled
       ? alreadyCurrent("cli")
@@ -431,6 +452,7 @@ export async function reconcileResolvedProviderIntegrations(
     mcp,
     hooks,
     skill,
+    legacySkillCleanup,
     ok: (!desired.mcp || mcp?.ok === true)
       && (!desired.hooks || hooks?.ok === true)
       && (!desired.skills || skill?.ok === true),

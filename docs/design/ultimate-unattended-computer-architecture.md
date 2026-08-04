@@ -1,9 +1,10 @@
 # 终极无人值守电脑架构图解
 
-> 状态：实现候选版；已同步纵向闭环代码、验证结果与剩余部署门禁
+> 状态：实现候选版；已同步纵向闭环代码，本地 UI 持久化闭环与真实 Operator 故障注入待交叉验收
 > 定稿日期：2026-08-02
 > 上位章程：[`ultimate-unattended-computer-charter.md`](./ultimate-unattended-computer-charter.md)
 > 可编辑图源：[`ultimate-unattended-computer.drawio`](./diagrams/ultimate-unattended-computer/ultimate-unattended-computer.drawio)
+> 验收方案：[`ultimate-unattended-computer-acceptance.md`](./ultimate-unattended-computer-acceptance.md)
 
 本文把章程中的系统边界转成四张图，回答四个不同问题：
 
@@ -145,7 +146,7 @@ Tower Goal 只有在存在持久唤醒事实时进入 `RUNNABLE`。执行一轮�
 
 | 状态 | 改造项 | 复用基础 | 当前证据 |
 |---|---|---|---|
-| 已完成 | 把 `tower-bridge` 从具体 Agent / 命令路由收敛为结构化 `CapabilityRequest` 边界 | Tower sibling task 留在 Tower；真人消息留在 `tower-ask` | 外部能力请求不再写 `xiao-fei`、本机 workspace 或裸委托命令 |
+| 已完成 | 把 `tower-bridge` 从具体 Agent / 命令路由收敛为统一外部能力边界 | Tower sibling task 留在 Tower；真人消息作为 `human.message.send`，按 `explicit / owner_home` 安全分流 | 外部能力请求不再写 `xiao-fei`、本机 workspace 或裸委托命令；模型不再选择两个重叠消息 skill |
 | 已完成 | 修正 goal mode 授权语义 | `set_goal_mode` 只保存可选模块运行态 | prompt 不再把激活视为授权；返回值明确 `authorizationGranted: false` |
 | 已完成 | 把 unattended 运行态移出 Core Task 所有权 | 新增 `UnattendedGoalRuntime`；旧字段保留一轮兼容 | 所有新读写经 goal 模块；生命周期生产者只报告事实 |
 | 已完成 | 复用 OpenClaw 原生 Task 状态做 Job 恢复查询 | `openclaw tasks show <ref> --json` | `get_capability_job_status` 只读归一化结果，未知/失联保守映射 |

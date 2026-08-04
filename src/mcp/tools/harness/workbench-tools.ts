@@ -13,12 +13,11 @@ export const workbenchTools = {
       leaseToken: z.string().trim().min(1).max(128),
     }),
     handler: async (args: { batchId: string; leaseToken: string }) => {
-      const parentTaskId = process.env.TOWER_TASK_ID?.trim();
-      if (!parentTaskId) return { error: "ack_workbench_batch must run inside the bound Workbench terminal" };
+      const parentTaskId = process.env.TOWER_TASK_ID?.trim() || undefined;
       const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "ack", parentTaskId, ...args }),
+        body: JSON.stringify({ action: "ack", ...(parentTaskId ? { parentTaskId } : {}), ...args }),
       });
       const data = await res.json().catch(() => ({}));
       return res.ok ? data : {
@@ -37,12 +36,11 @@ export const workbenchTools = {
       leaseToken: z.string().trim().min(1).max(128),
     }),
     handler: async (args: { batchId: string; leaseToken: string }) => {
-      const parentTaskId = process.env.TOWER_TASK_ID?.trim();
-      if (!parentTaskId) return { error: "heartbeat_workbench_batch must run inside the bound Workbench terminal" };
+      const parentTaskId = process.env.TOWER_TASK_ID?.trim() || undefined;
       const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "heartbeat", parentTaskId, ...args }),
+        body: JSON.stringify({ action: "heartbeat", ...(parentTaskId ? { parentTaskId } : {}), ...args }),
       });
       const data = await res.json().catch(() => ({}));
       return res.ok ? data : {
@@ -61,12 +59,11 @@ export const workbenchTools = {
       leaseToken: z.string().trim().min(1).max(128),
     }),
     handler: async (args: { batchId: string; leaseToken: string }) => {
-      const parentTaskId = process.env.TOWER_TASK_ID?.trim();
-      if (!parentTaskId) return { error: "resolve_workbench_batch must run inside the bound Workbench terminal" };
+      const parentTaskId = process.env.TOWER_TASK_ID?.trim() || undefined;
       const res = await fetch(WORKBENCH_BATCH_BRIDGE, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "resolve", parentTaskId, ...args }),
+        body: JSON.stringify({ action: "resolve", ...(parentTaskId ? { parentTaskId } : {}), ...args }),
       });
       const data = await res.json().catch(() => ({}));
       return res.ok ? data : {

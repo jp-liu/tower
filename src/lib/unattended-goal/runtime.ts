@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { setUnattendedSignal } from "@/lib/harness/unattended-signal";
 
 export type UnattendedGoalLifecycleEvent =
@@ -8,7 +8,8 @@ export type UnattendedGoalLifecycleEvent =
   | "TERMINAL_STOPPED"
   | "TERMINAL_COMPLETED";
 
-type RuntimeDb = Pick<PrismaClient, "task" | "unattendedGoalRuntime" | "$transaction">;
+type RuntimeDb = Pick<PrismaClient, "task" | "unattendedGoalRuntime" | "capabilityGrant" | "$transaction">;
+type RuntimeStore = Pick<Prisma.TransactionClient, "task" | "unattendedGoalRuntime" | "capabilityGrant">;
 type GoalStateDb = Pick<PrismaClient, "unattendedGoalRuntime">;
 
 export interface UnattendedGoalPolicy {
@@ -168,15 +169,16 @@ export async function readUnattendedGoalMode(
   };
 }
 
-export async function applyUnattendedGoalLifecycleEvent(
-  db: RuntimeDb,
+export async function applyUnattendedGoalLifecycleEventInTransaction(
+  database: RuntimeStore,
   input: {
     taskId: string;
     event: UnattendedGoalLifecycleEvent;
     policy?: Partial<UnattendedGoalPolicy>;
+    refreshActive?: boolean;
   },
 ): Promise<UnattendedGoalSnapshot> {
-  const task = await db.task.findUnique({
+  const task = await database.task.findUnique({
     where: { id: input.taskId },
     select: { id: true },
   });
@@ -185,66 +187,90 @@ export async function applyUnattendedGoalLifecycleEvent(
   const active = input.event === "ACTIVATED";
   const policy = normalizePolicy(input.policy);
   const now = new Date();
-  const runtime = await db.$transaction(async (tx) => {
-    // Dual-write the compatibility shadow until the next migration window.
-    await tx.task.update({
-      where: { id: input.taskId },
-      data: { unattended: active },
-      select: { id: true },
+  // Dual-write the compatibility shadow until the next migration window.
+  await database.task.update({
+    where: { id: input.taskId },
+    data: { unattended: active },
+    select: { id: true },
+  });
+  // A Goal that cannot continue must not leave any bounded write authority
+  // behind. Keep revocation in the same transaction as the runtime/shadow
+  // transition so every lifecycle producer (UI, MCP, terminal, task status)
+  // gets the invariant, not only the UI disable action.
+  if (!active) {
+    await database.capabilityGrant.updateMany({
+      where: { taskId: input.taskId, revokedAt: null },
+      data: { revokedAt: now },
     });
-    const existing = await tx.unattendedGoalRuntime.findUnique({
-      where: { taskId: input.taskId },
-    });
-    if (existing && (existing.state === "ACTIVE") === active) {
-      return existing;
-    }
-    if (!existing) {
-      return tx.unattendedGoalRuntime.create({
-        data: {
-          taskId: input.taskId,
-          state: active ? "ACTIVE" : "ENDED",
-          lastEventKind: input.event,
-          activatedAt: now,
-          endedAt: active ? null : now,
-          blockedAt: null,
-          blockedReason: null,
-          lastProgressAt: active ? now : null,
-          ...policy,
-        },
-      });
-    }
-    return tx.unattendedGoalRuntime.update({
-      where: { taskId: input.taskId },
+  }
+  const existing = await database.unattendedGoalRuntime.findUnique({
+    where: { taskId: input.taskId },
+  });
+  if (!existing) {
+    const runtime = await database.unattendedGoalRuntime.create({
       data: {
+        taskId: input.taskId,
         state: active ? "ACTIVE" : "ENDED",
         lastEventKind: input.event,
-        ...(active
-          ? {
-              activatedAt: now,
-              endedAt: null,
-              blockedAt: null,
-              blockedReason: null,
-              providerTurns: 0,
-              consecutiveFailures: 0,
-              noProgressTurns: 0,
-              lastProgressAt: now,
-              nextWakeAt: null,
-              wakeReason: null,
-              wakePublishedAt: null,
-              blockEventPublishedAt: null,
-              ...policy,
-            }
-          : {
-              endedAt: now,
-              nextWakeAt: null,
-              wakeReason: null,
-            }),
+        activatedAt: now,
+        endedAt: active ? null : now,
+        blockedAt: null,
+        blockedReason: null,
+        lastProgressAt: active ? now : null,
+        ...policy,
       },
     });
+    return snapshot(runtime);
+  }
+  const sameState = (existing.state === "ACTIVE") === active;
+  if (sameState && (!active || !input.refreshActive)) return snapshot(existing);
+  const runtime = await database.unattendedGoalRuntime.update({
+    where: { taskId: input.taskId },
+    data: {
+      state: active ? "ACTIVE" : "ENDED",
+      lastEventKind: input.event,
+      ...(active
+        ? {
+            activatedAt: now,
+            endedAt: null,
+            blockedAt: null,
+            blockedReason: null,
+            providerTurns: 0,
+            consecutiveFailures: 0,
+            noProgressTurns: 0,
+            lastProgressAt: now,
+            nextWakeAt: null,
+            wakeReason: null,
+            wakePublishedAt: null,
+            blockEventPublishedAt: null,
+            ...policy,
+          }
+        : {
+            endedAt: now,
+            nextWakeAt: null,
+            wakeReason: null,
+          }),
+    },
   });
 
-  setUnattendedSignal(input.taskId, active);
   return snapshot(runtime);
+}
+
+export async function applyUnattendedGoalLifecycleEvent(
+  database: RuntimeDb,
+  input: {
+    taskId: string;
+    event: UnattendedGoalLifecycleEvent;
+    policy?: Partial<UnattendedGoalPolicy>;
+    refreshActive?: boolean;
+  },
+): Promise<UnattendedGoalSnapshot> {
+  const active = input.event === "ACTIVATED";
+  const runtime = await database.$transaction((tx) =>
+    applyUnattendedGoalLifecycleEventInTransaction(tx, input));
+
+  setUnattendedSignal(input.taskId, active);
+  return runtime;
 }
 
 export async function activateUnattendedGoal(

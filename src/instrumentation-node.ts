@@ -10,7 +10,18 @@ async function initializeNodeRuntime() {
     towerRuntimeOwnerId,
   } = await import("@/lib/runtime-leader");
   const runtimeOwnerId = towerRuntimeOwnerId();
-  await acquireTowerRuntimeLease(runtimeOwnerId);
+  try {
+    await acquireTowerRuntimeLease(runtimeOwnerId);
+  } catch (error) {
+    // Next keeps its HTTP listener alive after an instrumentation registration
+    // failure. A lease conflict must terminate the process explicitly; leaving
+    // a permanent 500 listener would look alive to supervisors and violates the
+    // single-runtime fence even though it never became the database leader.
+    console.error("[runtime-leader] Failed to acquire the database runtime lease; terminating", error);
+    process.exitCode = 78;
+    setImmediate(() => process.exit(78));
+    throw error;
+  }
   let runtimeLeaseHeartbeatFailures = 0;
   const runtimeLeaseHeartbeat = setInterval(() => {
     void heartbeatTowerRuntimeLease(runtimeOwnerId).then((owned) => {

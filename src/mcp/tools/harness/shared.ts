@@ -12,6 +12,7 @@ export const GATEWAY_QUERY_BRIDGE = `${BRIDGE}/gateway-query`;
 export const GATEWAY_TASK_BRIDGE = `${BRIDGE}/gateway-task`;
 export const GATEWAY_DIAGNOSTICS_BRIDGE = `${BRIDGE}/gateway-diagnostics`;
 export const GATEWAY_RUNTIME_HEALTH_BRIDGE = `${BRIDGE}/gateway-runtime-health`;
+export const GATEWAY_ACCESS_BRIDGE = `${BRIDGE}/gateway-access`;
 export const CAPABILITY_BRIDGE = `${BRIDGE}/capabilities`;
 export const HARNESS_OUTBOUND_BRIDGE = `${BRIDGE}/outbound`;
 export const REMOTE_PROJECT_BRIDGE = `${BRIDGE}/remote-project`;
@@ -39,7 +40,7 @@ export function resolveTaskForCurrentTerminal(taskId?: string): { taskId: string
 
 /**
  * Compose ready-to-follow send instructions from the ACTIVE notify channel.
- * The tower-ask / tower-goal skills call list_notify_targets and just DO what
+ * The tower-bridge / tower-goal skills call list_notify_targets and just DO what
  * `instructions` says — no need to re-derive the gateway→platform-MCP mapping
  * from static skill docs. Tower only records; the agent does the real send.
  */

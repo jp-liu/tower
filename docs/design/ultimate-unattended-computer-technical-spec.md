@@ -1,10 +1,11 @@
 # Tower 模块边界与终极无人值守纵向闭环 Technical Spec
 
-> 状态：实现候选版；代码与自动化门禁已完成，真实 Operator 故障注入 E2E 待部署现场执行
+> 状态：实现候选版；自动化门禁已完成，本地 UI 持久化闭环与真实 Operator 故障注入待交叉验收
 > 更新日期：2026-08-02
 > 回滚基线：`40cdf1a`
 > 上位章程：[`ultimate-unattended-computer-charter.md`](./ultimate-unattended-computer-charter.md)
 > 架构图解：[`ultimate-unattended-computer-architecture.md`](./ultimate-unattended-computer-architecture.md)
+> 验收方案：[`ultimate-unattended-computer-acceptance.md`](./ultimate-unattended-computer-acceptance.md)
 
 ## 1. 本次交付
 

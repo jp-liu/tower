@@ -63,6 +63,8 @@ async function uninstall(): Promise<ExtensionResult> {
 
 export const monacoExtension: Extension = {
   id: "monaco",
+  kind: "tower-component",
+  capabilities: ["code-editor"],
   name: "代码编辑器 (Monaco)",
   nameKey: "settings.extensions.monaco.name",
   description: "VS Code 同款 Web 编辑器",

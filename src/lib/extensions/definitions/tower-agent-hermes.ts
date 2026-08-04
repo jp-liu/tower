@@ -6,6 +6,7 @@ import {
 } from "../tower-agent-install";
 import { readHarnessGatewayRuntimeConfig } from "@/lib/harness/gateway-config";
 import type { Extension, ExtensionResult, ExtensionStatus } from "../types";
+import { getTowerAgentGatewayDescriptor, towerAgentManifest } from "../tower-agent-manifest";
 
 async function check(): Promise<ExtensionStatus> {
   const config = await readHarnessGatewayRuntimeConfig("hermes");
@@ -23,6 +24,9 @@ async function uninstall(): Promise<ExtensionResult> {
 
 export const towerAgentHermesExtension: Extension = {
   id: "tower-agent-hermes",
+  kind: towerAgentManifest.kind,
+  gateway: "hermes",
+  capabilities: getTowerAgentGatewayDescriptor("hermes").capabilities,
   name: "Tower Agent (Hermes)",
   nameKey: "settings.extensions.towerAgentHermes.name",
   description: "安装 Tower 助手 profile、MCP 与 skills 到 Hermes",

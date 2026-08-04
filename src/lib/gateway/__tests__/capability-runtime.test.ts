@@ -5,6 +5,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { up as addWorkbenchEvents } from "../../../../scripts/migrations/0014-workbench-events";
+import { up as addWorkbenchReviewKey } from "../../../../scripts/migrations/0015-workbench-execution-review-key";
+import { up as addWorkbenchBatchAck } from "../../../../scripts/migrations/0021-workbench-batch-ack";
 import { up as addGoalRuntime } from "../../../../scripts/migrations/0029-unattended-goal-runtime";
 import { up } from "../../../../scripts/migrations/0030-capability-runtime";
 import { up as addResultWakeup } from "../../../../scripts/migrations/0031-capability-result-wakeup";
@@ -17,7 +20,6 @@ const mocks = vi.hoisted(() => ({
   discoverJobs: vi.fn(),
   submitJob: vi.fn(),
   readJob: vi.fn(),
-  publishCommand: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {} }));
 vi.mock("@/lib/harness/harness-outbound", () => ({ enqueueHarnessOutbound: mocks.outbound }));
@@ -30,10 +32,10 @@ vi.mock("../openclaw-task-client", () => ({ readOpenClawCapabilityJob: mocks.rea
 vi.mock("@/lib/harness/gateway-config", () => ({
   readHarnessGatewayRuntimeConfig: vi.fn(async () => ({ env: {} })),
 }));
-vi.mock("@/lib/workbench/command-inbox", () => ({ publishWorkbenchCommand: mocks.publishCommand }));
 
 import { issueCapabilityGrants, issueOwnerMessageGrant } from "../capability-grants";
 import {
+  applyCapabilityJobSnapshot,
   discoverGatewayCapabilities,
   reconcileCapabilityCompletion,
   recoverPendingCapabilityRequests,
@@ -82,6 +84,9 @@ async function database(): Promise<PrismaClient> {
       "leaseExpiresAt" DATETIME
     )
   `);
+  await addWorkbenchEvents(client);
+  await addWorkbenchReviewKey(client);
+  await addWorkbenchBatchAck(client);
   await addGoalRuntime(client);
   await up(client);
   await addResultWakeup(client);
@@ -169,7 +174,6 @@ beforeEach(() => {
     updatedAt: "2026-08-02T00:00:00.000Z",
     summary: "Report opened",
   });
-  mocks.publishCommand.mockResolvedValue({ event: { id: "event-1" }, deduped: false });
 });
 
 afterEach(async () => {
@@ -373,13 +377,14 @@ describe("Gateway capability runtime", () => {
         url: "http://127.0.0.1:3000/api/internal/harness/capabilities/completions",
       }),
     }), {});
-    expect(mocks.publishCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.publishCommand).toHaveBeenCalledWith(expect.objectContaining({
+    expect(await prisma.workbenchEvent.findUniqueOrThrow({
+      where: { dedupKey: "capability-result:4cc2791f-fbc9-47af-b410-4bd0586ae941:1785628800000" },
+    })).toMatchObject({
       parentTaskId: "task-1",
       sourceTaskId: "task-1",
       kind: "CAPABILITY_RESULT_AVAILABLE",
       dedupKey: "capability-result:4cc2791f-fbc9-47af-b410-4bd0586ae941:1785628800000",
-    }));
+    });
     expect(await prisma.capabilityRequest.findUniqueOrThrow({
       where: { requestId: "4cc2791f-fbc9-47af-b410-4bd0586ae941" },
     })).toMatchObject({ resultEventPublishedAt: expect.any(Date), callbackTokenHash: null });
@@ -393,7 +398,9 @@ describe("Gateway capability runtime", () => {
     await expect(submitCapabilityRequest(jobEnvelope(grant.authorizationRef), prisma)).resolves.toMatchObject({
       status: "SUCCEEDED",
     });
-    expect(mocks.publishCommand).toHaveBeenCalledTimes(1);
+    expect(await prisma.workbenchEvent.count({
+      where: { kind: "CAPABILITY_RESULT_AVAILABLE" },
+    })).toBe(1);
   });
 
   it("reconciles a completion callback that wins the submit-response race", async () => {
@@ -445,12 +452,69 @@ describe("Gateway capability runtime", () => {
     });
     expect(mocks.submitJob).toHaveBeenCalledTimes(1);
     expect(mocks.readJob).toHaveBeenCalledTimes(1);
-    expect(mocks.publishCommand).toHaveBeenCalledTimes(1);
+    expect(await prisma.workbenchEvent.count({
+      where: { kind: "CAPABILITY_RESULT_AVAILABLE" },
+    })).toBe(1);
+  });
+
+  it("settles a completion event that arrives before OpenClaw persists the terminal task snapshot", async () => {
+    const prisma = await database();
+    const callbackToken = "callback-token-that-is-long-enough-for-the-contract";
+    await prisma.capabilityRequest.create({
+      data: {
+        requestId: "460880aa-2935-45d7-bfd8-ce0bedf0a147",
+        taskId: "task-1",
+        capability: "computer.gui.act",
+        lane: "JOB",
+        risk: "R1",
+        inputDigest: "already-accepted",
+        inputsJson: JSON.stringify({ instruction: "Read the report" }),
+        state: "RUNNING",
+        gateway: "openclaw",
+        jobRef: "openclaw-run-1",
+        callbackTokenHash: createHash("sha256").update(callbackToken).digest("hex"),
+      },
+    });
+    mocks.readJob
+      .mockResolvedValueOnce({
+        gateway: "openclaw",
+        requestedRef: "openclaw-run-1",
+        jobRef: "openclaw-task-1",
+        runId: "openclaw-run-1",
+        status: "RUNNING",
+        revision: "1785628799900",
+        updatedAt: "2026-08-01T23:59:59.900Z",
+        summary: null,
+      })
+      .mockResolvedValueOnce({
+        gateway: "openclaw",
+        requestedRef: "openclaw-run-1",
+        jobRef: "openclaw-task-1",
+        runId: "openclaw-run-1",
+        status: "SUCCEEDED",
+        revision: "1785628800000",
+        updatedAt: "2026-08-02T00:00:00.000Z",
+        summary: "Report opened",
+      });
+
+    await expect(reconcileCapabilityCompletion({
+      requestId: "460880aa-2935-45d7-bfd8-ce0bedf0a147",
+      runId: "openclaw-run-1",
+      callbackToken,
+    }, prisma)).resolves.toMatchObject({
+      status: "SUCCEEDED",
+      revision: "1785628800000",
+    });
+    expect(mocks.readJob).toHaveBeenCalledTimes(2);
+    expect(await prisma.workbenchEvent.count({
+      where: { kind: "CAPABILITY_RESULT_AVAILABLE" },
+    })).toBe(1);
   });
 
   it("recovers a terminal Job whose durable Workbench event was not marked as published", async () => {
-    const prisma = await database();
-    await prisma.capabilityRequest.create({
+    const firstProcess = await database();
+    const databasePath = join(directories.at(-1)!, "capability.db");
+    await firstProcess.capabilityRequest.create({
       data: {
         requestId: "460880aa-2935-45d7-bfd8-ce0bedf0a146",
         taskId: "task-1",
@@ -469,20 +533,73 @@ describe("Gateway capability runtime", () => {
       },
     });
 
+    await firstProcess.$disconnect();
+    const prisma = new PrismaClient({ datasourceUrl: `file:${databasePath}` });
+    clients.push(prisma);
+
     await expect(recoverPendingCapabilityRequests(25, prisma)).resolves.toEqual({
       scanned: 1,
       recovered: 1,
       blocked: 0,
     });
     expect(mocks.readJob).not.toHaveBeenCalled();
-    expect(mocks.publishCommand).toHaveBeenCalledWith(expect.objectContaining({
+    const event = await prisma.workbenchEvent.findUniqueOrThrow({
+      where: { dedupKey: "capability-result:460880aa-2935-45d7-bfd8-ce0bedf0a146:revision-9" },
+    });
+    expect(event).toMatchObject({
       priority: "HIGH",
       dedupKey: "capability-result:460880aa-2935-45d7-bfd8-ce0bedf0a146:revision-9",
-      payload: expect.objectContaining({ status: "SIDE_EFFECT_UNKNOWN" }),
-    }));
+    });
+    expect(JSON.parse(event.payload)).toMatchObject({ status: "SIDE_EFFECT_UNKNOWN" });
     expect(await prisma.capabilityRequest.findUniqueOrThrow({
       where: { requestId: "460880aa-2935-45d7-bfd8-ce0bedf0a146" },
     })).toMatchObject({ resultEventPublishedAt: expect.any(Date) });
+  });
+
+  it("maps a lost external Job to SIDE_EFFECT_UNKNOWN and rejects a delayed active snapshot", async () => {
+    const prisma = await database();
+    const requestId = "460880aa-2935-45d7-bfd8-ce0bedf0a145";
+    await prisma.capabilityRequest.create({
+      data: {
+        requestId,
+        taskId: "task-1",
+        capability: "computer.gui.act",
+        lane: "JOB",
+        risk: "R1",
+        inputDigest: "digest",
+        inputsJson: JSON.stringify({ instruction: "Open the report" }),
+        state: "RUNNING",
+        gateway: "openclaw",
+        jobRef: "openclaw-run-lost",
+        revision: "100",
+      },
+    });
+
+    await expect(applyCapabilityJobSnapshot(requestId, {
+      gateway: "openclaw",
+      requestedRef: "openclaw-run-lost",
+      jobRef: "openclaw-task-lost",
+      runId: "openclaw-run-lost",
+      status: "SIDE_EFFECT_UNKNOWN",
+      revision: "200",
+      updatedAt: "2026-08-03T04:00:00.200Z",
+      summary: "The OpenClaw task record was lost; external effects cannot be proven absent",
+    }, prisma)).resolves.toMatchObject({ status: "SIDE_EFFECT_UNKNOWN", revision: "200" });
+
+    await expect(applyCapabilityJobSnapshot(requestId, {
+      gateway: "openclaw",
+      requestedRef: "openclaw-run-lost",
+      jobRef: "openclaw-task-lost",
+      runId: "openclaw-run-lost",
+      status: "RUNNING",
+      revision: "150",
+      updatedAt: "2026-08-03T04:00:00.150Z",
+      summary: null,
+    }, prisma)).resolves.toMatchObject({ status: "SIDE_EFFECT_UNKNOWN", revision: "200" });
+
+    expect(await prisma.workbenchEvent.count({
+      where: { kind: "CAPABILITY_RESULT_AVAILABLE" },
+    })).toBe(1);
   });
 
   it("never lets a late RUNNING observation overwrite a terminal Job revision", async () => {

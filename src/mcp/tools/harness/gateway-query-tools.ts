@@ -14,6 +14,7 @@ export const gatewayQueryTools = {
       chatId: z.string().min(1).max(512),
       platformMessageId: z.string().min(1).max(512),
       senderId: z.string().max(512).optional(),
+      chatName: z.string().max(160).optional().describe("Display-only group name from gateway context"),
       threadId: z.string().max(512).optional(),
       rootMessageId: z.string().max(512).optional(),
       replyToMessageId: z.string().max(512).optional(),
@@ -28,6 +29,7 @@ export const gatewayQueryTools = {
       chatId: string;
       platformMessageId: string;
       senderId?: string;
+      chatName?: string;
       threadId?: string;
       rootMessageId?: string;
       replyToMessageId?: string;

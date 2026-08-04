@@ -41,6 +41,7 @@ export const WORKBENCH_PROCESSING_LEASE_MS = 5 * 60_000;
 export const WORKBENCH_MAX_BATCH_SIZE = 50;
 export const WORKBENCH_RECOVERY_BATCH_SIZE = 500;
 export const WORKBENCH_EVENTS_ENABLED_AT_KEY = "workbench.eventsEnabledAt";
+export const WORKBENCH_RECONCILE_FAILURE_BACKOFF_MS = 60_000;
 // Workbench batches are substantially larger than ordinary terminal messages.
 // Claude Code keeps treating a CR as pasted content while it is still ingesting
 // the preceding multi-line write, so the generic 80 ms bridge delay can leave the
@@ -756,13 +757,18 @@ export async function drainWorkbenchEvents(
 
 export async function acknowledgeWorkbenchBatch(
   batchId: string,
-  parentTaskId: string,
+  parentTaskId: string | undefined,
   leaseToken: string,
 ): Promise<WorkbenchBatchTransitionResult> {
+  const boundParentTaskId = parentTaskId ?? (await db.workbenchBatch.findUnique({
+    where: { id: batchId },
+    select: { parentTaskId: true },
+  }))?.parentTaskId;
+  if (!boundParentTaskId) throw new Error(`Unknown Workbench batch: ${batchId}`);
   const result = await db.$transaction(async (tx) => {
     const batch = await tx.workbenchBatch.findUnique({ where: { id: batchId } });
     if (!batch) throw new Error(`Unknown Workbench batch: ${batchId}`);
-    if (batch.parentTaskId !== parentTaskId) {
+    if (batch.parentTaskId !== boundParentTaskId) {
       throw new Error(`Workbench batch ${batchId} belongs to a different parent task`);
     }
     if (batch.state === "RESOLVED") {
@@ -822,7 +828,7 @@ export async function acknowledgeWorkbenchBatch(
       noOp: false,
     };
   });
-  await recordWorkbenchRuntime(parentTaskId, "BUSY", {
+  await recordWorkbenchRuntime(boundParentTaskId, "BUSY", {
     activeBatchId: batchId,
     blockedReason: "Workbench acknowledged the batch and is processing it",
   });
@@ -831,13 +837,18 @@ export async function acknowledgeWorkbenchBatch(
 
 export async function resolveWorkbenchBatch(
   batchId: string,
-  parentTaskId: string,
+  parentTaskId: string | undefined,
   leaseToken: string,
 ): Promise<WorkbenchBatchTransitionResult> {
+  const boundParentTaskId = parentTaskId ?? (await db.workbenchBatch.findUnique({
+    where: { id: batchId },
+    select: { parentTaskId: true },
+  }))?.parentTaskId;
+  if (!boundParentTaskId) throw new Error(`Unknown Workbench batch: ${batchId}`);
   const result = await db.$transaction(async (tx) => {
     const batch = await tx.workbenchBatch.findUnique({ where: { id: batchId } });
     if (!batch) throw new Error(`Unknown Workbench batch: ${batchId}`);
-    if (batch.parentTaskId !== parentTaskId) {
+    if (batch.parentTaskId !== boundParentTaskId) {
       throw new Error(`Workbench batch ${batchId} belongs to a different parent task`);
     }
     if (batch.state === "RESOLVED") {
@@ -886,7 +897,7 @@ export async function resolveWorkbenchBatch(
       noOp: false,
     };
   });
-  await recordWorkbenchRuntime(parentTaskId, "BUSY", {
+  await recordWorkbenchRuntime(boundParentTaskId, "BUSY", {
     activeBatchId: null,
     blockedReason: "Batch resolved; provider turn is still in progress",
   });
@@ -916,15 +927,20 @@ export async function recordWorkbenchProviderTurnCompleted(parentTaskId: string)
 
 export async function heartbeatWorkbenchBatch(
   batchId: string,
-  parentTaskId: string,
+  parentTaskId: string | undefined,
   leaseToken: string,
 ): Promise<{ batchId: string; generation: number; state: "ACKED"; leaseExpiresAt: Date }> {
+  const boundParentTaskId = parentTaskId ?? (await db.workbenchBatch.findUnique({
+    where: { id: batchId },
+    select: { parentTaskId: true },
+  }))?.parentTaskId;
+  if (!boundParentTaskId) throw new Error(`Unknown Workbench batch: ${batchId}`);
   const heartbeatAt = new Date();
   const leaseExpiresAt = new Date(heartbeatAt.getTime() + WORKBENCH_PROCESSING_LEASE_MS);
   const updated = await db.workbenchBatch.updateMany({
     where: {
       id: batchId,
-      parentTaskId,
+      parentTaskId: boundParentTaskId,
       state: "ACKED",
       leaseToken,
       leaseExpiresAt: { gt: heartbeatAt },
@@ -1092,9 +1108,17 @@ async function defaultEnsureWorkbenchRunning(taskId: string) {
  */
 export async function reconcilePendingWorkbenchEvents(
   ensureWorkbench: EnsureWorkbenchRunning = defaultEnsureWorkbenchRunning,
+  now = new Date(),
 ): Promise<WorkbenchReconcileResult> {
+  const failedBefore = new Date(now.getTime() - WORKBENCH_RECONCILE_FAILURE_BACKOFF_MS);
   const parents = await db.workbenchEvent.findMany({
-    where: { state: "PENDING" },
+    where: {
+      state: "PENDING",
+      OR: [
+        { lastError: null },
+        { updatedAt: { lte: failedBefore } },
+      ],
+    },
     distinct: ["parentTaskId"],
     orderBy: { createdAt: "asc" },
     select: { parentTaskId: true },

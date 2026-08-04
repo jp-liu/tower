@@ -53,23 +53,21 @@ pnpm start
 
 “更新”就是重新注入流程。它会用当前 Tower 包内的版本刷新 `SOUL.md`、`AGENTS.md`、`TOOLS.md`、Tower MCP 配置和 `tower` skill，同时保留 OpenClaw agent 条目中不归 Tower 管理的其他字段。
 
-### OWNER 与可信群安全策略
+### OWNER 与动态群授权
 
-设置页同时维护两张前置名单：
+设置页只维护 **OWNER IDs**（每行 `platform:senderId`）。OpenClaw 在同一个
+`o-tower` profile 内按真实 sender 切换 Tool Surface：OWNER 获得管理工具，
+NON_OWNER 只能调用受控查询入口。群入口采用 `groupPolicy=open`，但仍要求真实
+@；这只是让新群可以进入授权判断，不代表新群已经获得 Tower 数据权限。
 
-- **OWNER IDs**：每行 `platform:senderId`。只有这些平台身份可以私聊
-  o-tower，并获得完整 Tower 工具。
-- **Trusted Channels**：每行 `platform:chatId`。只有这些群可以路由到
-  o-tower；群内仍要求真实 @。
+OWNER 在群内发送“授权本群”“绑定工作区/项目”“解除绑定”或“撤销授权”。动态
+状态保存在版本化扩展配置 `tower-agent.channel-access.v1` 中，范围显式为 `ALL`、
+`WORKSPACE` 或 `PROJECTS`。Tower 在每次项目读取和回复完成前重新校验，撤销、
+缺失或失效绑定一律 fail closed。设置页以“群名 + 群 ID + 实际范围”展示记录；
+群名仅供显示，不参与身份判断。
 
-OpenClaw 在 agent 路由前执行私聊/群 allowlist，并在同一个 `o-tower`
-profile 内按 sender 切换 Tool Surface。可信群中的 NON_OWNER 只有
-`route_gateway_query`、`read_gateway_project_context` 和
-`complete_gateway_discussion`；陌生群不会进入 o-tower。Tower 不维护第二套
-sender RBAC，也不接受自然语言自报 OWNER。
-
-更新名单时，安装器会以当前名单为事实来源，移除该 profile 在对应平台上的
-旧群绑定，避免历史授权残留。完整设计、验收与排障见
+旧 Trusted Channels / channelScopes 只做一次幂等迁移，之后不再参与运行时权限
+判断。完整设计、验收与排障见
 `docs/design/o-tower-personal-assistant-security-and-operations.md`。
 
 ### 3. 重启网关并刷新飞书会话
@@ -251,11 +249,14 @@ capabilityRoutes:
 
 `o-tower` 看到 Tower 范围内的需求时自己处理；看到飞书文档页面、知识库页面、普通表格、多维表格、云盘文件、附件、权限等请求时，把目标、输入、期望输出和风险约束交给 `xiao-fei`。`xiao-fei` 返回结构化结果后，`o-tower` 再回复用户或写回 Tower。
 
-## tower-bridge 与 tower-ask
+## 统一 tower-bridge
 
-`tower-ask` 只负责把消息发给真人、群组或外部沟通渠道。它不负责把任务交给 `o-tower`、`xiao-fei` 或其他 agent。
+所有 Tower 外部副作用都使用 `tower-bridge`。真人或群组消息是
+`human.message.send`：用户明确指定收件人时走 `explicit` 模式和
+`push_to_human`；无人值守主动联系 OWNER 时走 `owner_home` 模式、固定
+OWNER 路由和 bounded grant。原 `tower-ask` 已合并，不再作为独立 skill 安装。
 
-当一个 Tower 任务需要“把整理结果交给小塔，让小塔按扩展能力分流”时，使用 `tower-bridge`：
+当一个 Tower 任务需要“把整理结果交给小塔，让小塔按扩展能力分流”时，也使用 `tower-bridge`：
 
 ```text
 当前任务
@@ -265,7 +266,7 @@ capabilityRoutes:
 -> 汇总结果回当前任务或用户
 ```
 
-`tower-bridge` 是路由技能，不安装第三方 MCP，也不默认持有飞书、邮件、知识库等权限。它只负责把内容交给正确的执行 owner。
+`tower-bridge` 是统一外部能力技能，不安装第三方 MCP，也不默认持有飞书、邮件、知识库等权限。它只负责把结构化请求交给正确的渠道或执行 owner。
 
 ## OpenClaw 示例：小飞负责飞书
 

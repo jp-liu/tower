@@ -39,10 +39,21 @@ const INSTALLED_RELEASE_PATHS = {
   codexProvider: "packages/ai-provider-codex/dist/index.js",
   geminiProvider: "packages/ai-provider-gemini/dist/index.js",
   towerSkill: "skills/tower/SKILL.md",
-  towerAskSkill: "skills/tower-ask/SKILL.md",
   towerBridgeSkill: "skills/tower-bridge/SKILL.md",
   towerGoalSkill: "skills/tower-goal/SKILL.md",
 };
+
+// npm 11 requires an explicit allow-list for lifecycle scripts in global
+// installs. The packaged Tower CLI needs these exact scripts to generate the
+// Prisma client, install the schema engine, and prepare native runtime helpers.
+const GLOBAL_INSTALL_SCRIPT_PACKAGES = [
+  "@prisma/client",
+  "@prisma/engines",
+  "prisma",
+  "node-pty",
+  "esbuild",
+  "fsevents",
+];
 
 function assertPathInside(root, candidate, label) {
   const relative = path.relative(root, candidate);
@@ -525,6 +536,13 @@ async function main() {
     console.log("[release:smoke] Installing tarball into temporary prefix");
   }
 
+  // npm 11's global installer expects the conventional lib directory to
+  // exist before strict allowScripts preflight resolves the install tree.
+  fs.mkdirSync(path.join(prefixDir, "lib"), { recursive: true });
+  const rootScriptIdentity = publishedPackageSpec
+    ? pkg.name
+    : `file:${installTarget}`;
+
   await runAsync("npm", [
     "install",
     "-g",
@@ -537,6 +555,11 @@ async function main() {
     registryUrl,
     "--no-audit",
     "--no-fund",
+    // npm 11 matches a local tarball against its file identity, not the
+    // package.json name inside the tarball. Registry installs use the trusted
+    // registry package name instead.
+    `--allow-scripts=${[rootScriptIdentity, ...GLOBAL_INSTALL_SCRIPT_PACKAGES].join(",")}`,
+    "--strict-allow-scripts",
   ], {
     env: cleanEnvironment({
       HOME: homeDir,

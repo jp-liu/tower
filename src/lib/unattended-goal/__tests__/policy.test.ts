@@ -10,7 +10,9 @@ import { up as addWorkbenchBatches } from "../../../../scripts/migrations/0021-w
 import { up as addWorkbenchLeases } from "../../../../scripts/migrations/0025-workbench-batch-leases";
 import { up as addGoalRuntime } from "../../../../scripts/migrations/0029-unattended-goal-runtime";
 import { up as addCapabilities } from "../../../../scripts/migrations/0030-capability-runtime";
+import { up as addCapabilityResultWakeup } from "../../../../scripts/migrations/0031-capability-result-wakeup";
 import { up as addGoalPolicy } from "../../../../scripts/migrations/0032-unattended-goal-policy";
+import { up as addCapabilityCompletionCallback } from "../../../../scripts/migrations/0033-capability-completion-callback";
 
 const mocks = vi.hoisted(() => ({
   setSignal: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock("@/lib/harness/unattended-signal", () => ({
 import { activateUnattendedGoal, endUnattendedGoal } from "../runtime";
 import {
   assertUnattendedGoalOperationAllowed,
+  enforceUnattendedGoalBudget,
   readUnattendedGoalBudget,
   reconcileUnattendedGoals,
   recordUnattendedGoalProgressFact,
@@ -71,7 +74,9 @@ async function database(): Promise<PrismaClient> {
   await addWorkbenchLeases(client);
   await addGoalRuntime(client);
   await addCapabilities(client);
+  await addCapabilityResultWakeup(client);
   await addGoalPolicy(client);
+  await addCapabilityCompletionCallback(client);
   await client.$executeRawUnsafe(
     `INSERT INTO "Task" ("id", "title", "projectId") VALUES ('goal-1', 'Ship release', 'project-1')`,
   );
@@ -118,6 +123,18 @@ describe("unattended Goal policy", () => {
   it("deduplicates provider turns and atomically blocks at the configured limit", async () => {
     const prisma = await database();
     await activateUnattendedGoal(prisma as never, "goal-1", { maxProviderTurns: 1 });
+    const grant = await prisma.capabilityGrant.create({
+      data: {
+        taskId: "goal-1",
+        capability: "human.message.send",
+        risk: "R2",
+        targetKind: "OWNER_HOME_ROUTE",
+        targetFingerprint: "owner-route-v1",
+        issuer: "TOWER_UI",
+        maxUses: 5,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
 
     const first = await recordUnattendedGoalProgressFact({
       taskId: "goal-1",
@@ -138,6 +155,8 @@ describe("unattended Goal policy", () => {
       .toMatchObject({ state: "BLOCKED", providerTurns: 1, blockEventPublishedAt: expect.any(Date) });
     expect(await prisma.workbenchEvent.findFirst({ where: { parentTaskId: "goal-1" } }))
       .toMatchObject({ kind: "GOAL_BLOCKED", dedupKey: "goal-blocked:goal-1:1" });
+    expect(await prisma.capabilityGrant.findUniqueOrThrow({ where: { id: grant.id } }))
+      .toMatchObject({ revokedAt: expect.any(Date) });
   });
 
   it("does not publish a scheduled timer after the Goal has ended", async () => {
@@ -157,6 +176,39 @@ describe("unattended Goal policy", () => {
     expect(await prisma.workbenchEvent.count()).toBe(0);
   });
 
+  it("keeps an ended Goal terminal when shutdown races a due-timer scan on separate connections", async () => {
+    const firstProcess = await database();
+    const databasePath = join(directories.at(-1)!, "goal.db");
+    const runtime = await activateUnattendedGoal(firstProcess as never, "goal-1");
+    await scheduleUnattendedGoalWakeup({
+      taskId: "goal-1",
+      delaySeconds: 10,
+      reason: "Race with shutdown",
+    }, firstProcess as never, runtime.activatedAt);
+
+    const recoveryProcess = new PrismaClient({ datasourceUrl: `file:${databasePath}` });
+    clients.push(recoveryProcess);
+    const dueAt = new Date(runtime.activatedAt.getTime() + 20_000);
+    await Promise.all([
+      endUnattendedGoal(firstProcess as never, "goal-1", "DEACTIVATED"),
+      reconcileUnattendedGoals(dueAt, recoveryProcess as never),
+    ]);
+
+    const ended = await recoveryProcess.unattendedGoalRuntime.findUniqueOrThrow({
+      where: { taskId: "goal-1" },
+    });
+    expect(ended).toMatchObject({ state: "ENDED", nextWakeAt: null });
+    expect(await recoveryProcess.workbenchEvent.count({
+      where: {
+        parentTaskId: "goal-1",
+        kind: "GOAL_TIMER_DUE",
+        createdAt: { gt: ended.endedAt! },
+      },
+    })).toBe(0);
+    await expect(reconcileUnattendedGoals(dueAt, recoveryProcess as never))
+      .resolves.toEqual({ scanned: 0, timersPublished: 0, blocked: 0, recoveredBlockEvents: 0 });
+  });
+
   it("blocks before creating a child that would exceed the persistent budget", async () => {
     const prisma = await database();
     await activateUnattendedGoal(prisma as never, "goal-1", { maxChildTasks: 1 });
@@ -173,6 +225,101 @@ describe("unattended Goal policy", () => {
       .rejects.toThrow(/Unattended Goal is blocked/);
     await expect(assertUnattendedGoalOperationAllowed("goal-1", "CAPABILITY_JOB", prisma as never))
       .rejects.toThrow(/Unattended Goal is blocked/);
+  });
+
+  it("atomically blocks every minimum F02 hard-limit class and publishes one event", async () => {
+    const assertBlockedOnce = async (prisma: PrismaClient, reason: string) => {
+      expect(await prisma.unattendedGoalRuntime.findUniqueOrThrow({ where: { taskId: "goal-1" } }))
+        .toMatchObject({ state: "BLOCKED", lastEventKind: `BUDGET_${reason}` });
+      expect(await prisma.workbenchEvent.count({
+        where: { parentTaskId: "goal-1", kind: "GOAL_BLOCKED" },
+      })).toBe(1);
+      await reconcileUnattendedGoals(new Date(), prisma as never);
+      expect(await prisma.workbenchEvent.count({
+        where: { parentTaskId: "goal-1", kind: "GOAL_BLOCKED" },
+      })).toBe(1);
+      await expect(assertUnattendedGoalOperationAllowed("goal-1", "CAPABILITY_JOB", prisma as never))
+        .rejects.toThrow(/blocked/i);
+    };
+
+    const provider = await database();
+    await activateUnattendedGoal(provider as never, "goal-1", {
+      maxProviderTurns: 1,
+      maxNoProgressTurns: 10,
+    });
+    await recordUnattendedGoalProgressFact({
+      taskId: "goal-1", kind: "PROVIDER_TURN_COMPLETED", dedupKey: "f02-provider",
+    }, provider as never);
+    await assertBlockedOnce(provider, "MAX_PROVIDER_TURNS");
+
+    const noProgress = await database();
+    await activateUnattendedGoal(noProgress as never, "goal-1", {
+      maxProviderTurns: 10,
+      maxNoProgressTurns: 1,
+    });
+    await recordUnattendedGoalProgressFact({
+      taskId: "goal-1", kind: "PROVIDER_TURN_COMPLETED", dedupKey: "f02-no-progress",
+    }, noProgress as never);
+    await assertBlockedOnce(noProgress, "MAX_NO_PROGRESS_TURNS");
+
+    const failures = await database();
+    await activateUnattendedGoal(failures as never, "goal-1", { maxConsecutiveFailures: 1 });
+    await recordUnattendedGoalProgressFact({
+      taskId: "goal-1", kind: "CAPABILITY_JOB_FAILED", dedupKey: "f02-failure",
+    }, failures as never);
+    await assertBlockedOnce(failures, "MAX_CONSECUTIVE_FAILURES");
+
+    const duration = await database();
+    const durationRuntime = await activateUnattendedGoal(duration as never, "goal-1", { maxDurationMs: 300_000 });
+    await enforceUnattendedGoalBudget(
+      "goal-1",
+      duration as never,
+      new Date(durationRuntime.activatedAt.getTime() + 300_001),
+    );
+    await assertBlockedOnce(duration, "MAX_DURATION");
+
+    const children = await database();
+    await activateUnattendedGoal(children as never, "goal-1", { maxChildTasks: 1 });
+    await children.$executeRawUnsafe(`
+      INSERT INTO "Task" ("id", "title", "projectId", "parentTaskId")
+      VALUES ('f02-child', 'Child', 'project-1', 'goal-1')
+    `);
+    await expect(assertUnattendedGoalOperationAllowed("goal-1", "CREATE_CHILD", children as never))
+      .rejects.toThrow(/reached limit/);
+    await assertBlockedOnce(children, "MAX_CHILD_TASKS");
+
+    const concurrency = await database();
+    await activateUnattendedGoal(concurrency as never, "goal-1", { maxConcurrentChildren: 1 });
+    await concurrency.$executeRawUnsafe(`
+      INSERT INTO "Task" ("id", "title", "projectId", "parentTaskId")
+      VALUES ('f02-running-child', 'Running child', 'project-1', 'goal-1')
+    `);
+    await concurrency.$executeRawUnsafe(`
+      INSERT INTO "TaskExecution" ("id", "taskId", "status")
+      VALUES ('f02-running-execution', 'f02-running-child', 'RUNNING')
+    `);
+    await expect(assertUnattendedGoalOperationAllowed("goal-1", "START_CHILD", concurrency as never))
+      .rejects.toThrow(/reached limit/);
+    await assertBlockedOnce(concurrency, "MAX_CONCURRENT_CHILDREN");
+
+    const jobs = await database();
+    await activateUnattendedGoal(jobs as never, "goal-1", { maxCapabilityJobs: 1 });
+    await jobs.capabilityRequest.create({
+      data: {
+        requestId: "f0200000-0000-4000-8000-000000000001",
+        taskId: "goal-1",
+        capability: "computer.gui.act",
+        lane: "JOB",
+        risk: "R1",
+        inputDigest: "f02-job",
+        inputsJson: "{}",
+      },
+    });
+    await expect(assertUnattendedGoalOperationAllowed("goal-1", "CAPABILITY_JOB", jobs as never))
+      .rejects.toThrow(/reached limit/);
+    await assertBlockedOnce(jobs, "MAX_CAPABILITY_JOBS");
+    expect(await jobs.capabilityGrant.count({ where: { taskId: "goal-1" } })).toBe(0);
+    expect(await jobs.capabilityRequest.count({ where: { taskId: "goal-1" } })).toBe(1);
   });
 
   it("does not infer failure from terminal silence when no durable limit is violated", async () => {

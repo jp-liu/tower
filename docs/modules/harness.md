@@ -92,7 +92,7 @@ Tower 消息回复 ──► resolve_gateway_task_context（只读）
 - **「停下等回复 ↔ 回复时 resume」= `ask_human` ↔ `reply_to_ask`**：同一个流程的两头（一个 park、一个唤醒）。
 - **「只登记不发 ↔ 持久化后真发」= `ask_human` vs `push_to_human`**：前者是纯状态原语，后者是 durable outbox 封装。
 
-`list_notify_targets` 是发送前的入口：读取当前 scope 的活跃通道，返回**照做即可的发送指令**，告诉 Agent 走哪个网关、要不要 park。`tower-ask` / `tower-goal` 技能内部就是先调它、再照指令发。
+`list_notify_targets` 是发送前的入口：读取当前 scope 的活跃通道，返回**照做即可的发送指令**，告诉 Agent 走哪个网关、要不要 park。`tower-bridge` 的明确收件人消息路径会先调它、再照指令发；无人值守 OWNER 消息则走同一 skill 内的 bounded CapabilityRequest 路径。
 
 `route_gateway_message` 是 OWNER 的 Tower 相关渠道入站入口；普通问答和外部能力请求在 OpenClaw 内处理，不调用 Tower。旧客户端传入 `DIRECT` 时返回 `direct_not_supported`，且不创建 `GatewayInbound`。`route_gateway_query` 是
 可信群 NON_OWNER 的能力受限入口：它固定为项目讨论，不能转 task reply、创建

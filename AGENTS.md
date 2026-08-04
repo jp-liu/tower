@@ -254,7 +254,7 @@ handoff, diagnostics, scoped recovery, and remote project provisioning.
   `notify_human`
 - Gateway query: `route_gateway_query`, `read_gateway_project_context`,
   `complete_gateway_discussion`
-- Gateway owner: `relay_channel_reply`, `route_gateway_message`,
+- Gateway owner: `manage_gateway_channel_access`, `relay_channel_reply`, `route_gateway_message`,
   `resolve_gateway_task_context`, `continue_bound_task`,
   `diagnose_gateway_request`, `provision_remote_project`, `reply_to_ask`
 - Workbench: `ack_workbench_batch`, `resolve_workbench_batch`,

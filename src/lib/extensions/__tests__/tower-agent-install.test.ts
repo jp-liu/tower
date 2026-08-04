@@ -129,6 +129,33 @@ describe("tower agent extension installer", () => {
     expect(marker.envKeys).toEqual(["NO_PROXY"]);
   });
 
+  it("ships a mobile-safe Feishu card and media delivery contract", () => {
+    const agentInstructions = fs.readFileSync(
+      path.join(process.cwd(), "extensions", "tower-agent", "agent", "AGENTS.md"),
+      "utf-8",
+    );
+    expect(agentInstructions).toContain("structured `presentation` titled with `小塔`");
+    expect(agentInstructions).toContain("only `cache_ready`, never `published` or");
+    expect(agentInstructions).toContain("whose `kind` is `image` or `media`");
+    expect(agentInstructions).toContain("local path or file URL in the presentation");
+    expect(agentInstructions).toContain("never use a `markdown` block");
+    expect(agentInstructions).toContain("card without a verified visible body as failed delivery");
+    expect(agentInstructions).toContain("do not ask the Operator to discover local files");
+    expect(agentInstructions).toContain("Route by information ownership before routing by output format");
+    expect(agentInstructions).toContain("does not turn project knowledge into external-operator work");
+    expect(agentInstructions).toContain("no general `~/knowledge` route");
+
+    const toolInstructions = fs.readFileSync(
+      path.join(process.cwd(), "extensions", "tower-agent", "agent", "TOOLS.md"),
+      "utf-8",
+    );
+    expect(toolInstructions).toContain("Use only `text`, `context`, and `divider` blocks");
+    expect(toolInstructions).toContain("A `kind=card` receipt alone is therefore not");
+    expect(toolInstructions).toContain("form the exact file URL");
+    expect(toolInstructions).toContain("Project-content routing takes precedence over presentation routing");
+    expect(toolInstructions).toContain("does not implement a general");
+  });
+
   it("appends to an existing OpenClaw plugin allowlist without replacing it", async () => {
     const paths = testPaths();
     fs.mkdirSync(path.dirname(paths.openclawConfigPath), { recursive: true });
@@ -164,7 +191,7 @@ describe("tower agent extension installer", () => {
 
     const installed = await checkTowerAgentExtension("openclaw", { paths });
     expect(installed.installed).toBe(true);
-    expect(installed.version).toBe("5");
+    expect(installed.version).toBe("7");
 
     const removed = await uninstallTowerAgentExtension("openclaw", { paths });
     expect(removed.success).toBe(true);
@@ -214,6 +241,15 @@ describe("tower agent extension installer", () => {
         agents: {
           list: [{ id: "o-tower", model: "keep/model" }],
         },
+        plugins: {
+          entries: {
+            "tower-capability-bridge": {
+              config: {
+                capabilities: [{ name: "computer.gui.act", agentId: "private-operator" }],
+              },
+            },
+          },
+        },
         bindings: [
           { type: "route", agentId: "o-tower", match: { channel: "feishu" } },
           {
@@ -249,6 +285,10 @@ describe("tower agent extension installer", () => {
     };
     const agent = cfg.agents.list.find((item) => item.id === "o-tower");
     expect(agent?.model).toBe("keep/model");
+    expect(agent?.subagents).toEqual({
+      allowAgents: ["private-operator"],
+      requireAgentId: true,
+    });
     expect(agent?.tools).toMatchObject({
       profile: "minimal",
       elevated: { enabled: false },
@@ -263,6 +303,9 @@ describe("tower agent extension installer", () => {
             "tower__complete_gateway_discussion",
             "tower__recover_gateway_request",
             "tower__provision_remote_project",
+            "agents_list",
+            "sessions_send",
+            "message",
             "session_status",
           ]),
         },
@@ -278,6 +321,14 @@ describe("tower agent extension installer", () => {
     expect(agent?.tools).not.toMatchObject({
       alsoAllow: expect.arrayContaining(["tower__create_task"]),
     });
+    expect((cfg as { tools?: Record<string, unknown> }).tools).toMatchObject({
+      alsoAllow: ["message"],
+      agentToAgent: {
+        enabled: true,
+        allow: ["o-tower", "private-operator"],
+      },
+      sessions: { visibility: "all" },
+    });
     expect(
       (agent?.tools as { toolsBySender?: Record<string, { allow?: string[] }> })
         .toolsBySender?.["channel:feishu:ou_owner"]?.allow,
@@ -288,13 +339,19 @@ describe("tower agent extension installer", () => {
     ).not.toEqual(expect.arrayContaining([
       "tower__recover_gateway_request",
       "tower__provision_remote_project",
+      "message",
     ]));
     expect(cfg.channels.feishu).toMatchObject({
       dmPolicy: "allowlist",
       allowFrom: ["ou_owner"],
-      groupPolicy: "allowlist",
+      groupPolicy: "open",
       groupSenderAllowFrom: ["*"],
       groups: {
+        "*": {
+          enabled: true,
+          requireMention: true,
+          systemPrompt: expect.stringContaining("verified sender"),
+        },
         oc_trusted: {
           enabled: true,
           requireMention: true,
@@ -302,18 +359,8 @@ describe("tower agent extension installer", () => {
         },
       },
     });
-    expect((cfg.channels.feishu.groups as Record<string, unknown>).oc_removed).toBeUndefined();
+    expect((cfg.channels.feishu.groups as Record<string, unknown>).oc_removed).toBeDefined();
     expect(cfg.bindings).toContainEqual({
-      type: "route",
-      agentId: "o-tower",
-      match: { channel: "feishu", peer: { kind: "direct", id: "ou_owner" } },
-    });
-    expect(cfg.bindings).toContainEqual({
-      type: "route",
-      agentId: "o-tower",
-      match: { channel: "feishu", peer: { kind: "group", id: "oc_trusted" } },
-    });
-    expect(cfg.bindings).not.toContainEqual({
       type: "route",
       agentId: "o-tower",
       match: { channel: "feishu" },
@@ -327,6 +374,39 @@ describe("tower agent extension installer", () => {
       type: "route",
       agentId: "other",
       match: { channel: "feishu" },
+    });
+
+    const ownerOnly = await installTowerAgentExtension({
+      gateway: "openclaw",
+      accessPolicy: { ownerIds: { feishu: ["ou_owner"] } },
+      paths,
+    });
+    expect(ownerOnly.success).toBe(true);
+    const ownerOnlyCfg = JSON.parse(fs.readFileSync(paths.openclawConfigPath, "utf-8")) as {
+      channels: Record<string, Record<string, unknown>>;
+      bindings: Array<Record<string, unknown>>;
+    };
+    expect(ownerOnlyCfg.channels.feishu).toMatchObject({
+      dmPolicy: "allowlist",
+      allowFrom: ["ou_owner"],
+      groupPolicy: "open",
+      groupSenderAllowFrom: ["*"],
+      groups: {
+        "*": {
+          enabled: true,
+          requireMention: true,
+        },
+      },
+    });
+    expect(ownerOnlyCfg.bindings).toContainEqual({
+      type: "route",
+      agentId: "o-tower",
+      match: { channel: "feishu" },
+    });
+    expect(ownerOnlyCfg.bindings).not.toContainEqual({
+      type: "route",
+      agentId: "o-tower",
+      match: { channel: "feishu", peer: { kind: "group", id: "oc_trusted" } },
     });
 
     const revoked = await installTowerAgentExtension({

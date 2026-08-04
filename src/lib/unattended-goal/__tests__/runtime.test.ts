@@ -62,13 +62,17 @@ function createDb(input: { legacy?: boolean; runtime?: Record<string, unknown> |
       return runtime;
     }),
   };
+  const capabilityGrant = {
+    updateMany: vi.fn(async () => ({ count: 1 })),
+  };
   const db = {
     task,
     unattendedGoalRuntime,
+    capabilityGrant,
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
-      callback({ task, unattendedGoalRuntime })),
+      callback({ task, unattendedGoalRuntime, capabilityGrant })),
   };
-  return { db, task, unattendedGoalRuntime };
+  return { db, task, unattendedGoalRuntime, capabilityGrant };
 }
 
 beforeEach(() => {
@@ -142,13 +146,36 @@ describe("unattended goal runtime", () => {
   });
 
   it("does not create ended projections for ordinary attended tasks", async () => {
-    const { db, unattendedGoalRuntime } = createDb();
+    const { db, unattendedGoalRuntime, capabilityGrant } = createDb();
 
     const result = await endUnattendedGoalIfActive(db as never, "task-1", "TERMINAL_STOPPED");
 
     expect(result).toBeNull();
     expect(unattendedGoalRuntime.create).not.toHaveBeenCalled();
     expect(unattendedGoalRuntime.update).not.toHaveBeenCalled();
+    expect(capabilityGrant.updateMany).not.toHaveBeenCalled();
     expect(setSignal).toHaveBeenCalledWith("task-1", false);
+  });
+
+  it("atomically revokes grants whenever an active Goal ends", async () => {
+    const { db, capabilityGrant } = createDb({
+      legacy: true,
+      runtime: {
+        ...runtimeDefaults,
+        taskId: "task-1",
+        state: "ACTIVE",
+        lastEventKind: "ACTIVATED",
+        activatedAt: new Date(),
+        endedAt: null,
+      },
+    });
+
+    const result = await endUnattendedGoalIfActive(db as never, "task-1", "TERMINAL_STOPPED");
+
+    expect(result).toMatchObject({ state: "ENDED" });
+    expect(capabilityGrant.updateMany).toHaveBeenCalledWith({
+      where: { taskId: "task-1", revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
   });
 });

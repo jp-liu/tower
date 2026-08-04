@@ -9,7 +9,7 @@ const { adapter } = vi.hoisted(() => ({
   adapter: {
     mcp: { install: vi.fn(), inspect: vi.fn() },
     hooks: { install: vi.fn(), inspect: vi.fn() },
-    skills: { install: vi.fn(), inspect: vi.fn() },
+    skills: { install: vi.fn(), inspect: vi.fn(), uninstall: vi.fn() },
   },
 }));
 
@@ -88,6 +88,7 @@ describe("inspectProviderIntegration", () => {
     adapter.mcp.install.mockResolvedValue({ installed: true, changed: true, detail: "tower" });
     adapter.hooks.install.mockResolvedValue({ installed: true, changed: true, detail: "hooks.json" });
     adapter.skills.install.mockResolvedValue({ installed: true, changed: true, detail: "skill" });
+    adapter.skills.uninstall.mockResolvedValue({ installed: false, changed: true, detail: "removed" });
     adapter.mcp.inspect.mockResolvedValue({ installed: true });
     adapter.hooks.inspect.mockResolvedValue({ installed: true });
     adapter.skills.inspect.mockResolvedValue({ installed: true });
@@ -100,10 +101,12 @@ describe("inspectProviderIntegration", () => {
     expect(buildTowerMcpConfig().envVars).toEqual([...TOWER_MCP_ENV_VARS]);
     expect(buildTowerMcpConfig().env).toEqual({
       DATABASE_URL: process.env.DATABASE_URL || "file:/Users/test/.tower/database/tower.db",
+      PORT: "3000",
       TOWER_DATA_DIR: "/Users/test/.tower",
     });
     expect(buildTowerMcpConfig({ profile: "gateway" }).env).toEqual({
       DATABASE_URL: process.env.DATABASE_URL || "file:/Users/test/.tower/database/tower.db",
+      PORT: "3000",
       TOWER_DATA_DIR: "/Users/test/.tower",
       TOWER_MCP_PROFILE: "gateway",
     });
@@ -114,10 +117,9 @@ describe("inspectProviderIntegration", () => {
 
     expect(adapter.mcp.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower", scope: "user" }));
     expect(adapter.hooks.inspect).toHaveBeenCalledOnce();
-    expect(adapter.skills.inspect).toHaveBeenCalledTimes(4);
+    expect(adapter.skills.inspect).toHaveBeenCalledTimes(3);
     expect(adapter.skills.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower", sourceDir: "/opt/tower/skills/tower" }));
     expect(adapter.skills.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower-goal", sourceDir: "/opt/tower/skills/tower-goal" }));
-    expect(adapter.skills.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower-ask", sourceDir: "/opt/tower/skills/tower-ask" }));
     expect(adapter.skills.inspect).toHaveBeenCalledWith(expect.objectContaining({ name: "tower-bridge", sourceDir: "/opt/tower/skills/tower-bridge" }));
     expect(result).toEqual({
       mcpInstalled: true,
@@ -190,7 +192,7 @@ describe("inspectProviderIntegration", () => {
   it("installs integrations for a dynamically resolved provider without a static definition", async () => {
     adapter.mcp.inspect.mockResolvedValueOnce({ installed: false });
     adapter.hooks.inspect.mockResolvedValueOnce({ installed: false });
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 3; index += 1) {
       adapter.skills.inspect.mockResolvedValueOnce({ installed: false });
     }
     const report = await installAllForProvider("@acme/community-cli", "http://localhost:3000");
@@ -198,7 +200,28 @@ describe("inspectProviderIntegration", () => {
     expect(report).toMatchObject({ provider: "@acme/community-cli", available: true, ok: true });
     expect(adapter.mcp.install).toHaveBeenCalledOnce();
     expect(adapter.hooks.install).toHaveBeenCalledOnce();
-    expect(adapter.skills.install).toHaveBeenCalledTimes(4);
+    expect(adapter.skills.install).toHaveBeenCalledTimes(3);
+    expect(adapter.skills.uninstall).toHaveBeenCalledWith({ name: "tower-ask", scope: "user" });
+    expect(report.legacySkillCleanup).toEqual([
+      expect.objectContaining({ ok: true, method: "symlink" }),
+    ]);
+  });
+
+  it("reports legacy skill cleanup refusal without deleting user data or blocking current skills", async () => {
+    adapter.skills.uninstall.mockRejectedValueOnce(new Error(
+      "Refusing to remove non-symlink at /Users/test/.codex/skills/tower-ask",
+    ));
+
+    const report = await installAllForProvider("codex", "http://localhost:3000");
+
+    expect(report.legacySkillCleanup).toEqual([
+      expect.objectContaining({
+        ok: false,
+        error: expect.stringMatching(/Refusing to remove non-symlink/),
+      }),
+    ]);
+    expect(adapter.skills.install).not.toHaveBeenCalled();
+    expect(report.ok).toBe(true);
   });
 
   it("does not retain third-party integration secrets in install reports", async () => {
@@ -270,6 +293,10 @@ function statefulIntegrationAdapter(initial: {
       state.skills[name] = true;
       return { installed: true, changed: true };
     }),
+    uninstallSkill: vi.fn(async ({ name }: { name: string }) => {
+      state.skills[name] = false;
+      return { installed: false, changed: true };
+    }),
   };
   const adapter = {
     mcp: {
@@ -283,6 +310,7 @@ function statefulIntegrationAdapter(initial: {
     skills: {
       inspect: vi.fn(async ({ name }: { name: string }) => ({ installed: state.skills[name] === true })),
       install: installs.skills,
+      uninstall: installs.uninstallSkill,
     },
   } as unknown as CliAdapter;
   return { adapter, state, installs };

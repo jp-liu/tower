@@ -118,7 +118,7 @@ export async function dispatchTaskCompletionEvent(
 
     // Done/failed is no longer auto-recorded by the backend: unattended is a run-time state the
     // agent enters via the tower-goal skill, which the backend can't infer. Pushing the result on
-    // done/failure is the goal-activated agent's own job (tower-ask + ask_human park). The onExit
+    // done/failure is the goal-activated agent's own job (tower-bridge message + ask_human park). The onExit
     // guard also keeps a parked task from ever reaching here.
   } catch {
     // Best-effort: notifications are non-critical

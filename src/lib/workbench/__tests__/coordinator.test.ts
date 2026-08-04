@@ -672,6 +672,52 @@ describe("Workbench durable coordinator", () => {
     expect(hasWorkbenchDrainBoundary("parent")).toBe(true);
   });
 
+  it("backs off a failed Workbench restart instead of retrying every scanner tick", async () => {
+    const { getSession } = await import("@/lib/pty/session-store");
+    const {
+      enqueueWorkbenchEvent,
+      reconcilePendingWorkbenchEvents,
+      WORKBENCH_RECONCILE_FAILURE_BACKOFF_MS,
+    } = await import("@/lib/workbench/coordinator");
+    vi.mocked(getSession).mockReturnValue(undefined);
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      kind: "CHILD_REVIEW_REQUIRED",
+      dedupKey: "reconcile-failed-parent",
+      payload: { childTaskId: "child-a", childTitle: "Child A" },
+    });
+    const ensure = vi.fn()
+      .mockRejectedValueOnce(new Error("Project has no local path configured"))
+      .mockResolvedValue({ mode: "continued" as const, executionId: "parent-exec-2" });
+    const startedAt = new Date();
+
+    await expect(reconcilePendingWorkbenchEvents(ensure, startedAt)).resolves.toEqual({
+      scanned: 1,
+      woken: 0,
+      busy: 0,
+      failed: 1,
+    });
+    await expect(reconcilePendingWorkbenchEvents(ensure, startedAt)).resolves.toEqual({
+      scanned: 0,
+      woken: 0,
+      busy: 0,
+      failed: 0,
+    });
+    expect(ensure).toHaveBeenCalledTimes(1);
+
+    await expect(reconcilePendingWorkbenchEvents(
+      ensure,
+      new Date(startedAt.getTime() + WORKBENCH_RECONCILE_FAILURE_BACKOFF_MS + 1_000),
+    )).resolves.toEqual({
+      scanned: 1,
+      woken: 1,
+      busy: 0,
+      failed: 0,
+    });
+    expect(ensure).toHaveBeenCalledTimes(2);
+  });
+
   it("leaves pending events durable while the live Workbench is busy", async () => {
     const { getSession } = await import("@/lib/pty/session-store");
     const {

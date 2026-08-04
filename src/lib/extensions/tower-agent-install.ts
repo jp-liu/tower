@@ -9,17 +9,27 @@ import { gatewayOwnerToolNames, gatewayQueryToolNames } from "@/mcp/tool-capabil
 
 export type TowerAgentGateway = "openclaw" | "hermes";
 
-const TOWER_AGENT_PACKAGE_VERSION = "5";
+const TOWER_AGENT_PACKAGE_VERSION = "7";
 const OPENCLAW_CAPABILITY_PLUGIN_ID = "tower-capability-bridge";
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"] as const;
 const OPENCLAW_PROJECT_READER_TOOLS = gatewayQueryToolNames.map((name) => `tower__${name}`);
 const OPENCLAW_OWNER_GATEWAY_TOOLS = gatewayOwnerToolNames.map((name) => `tower__${name}`);
+const OPENCLAW_OPERATOR_DELEGATION_TOOLS = ["agents_list", "sessions_send", "message"] as const;
 const OPENCLAW_TOWER_GROUP_PROMPT =
   "Use only the Tower tools exposed for the verified sender. Ordinary Q&A and third-party/operator requests " +
   "stay in OpenClaw and must not be persisted or routed through Tower. Tower-related non-reply messages use " +
   "tower__route_gateway_message. A reply to a Tower delivery must first use tower__resolve_gateway_task_context; " +
   "finding a task never authorizes terminal resume. Read-only status questions use query tools without continuation, " +
-  "open ask_human answers use tower__reply_to_ask, external-system work is delegated with read-only towerContext, " +
+  "open ask_human answers use tower__reply_to_ask. For an OWNER request that needs a computer, browser, SaaS, " +
+  "or another external system, discover only the configured private Operator with agents_list, then send exactly one " +
+  "request to its peer main session with sessions_send and wait up to 240 seconds for the inline result. Give the Operator " +
+  "the user's exact request plus read-only Tower context when relevant; return its result and evidence without " +
+  "revealing the private agent id. Validate that observed values and evidence satisfy the request; an Operator status " +
+  "alone is not proof. For returned screenshots, require the Operator to publish each file into OpenClaw's channel-safe " +
+  "media cache, then use the message tool with action=send and media set to that absolute path. Include the user-facing " +
+  "summary in the same structured reply; after a successful message reply, finish with NO_REPLY so it is not duplicated. " +
+  "Never emit a textual MEDIA directive and never route " +
+  "this external work through Tower and never claim success before the Operator result arrives. " +
   "and only an explicit continue/fix/rerun request uses tower__continue_bound_task. " +
   "OWNER requests for new project work or Tower mutations other than a bound continuation use " +
   "tower__route_gateway_message with intent PROJECT_WORK; computer/operator state is outside Tower. " +
@@ -63,6 +73,7 @@ interface OpenClawConfig {
     entries?: Record<string, Record<string, unknown>>;
     [key: string]: unknown;
   };
+  tools?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
@@ -190,16 +201,21 @@ function installOpenClawProfile(input: {
       managedPlatforms: policyPlatforms(accessPolicy),
     });
 
+    const operatorAgentIds = configuredOpenClawOperatorAgentIds(input.paths.openclawConfigPath);
     upsertOpenClawAgent(input.paths.openclawConfigPath, {
       id: input.profile,
       name: input.profile,
       workspace: workspaceDir,
       agentDir,
       identity: { name: input.displayName, emoji: "🗼" },
+      subagents: { allowAgents: operatorAgentIds, requireAgentId: true },
       tools: hasAccessPolicy
-        ? buildOpenClawTowerToolPolicy(accessPolicy)
+        ? buildOpenClawTowerToolPolicy(accessPolicy, operatorAgentIds.length > 0)
         : disabledOpenClawTowerToolPolicy(),
     });
+    if (operatorAgentIds.length > 0) {
+      enableOpenClawPeerDelegation(input.paths.openclawConfigPath, input.profile, operatorAgentIds);
+    }
     enableOpenClawCapabilityPlugin(input.paths.openclawConfigPath);
     upsertOpenClawAccessPolicy(
       input.paths.openclawConfigPath,
@@ -246,18 +262,23 @@ function disabledOpenClawTowerToolPolicy(): Record<string, unknown> {
   };
 }
 
-function buildOpenClawTowerToolPolicy(policy: HarnessGatewayAccessPolicy): Record<string, unknown> {
+function buildOpenClawTowerToolPolicy(
+  policy: HarnessGatewayAccessPolicy,
+  operatorDelegationEnabled = false,
+): Record<string, unknown> {
   const { owners } = normalizedAccessEntries(policy);
+  const delegationTools = operatorDelegationEnabled ? [...OPENCLAW_OPERATOR_DELEGATION_TOOLS] : [];
   const allGatewayTools = Array.from(new Set([
     ...OPENCLAW_PROJECT_READER_TOOLS,
     ...OPENCLAW_OWNER_GATEWAY_TOOLS,
+    ...delegationTools,
   ]));
   const toolsBySender: Record<string, { allow: string[] }> = {
     "*": { allow: [...OPENCLAW_PROJECT_READER_TOOLS] },
   };
   for (const owner of owners) {
     toolsBySender[`channel:${owner.platform}:${owner.id}`] = {
-      allow: [...OPENCLAW_OWNER_GATEWAY_TOOLS, "session_status"],
+      allow: [...OPENCLAW_OWNER_GATEWAY_TOOLS, ...delegationTools, "session_status"],
     };
   }
   return {
@@ -266,6 +287,51 @@ function buildOpenClawTowerToolPolicy(policy: HarnessGatewayAccessPolicy): Recor
     toolsBySender,
     elevated: { enabled: false },
   };
+}
+
+function configuredOpenClawOperatorAgentIds(configPath: string): string[] {
+  const cfg = readJson<OpenClawConfig>(configPath);
+  const entry = cfg?.plugins?.entries?.[OPENCLAW_CAPABILITY_PLUGIN_ID];
+  const config = entry?.config;
+  if (!config || typeof config !== "object" || Array.isArray(config)) return [];
+  const capabilities = (config as Record<string, unknown>).capabilities;
+  if (!Array.isArray(capabilities)) return [];
+  return Array.from(new Set(capabilities.flatMap((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const agentId = (value as Record<string, unknown>).agentId;
+    return typeof agentId === "string" && agentId.trim() ? [agentId.trim()] : [];
+  }))).sort();
+}
+
+function enableOpenClawPeerDelegation(configPath: string, profile: string, operatorAgentIds: string[]): void {
+  const cfg = readJson<OpenClawConfig>(configPath) ?? {};
+  const tools = cfg.tools && typeof cfg.tools === "object" && !Array.isArray(cfg.tools) ? cfg.tools : {};
+  const currentA2A = tools.agentToAgent && typeof tools.agentToAgent === "object" && !Array.isArray(tools.agentToAgent)
+    ? tools.agentToAgent as Record<string, unknown>
+    : {};
+  const currentAllow = Array.isArray(currentA2A.allow)
+    ? currentA2A.allow.filter((value): value is string => typeof value === "string")
+    : [];
+  const currentSessions = tools.sessions && typeof tools.sessions === "object" && !Array.isArray(tools.sessions)
+    ? tools.sessions as Record<string, unknown>
+    : {};
+  const currentAlsoAllow = Array.isArray(tools.alsoAllow)
+    ? tools.alsoAllow.filter((value): value is string => typeof value === "string")
+    : [];
+  cfg.tools = {
+    ...tools,
+    // Embedded OpenClaw runs only construct the message tool when the global
+    // factory policy admits it. Agent and sender policies below still decide
+    // whether a particular turn may use it.
+    alsoAllow: Array.from(new Set([...currentAlsoAllow, "message"])).sort(),
+    agentToAgent: {
+      ...currentA2A,
+      enabled: true,
+      allow: Array.from(new Set([...currentAllow, profile, ...operatorAgentIds])).sort(),
+    },
+    sessions: { ...currentSessions, visibility: "all" },
+  };
+  writeJsonWithBackup(configPath, cfg);
 }
 
 function upsertOpenClawAccessPolicy(
@@ -300,10 +366,11 @@ function upsertOpenClawAccessPolicy(
       : {};
     const platformOwners = owners.filter((item) => item.platform === platform).map((item) => item.id);
     const platformChannels = channels.filter((item) => item.platform === platform).map((item) => item.id);
+    const platformEnabled = platformOwners.length > 0 || platformChannels.length > 0;
     const existingGroups = current.groups && typeof current.groups === "object" && !Array.isArray(current.groups)
       ? current.groups as Record<string, unknown>
       : {};
-    const groups: Record<string, unknown> = {};
+    const groups: Record<string, unknown> = { ...existingGroups };
     for (const chatId of platformChannels) {
       const existing = existingGroups[chatId] && typeof existingGroups[chatId] === "object" && !Array.isArray(existingGroups[chatId])
         ? existingGroups[chatId] as Record<string, unknown>
@@ -315,12 +382,23 @@ function upsertOpenClawAccessPolicy(
         systemPrompt: OPENCLAW_TOWER_GROUP_PROMPT,
       };
     }
+    const wildcard = existingGroups["*"] && typeof existingGroups["*"] === "object" && !Array.isArray(existingGroups["*"])
+      ? existingGroups["*"] as Record<string, unknown>
+      : {};
+    groups["*"] = {
+      ...wildcard,
+      enabled: true,
+      requireMention: true,
+      systemPrompt: OPENCLAW_TOWER_GROUP_PROMPT,
+    };
     channelRoot[platform] = {
       ...current,
       dmPolicy: platformOwners.length > 0 ? "allowlist" : "disabled",
       allowFrom: platformOwners,
-      groupPolicy: platformChannels.length > 0 ? "allowlist" : "disabled",
-      groupSenderAllowFrom: platformChannels.length > 0 ? ["*"] : [],
+      // OpenClaw admits mentioned group messages; Tower's gateway-query path
+      // makes the authoritative per-channel and project-scope decision.
+      groupPolicy: platformEnabled ? "open" : "disabled",
+      groupSenderAllowFrom: platformEnabled ? ["*"] : [],
       groups,
     };
   }
@@ -333,18 +411,17 @@ function upsertOpenClawAccessPolicy(
         return row.agentId !== profile;
       })
     : [];
-  const managedBindings = [
-    ...owners.map(({ platform, id }) => ({
+  const enabledPlatforms = new Set([
+    ...owners.map((item) => item.platform),
+    ...channels.map((item) => item.platform),
+  ]);
+  const managedBindings = Array.from(platforms)
+    .filter((platform) => enabledPlatforms.has(platform))
+    .map((platform) => ({
       type: "route",
       agentId: profile,
-      match: { channel: platform, peer: { kind: "direct", id } },
-    })),
-    ...channels.map(({ platform, id }) => ({
-      type: "route",
-      agentId: profile,
-      match: { channel: platform, peer: { kind: "group", id } },
-    })),
-  ];
+      match: { channel: platform },
+    }));
   const bindingKey = (binding: unknown) => JSON.stringify(binding);
   const seen = new Set(existingBindings.map(bindingKey));
   cfg.bindings = [
@@ -641,5 +718,11 @@ function writeJsonWithBackup(file: string, data: unknown): void {
   if (fs.existsSync(file)) {
     fs.copyFileSync(file, `${file}.bak-tower-agent`);
   }
-  fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n", "utf-8");
+  const temp = `${file}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    fs.writeFileSync(temp, JSON.stringify(data, null, 2) + "\n", "utf-8");
+    fs.renameSync(temp, file);
+  } finally {
+    if (fs.existsSync(temp)) fs.rmSync(temp, { force: true });
+  }
 }

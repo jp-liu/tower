@@ -12,7 +12,11 @@ import { continueOrStartTaskExecution } from "@/actions/agent-actions";
 import { TOWER_LABEL_NAME } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { readConfigValue } from "@/lib/config-reader";
-import { readHarnessGatewayRuntimeConfig } from "@/lib/harness/gateway-config";
+import {
+  decideGatewayChannelAccess,
+  gatewayScopeAllowsProject,
+  type GatewayChannelScope,
+} from "@/lib/harness/gateway-channel-access";
 import { ensureTowerTask } from "@/lib/instrumentation-tasks";
 import { logger } from "@/lib/logger";
 import { queryProjectKnowledge } from "@/lib/knowledge";
@@ -36,6 +40,7 @@ import {
 } from "./gateway-presentation";
 import { sendViaHarnessGateway, type HarnessGatewaySendResult } from "./gateway-send";
 
+/** Legacy migration key; runtime authorization no longer reads this value. */
 export const GATEWAY_CHANNEL_BINDINGS_KEY = "harness.channelBindings";
 export const GATEWAY_RECENT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const INBOUND_CLAIM_LEASE_MS = 60_000;
@@ -57,7 +62,6 @@ export interface GatewayChannelBinding {
   chatId: string;
   defaultWorkspaceId?: string;
   allowedProjectIds?: string[];
-  defaultProjectId?: string;
 }
 
 export interface GatewayInboundRequest {
@@ -66,6 +70,7 @@ export interface GatewayInboundRequest {
   chatId: string;
   platformMessageId: string;
   senderId?: string;
+  chatName?: string;
   threadId?: string;
   rootMessageId?: string;
   replyToMessageId?: string;
@@ -166,6 +171,8 @@ export interface GatewayProjectCandidate {
 type GatewayProject = GatewayProjectCandidate & {
   description: string | null;
   accessMode: ProjectAccessMode;
+  groupId?: string | null;
+  groupName?: string | null;
 };
 
 export type GatewayRouteResult =
@@ -198,6 +205,15 @@ export type GatewayRouteResult =
       inboundId: null;
       deduped: false;
       noOp: true;
+      instructions: string;
+    }
+  | {
+      mode: "channel_access_denied";
+      inboundId: string;
+      deduped: boolean;
+      noOp: true;
+      silent: boolean;
+      reason: "CHANNEL_UNAUTHORIZED" | "CHANNEL_REVOKED" | "SCOPE_INVALID";
       instructions: string;
     }
   | {
@@ -292,6 +308,34 @@ function normalizeChatId(value: string | null | undefined): string {
   return normalize(value).replace(/^(?:feishu|lark|wechat|weixin):/, "").replace(/^chat:/, "");
 }
 
+function matchesHarnessDeliveryChannel(input: {
+  platform: string;
+  chatId: string;
+}, delivery: {
+  platform: string;
+  chatId: string;
+}): boolean {
+  if (normalize(delivery.platform) !== normalize(input.platform)) return false;
+
+  const deliveryChatId = normalizeChatId(delivery.chatId);
+  const inboundChatId = normalizeChatId(input.chatId);
+  if (deliveryChatId === inboundChatId) return true;
+
+  // OpenClaw identifies a Feishu P2P inbound by the user's open_id (`user:ou_*`),
+  // while the send receipt identifies that same conversation by its chat_id
+  // (`feishu:oc_*`). The platform message id is globally unique and already has
+  // a unique DB index, so allow only this provider-specific direct-chat alias
+  // pair. Group-to-group (`oc_*` vs `oc_*`) mismatches still fail closed.
+  const platform = normalize(input.platform);
+  if (platform !== "feishu" && platform !== "lark") return false;
+  const deliveryId = deliveryChatId.replace(/^user:/, "");
+  const inboundId = inboundChatId.replace(/^user:/, "");
+  return (
+    (deliveryId.startsWith("oc_") && inboundId.startsWith("ou_"))
+    || (deliveryId.startsWith("ou_") && inboundId.startsWith("oc_"))
+  );
+}
+
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -342,7 +386,10 @@ function explicitlyStartsNewWork(input: GatewayInboundRequest): boolean {
 async function loadProjects(where?: Prisma.ProjectWhereInput): Promise<GatewayProject[]> {
   const rows = await db.project.findMany({
     where,
-    include: { workspace: { select: { id: true, name: true } } },
+    include: {
+      workspace: { select: { id: true, name: true } },
+      group: { select: { id: true, name: true } },
+    },
     orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
   });
   return rows.map((project) => ({
@@ -351,68 +398,26 @@ async function loadProjects(where?: Prisma.ProjectWhereInput): Promise<GatewayPr
     alias: project.alias,
     description: project.description,
     accessMode: project.accessMode,
+    groupId: project.groupId,
+    groupName: project.group?.name ?? null,
     workspaceId: project.workspaceId,
     workspaceName: project.workspace.name,
   }));
 }
 
-async function channelBindingFor(
-  gateway: string,
-  platformValue: string,
-  chatIdValue: string,
-): Promise<GatewayChannelBinding | null> {
-  const bindings = await readConfigValue<GatewayChannelBinding[]>(GATEWAY_CHANNEL_BINDINGS_KEY, []);
-  const platform = normalize(platformValue);
-  const chatId = normalizeChatId(chatIdValue);
-  const explicit = (Array.isArray(bindings) ? bindings : []).find((binding) => {
-    if (!binding?.platform || !binding.chatId) return false;
-    if (normalize(binding.platform) !== platform || normalizeChatId(binding.chatId) !== chatId) return false;
-    return !binding.gateway || normalize(binding.gateway) === normalize(gateway);
-  }) ?? null;
-  if (explicit) return explicit;
-
-  const normalizedGateway = normalize(gateway);
-  if (normalizedGateway !== "openclaw" && normalizedGateway !== "hermes") return null;
-  const runtime = await readHarnessGatewayRuntimeConfig(normalizedGateway);
-  const configuredWorkspace = runtime.accessPolicy?.channelScopes?.[platform]?.[chatId]?.trim();
-  if (!configuredWorkspace) return null;
-  const workspaces = await db.workspace.findMany({
-    where: {
-      OR: [
-        { id: configuredWorkspace },
-        { name: configuredWorkspace },
-      ],
-    },
-    take: 2,
-    select: { id: true },
-  });
-  if (workspaces.length !== 1) return null;
-  return {
-    gateway: normalizedGateway,
-    platform,
-    chatId,
-    defaultWorkspaceId: workspaces[0].id,
-  };
-}
-
-async function channelBinding(input: GatewayInboundRequest): Promise<GatewayChannelBinding | null> {
-  return channelBindingFor(input.gateway, input.platform, input.chatId);
-}
-
-function hasExplicitProjectScope(binding: GatewayChannelBinding | null): boolean {
-  return Boolean(
-    binding?.defaultWorkspaceId?.trim()
-    || binding?.allowedProjectIds?.some((projectId) => projectId?.trim()),
-  );
+function bindingForScope(scope: GatewayChannelScope): GatewayChannelBinding | null {
+  if (scope.mode === "ALL") return null;
+  if (scope.mode === "WORKSPACE") {
+    return { platform: "", chatId: "", defaultWorkspaceId: scope.workspaceId };
+  }
+  return { platform: "", chatId: "", allowedProjectIds: scope.projectIds };
 }
 
 function projectAllowed(
   projectId: string,
   binding: GatewayChannelBinding | null,
   workspaceId?: string,
-  requireExplicitScope = false,
 ): boolean {
-  if (requireExplicitScope && !hasExplicitProjectScope(binding)) return false;
   if (binding?.defaultWorkspaceId && workspaceId && binding.defaultWorkspaceId !== workspaceId) return false;
   const allowed = binding?.allowedProjectIds?.filter(Boolean) ?? [];
   return allowed.length === 0 || allowed.includes(projectId);
@@ -465,8 +470,7 @@ async function resolveTaskBindingReference(
     const harness = await findHarnessDeliveryByPlatformMessageId(input.replyToMessageId);
     if (
       harness
-      && normalize(harness.platform) === normalize(input.platform)
-      && normalizeChatId(harness.chatId) === normalizeChatId(input.chatId)
+      && matchesHarnessDeliveryChannel(input, harness)
     ) {
       return {
         taskId: harness.taskId,
@@ -546,11 +550,6 @@ export async function resolveGatewayTaskContext(
     },
   });
   if (!task) return { bound: false, reason: "not_found" };
-
-  const binding = await channelBindingFor(input.gateway, input.platform, input.chatId);
-  if (!projectAllowed(task.projectId, binding, task.project.workspaceId)) {
-    return { bound: false, reason: "not_allowed" };
-  }
 
   const parentIsWorkbench = task.parentTaskId
     ? await db.task.findFirst({
@@ -641,11 +640,15 @@ async function resolveBoundSession(input: GatewayInboundRequest) {
 async function resolveProject(
   input: GatewayInboundRequest,
   binding: GatewayChannelBinding | null,
-  options: { ignoreSessionBindings?: boolean; requireExplicitScope?: boolean } = {},
+  options: {
+    ignoreSessionBindings?: boolean;
+    enforceProjectScope?: boolean;
+  } = {},
 ): Promise<
   | { project: GatewayProject; resolution: string }
   | { candidates: GatewayProjectCandidate[]; reason: "ambiguous" | "not_found" | "not_allowed" }
 > {
+  const scopeBinding = options.enforceProjectScope === false ? null : binding;
   if (!options.ignoreSessionBindings && input.replyToMessageId?.trim()) {
     const delivery = await db.gatewayDelivery.findFirst({
       where: { platformMessageId: input.replyToMessageId.trim(), state: "DELIVERED" },
@@ -654,7 +657,7 @@ async function resolveProject(
     });
     if (delivery?.session) {
       const project = delivery.session.project;
-      if (!projectAllowed(project.id, binding, project.workspaceId, options.requireExplicitScope)) {
+      if (!projectAllowed(project.id, scopeBinding, project.workspaceId)) {
         return { candidates: [], reason: "not_allowed" };
       }
       return {
@@ -676,9 +679,8 @@ async function resolveProject(
   if (boundSession) {
     if (!projectAllowed(
       boundSession.projectId,
-      binding,
+      scopeBinding,
       boundSession.project.workspaceId,
-      options.requireExplicitScope,
     )) {
       return { candidates: [], reason: "not_allowed" };
     }
@@ -697,8 +699,8 @@ async function resolveProject(
   }
 
   const scope: Prisma.ProjectWhereInput = {
-    ...(binding?.defaultWorkspaceId ? { workspaceId: binding.defaultWorkspaceId } : {}),
-    ...(binding?.allowedProjectIds?.length ? { id: { in: binding.allowedProjectIds } } : {}),
+    ...(scopeBinding?.defaultWorkspaceId ? { workspaceId: scopeBinding.defaultWorkspaceId } : {}),
+    ...(scopeBinding?.allowedProjectIds?.length ? { id: { in: scopeBinding.allowedProjectIds } } : {}),
   };
   const projects = await loadProjects(scope);
   const explicit = input.project?.trim();
@@ -716,6 +718,16 @@ async function resolveProject(
       .filter((item) => item.confidence >= 0.3)
       .sort((a, b) => b.confidence - a.confidence);
     if (identified.length === 1) return { project: identified[0].project, resolution: "identify_project" };
+    const matchedGroupIds = new Set(identified.map((item) => item.project.groupId).filter(Boolean));
+    if (
+      input.intent === "PROJECT_DISCUSSION"
+      && identified.length > 1
+      && matchedGroupIds.size === 1
+      && identified.every((item) => item.project.groupId)
+    ) {
+      const anchor = identified.find((item) => item.project.name.endsWith("-trace")) ?? identified[0];
+      return { project: anchor.project, resolution: "identify_product_group" };
+    }
     if (identified.length > 1) return { candidates: identified.map((item) => candidate(item.project)), reason: "ambiguous" };
 
     const unrestricted = await db.project.findFirst({
@@ -739,8 +751,8 @@ async function resolveProject(
         senderId: input.senderId.trim(),
         status: "ACTIVE",
         lastActivityAt: { gte: new Date(Date.now() - GATEWAY_RECENT_SESSION_TTL_MS) },
-        ...(binding?.defaultWorkspaceId ? { project: { workspaceId: binding.defaultWorkspaceId } } : {}),
-        ...(binding?.allowedProjectIds?.length ? { projectId: { in: binding.allowedProjectIds } } : {}),
+        ...(scopeBinding?.defaultWorkspaceId ? { project: { workspaceId: scopeBinding.defaultWorkspaceId } } : {}),
+        ...(scopeBinding?.allowedProjectIds?.length ? { projectId: { in: scopeBinding.allowedProjectIds } } : {}),
       },
       orderBy: { lastActivityAt: "desc" },
       include: { project: { include: { workspace: { select: { name: true } } } } },
@@ -761,11 +773,6 @@ async function resolveProject(
     }
   }
 
-  if (binding?.defaultProjectId) {
-    const found = projects.find((project) => project.projectId === binding.defaultProjectId);
-    if (found) return { project: found, resolution: "channel_default_project" };
-    return { candidates: projects.map(candidate), reason: "not_allowed" };
-  }
   return { candidates: projects.map(candidate), reason: projects.length > 1 ? "ambiguous" : "not_found" };
 }
 
@@ -1438,6 +1445,38 @@ export async function routeGatewayInbound(
     };
   }
 
+  let binding: GatewayChannelBinding | null = null;
+  if (options.projectQueryOnly) {
+    const decision = await decideGatewayChannelAccess(input);
+    if (!decision.allowed) {
+      const recentInbounds = await db.gatewayInbound.count({
+        where: {
+          gateway: normalize(input.gateway),
+          platform: normalize(input.platform),
+          chatId: normalizeChatId(input.chatId),
+          createdAt: { gte: new Date(Date.now() - GATEWAY_RATE_WINDOW_MS) },
+        },
+      });
+      const silent = recentInbounds > 1;
+      const result: GatewayRouteResult = {
+        mode: "channel_access_denied",
+        inboundId: created.inbound.id,
+        deduped: created.deduped,
+        noOp: true,
+        silent,
+        reason: decision.reason,
+        instructions: silent
+          ? "Return NO_REPLY. This channel's deterministic authorization denial is rate-limited. Do not call another Tower tool."
+          : decision.reason === "SCOPE_INVALID"
+            ? "本群的 Tower 授权范围已失效，请联系 OWNER 重新绑定工作区或项目。不要调用其他 Tower 工具。"
+            : "本群尚未获得 Tower OWNER 授权，暂时无法使用。请联系 OWNER 在本群发送“@Tower 授权本群”或直接绑定工作区/项目。不要调用其他 Tower 工具。",
+      };
+      await saveRoute(created.inbound.id, result, "PROCESSED");
+      return result;
+    }
+    binding = bindingForScope(decision.scope);
+  }
+
   const rateWindowStart = new Date(Date.now() - GATEWAY_RATE_WINDOW_MS);
   const [senderCount, chatCount, queuedCount, globalQueuedCount] = await Promise.all([
     input.senderId
@@ -1491,18 +1530,6 @@ export async function routeGatewayInbound(
     return result;
   }
 
-  const binding = await channelBinding(input);
-  if (options.projectQueryOnly && !hasExplicitProjectScope(binding)) {
-    const denied: GatewayRouteResult = {
-      mode: "needs_project_selection",
-      inboundId: created.inbound.id,
-      deduped: created.deduped,
-      candidates: [],
-      reason: "not_allowed",
-    };
-    await saveRoute(created.inbound.id, denied, "PROCESSED");
-    return denied;
-  }
   if (input.sessionAction === "CLOSE") {
     const closedSessionIds = await closeDiscussionSessions(input);
     const result: GatewayRouteResult = {
@@ -1523,7 +1550,11 @@ export async function routeGatewayInbound(
     ? null
     : await resolveTaskBinding(input);
   if (reply) {
-    if (!projectAllowed(reply.project.projectId, binding, reply.project.workspaceId)) {
+    if (!projectAllowed(
+      reply.project.projectId,
+      options.projectQueryOnly ? binding : null,
+      reply.project.workspaceId,
+    )) {
       const denied: GatewayRouteResult = {
         mode: "needs_project_selection",
         inboundId: created.inbound.id,
@@ -1566,7 +1597,7 @@ export async function routeGatewayInbound(
       mode: "tower_mcp",
       inboundId: created.inbound.id,
       deduped: created.deduped,
-      instructions: "Handle only read-only Tower queries with the gateway's exposed query tools. Mutations must be classified as PROJECT_WORK before routing so the resident Workbench exclusively owns task creation, execution, review, and callbacks; the ingress agent intentionally has no direct mutation tools.",
+      instructions: `Handle only read-only Tower queries with the gateway's exposed query tools. If the OWNER asked to authorize, bind, unbind, revoke, or inspect this group, call manage_gateway_channel_access with gatewayInboundId=${created.inbound.id}; never ask for chatId or senderId. Other mutations must be classified as PROJECT_WORK before routing so the resident Workbench exclusively owns task creation, execution, review, and callbacks; the ingress agent intentionally has no direct mutation tools.`,
     };
     await saveRoute(created.inbound.id, result, "PROCESSED");
     return result;
@@ -1574,7 +1605,10 @@ export async function routeGatewayInbound(
 
   const resolved = await resolveProject(input, binding, {
     ignoreSessionBindings: input.sessionAction === "NEW",
-    requireExplicitScope: options.projectQueryOnly,
+    // Channel scopes are a hard boundary for NON_OWNER queries. The OWNER
+    // route still uses the binding for default-project hints, but searches all
+    // registered Tower projects.
+    enforceProjectScope: Boolean(options.projectQueryOnly),
   });
   if ("candidates" in resolved) {
     const result: GatewayRouteResult = {
@@ -1745,6 +1779,7 @@ export async function readGatewayProjectContext(inboundId: string, question: str
       gateway: true,
       platform: true,
       chatId: true,
+      senderId: true,
       session: {
         select: {
           kind: true,
@@ -1765,8 +1800,11 @@ export async function readGatewayProjectContext(inboundId: string, question: str
     throw new Error("Gateway inbound is not bound to a project discussion");
   }
   const project = inbound.session.project;
-  const binding = await channelBindingFor(inbound.gateway, inbound.platform, inbound.chatId);
-  if (!projectAllowed(project.id, binding, project.workspace.id, true)) {
+  const decision = await decideGatewayChannelAccess(inbound);
+  if (!decision.allowed || !gatewayScopeAllowsProject(decision.scope, {
+    id: project.id,
+    workspaceId: project.workspace.id,
+  })) {
     throw new Error("Gateway channel is not authorized to read this project");
   }
   const groupedProjects = project.groupId
@@ -1776,7 +1814,7 @@ export async function readGatewayProjectContext(inboundId: string, question: str
       })
     : [];
   if (project.groupId && groupedProjects.some((item) =>
-    !projectAllowed(item.id, binding, item.workspaceId, true)
+    !gatewayScopeAllowsProject(decision.scope, item)
   )) {
     throw new Error("Gateway channel is not authorized to read every project in this product group");
   }
@@ -2046,12 +2084,26 @@ export async function completeGatewayDiscussion(
   response: string,
   sender: DeliverySender = sendViaHarnessGateway,
 ) {
-  const canonical = await completeDiscussionTurn(inboundId, response);
   const inbound = await db.gatewayInbound.findUnique({
     where: { id: inboundId },
-    select: { session: { select: { project: { select: { name: true } } } } },
+    select: {
+      gateway: true,
+      platform: true,
+      chatId: true,
+      senderId: true,
+      session: {
+        select: {
+          project: { select: { id: true, name: true, workspaceId: true } },
+        },
+      },
+    },
   });
   if (!inbound?.session) throw new Error("Gateway discussion session not found");
+  const decision = await decideGatewayChannelAccess(inbound);
+  if (!decision.allowed || !gatewayScopeAllowsProject(decision.scope, inbound.session.project)) {
+    throw new Error("Gateway channel authorization changed before the discussion completed");
+  }
+  const canonical = await completeDiscussionTurn(inboundId, response);
   const result = await deliverGatewayResponse({
     inboundId,
     kind: "DISCUSSION_REPLY",

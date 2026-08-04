@@ -95,6 +95,7 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   const { removePortal } = useTerminalPortal();
   const { status: rgStatus } = useExtension("rg");
   const { status: monacoStatus } = useExtension("monaco");
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [taskStatus, setTaskStatus] = useState(task.status);
   const [taskStatusSource, setTaskStatusSource] = useState(task.status);
   if (taskStatusSource !== task.status) {
@@ -112,6 +113,14 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
     originalContent: string;
     modifiedContent: string;
   } | null>(null);
+
+  useEffect(() => {
+    const compactViewport = window.matchMedia("(max-width: 639px)");
+    const syncDirection = () => setIsCompactViewport(compactViewport.matches);
+    syncDirection();
+    compactViewport.addEventListener("change", syncDirection);
+    return () => compactViewport.removeEventListener("change", syncDirection);
+  }, []);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   // Inner sub-tab inside files: filetree | search | git. Initial pick is
   // the first available sub-tab given current extension state.
@@ -322,9 +331,13 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
   }, [task.id, router, t]);
 
   return (
-    <PanelGroup direction="horizontal" className="h-screen bg-background">
+    <PanelGroup direction={isCompactViewport ? "vertical" : "horizontal"} className="h-screen bg-background">
       {/* Left panel: Terminal — 35% default, 20% minimum */}
-      <Panel defaultSize={35} minSize={20} className="flex flex-col border-r border-border bg-sidebar">
+      <Panel
+        defaultSize={35}
+        minSize={20}
+        className={`flex flex-col bg-sidebar ${isCompactViewport ? "border-b border-border" : "border-r border-border"}`}
+      >
         {/* Header: back + breadcrumb + status + branch */}
         <div className="header-lg px-4 py-3">
           {/* Back button + breadcrumb: workspace / project / task */}
@@ -541,7 +554,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
       </Panel>
 
       {/* Drag resize handle — 4px, bg-border at rest, bg-primary/20 on hover per UI-SPEC */}
-      <PanelResizeHandle className="relative w-px bg-border transition-colors hover:bg-primary/20 active:bg-primary/40 cursor-col-resize" />
+      <PanelResizeHandle
+        className={`relative bg-border transition-colors hover:bg-primary/20 active:bg-primary/40 ${isCompactViewport ? "h-px cursor-row-resize" : "w-px cursor-col-resize"}`}
+      />
 
       {/* Right panel: Tabs — 65% default, 20% minimum per D-02 and D-03 */}
       <Panel defaultSize={65} minSize={20} className="flex flex-col">
@@ -575,9 +590,9 @@ export function TaskPageClient({ task, workspaceId, workspaceName, latestExecuti
 
           {/* Files tab — Phase 21+64: FileTree/Search sub-tabs + CodeEditor */}
           <TabsContent value="files" className="flex-1 min-h-0 overflow-hidden">
-            <div className="flex h-full flex-row overflow-hidden">
+            <div className="flex h-full flex-col overflow-hidden sm:flex-row">
               {/* Left: sub-tabs for file tree / search / git / graph — single 280px width */}
-              <div className="w-70 flex-none border-r border-border overflow-hidden flex flex-col">
+              <div className="flex h-1/2 w-full flex-none flex-col overflow-hidden border-b border-border sm:h-auto sm:w-70 sm:border-b-0 sm:border-r">
                 <Tabs value={innerTab} onValueChange={setInnerTab} className="flex h-full flex-col gap-0">
                   {/* Sub-tab bar */}
                   <div className="header-xs flex shrink-0 px-2 py-1.5">

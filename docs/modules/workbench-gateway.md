@@ -28,12 +28,16 @@ Workbench 网关把飞书、微信及 OpenClaw/Hermes 支持的平台接入 Towe
 
 ### NON_OWNER
 
-同事仅能在可信群中查询该群绑定工作区内的项目：
+同事仅能在 OWNER 已授权的群中进行只读查询：
 
-- 无工作区 scope 时 fail-closed；
+- `ALL` 可查询全部工作区和项目；`WORKSPACE/PROJECTS` 强制追加范围过滤；
+- 未授权、已撤销或绑定资源失效时 fail-closed；
 - 不返回个人任务、个人日报或本地路径；
 - 不能创建、修改、启动或删除任务；
 - 陌生群和无法验证身份的请求直接返回权限不足。
+
+OWNER 在当前群内通过 `manage_gateway_channel_access` 授权、绑定、解绑或撤销。
+扩展配置保存状态，OpenClaw 控制 sender 工具面，Tower 负责最终数据范围校验。
 
 ## 请求类型
 

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, Check, Circle, Copy, Download, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { ExtensionCardShell } from "./extension-card-shell";
 import { useI18n } from "@/lib/i18n";
 import { useExtension } from "@/lib/extensions/client";
 import type { ExtensionMetadata } from "@/lib/extensions/types";
@@ -67,10 +68,8 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
   const { status, loading, isInstalling, install, uninstall, refresh } = useExtension(extension.id);
   const [refreshing, setRefreshing] = useState(false);
 
-  const Icon = extension.icon;
   const isInstalled = status.installed;
   const extensionName = extension.nameKey ? t(extension.nameKey) : extension.name;
-  const extensionDescription = extension.descriptionKey ? t(extension.descriptionKey) : extension.description;
 
   const handleInstall = async () => {
     const result = await install();
@@ -110,48 +109,13 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-muted/50 p-5">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background ring-1 ring-border">
-            <Icon className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold">{extensionName}</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">{extensionDescription}</p>
-          </div>
-        </div>
-        <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground ring-1 ring-border">
-          ~{extension.sizeMB} MB
-        </span>
-      </div>
-
-      {/* Status row */}
-      <div className="mt-4 flex items-center gap-2 text-xs">
-        {loading ? (
-          <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            <span className="text-muted-foreground">{t("common.loading")}</span>
-          </>
-        ) : isInstalled ? (
-          <>
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-            <span className="text-foreground">
-              {t("settings.extensions.installed")}
-              {status.version ? ` v${status.version}` : ""}
-            </span>
-          </>
-        ) : (
-          <>
-            <Circle className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-muted-foreground">{t("settings.extensions.notInstalledShort")}</span>
-          </>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+    <ExtensionCardShell
+      extension={extension}
+      installed={isInstalled}
+      version={status.version}
+      loading={loading}
+      actions={(
+        <>
         {isInstalled ? (
           <>
             <Button
@@ -242,7 +206,8 @@ export function ExtensionCard({ extension }: ExtensionCardProps) {
           <ExternalLink className="h-3.5 w-3.5" />
           {t("settings.extensions.visitHomepage")}
         </Button>
-      </div>
-    </div>
+        </>
+      )}
+    />
   );
 }

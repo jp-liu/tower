@@ -7,7 +7,6 @@ import {
 } from "@/lib/workbench/boundary";
 import { activateWorkbenchCommandConsumer } from "@/lib/workbench/command-inbox";
 import {
-  GATEWAY_CHANNEL_BINDINGS_KEY,
   GATEWAY_RECENT_SESSION_TTL_MS,
   completeGatewayDiscussion,
   completeGatewayWork,
@@ -22,8 +21,13 @@ import {
   resolveGatewayTaskContext,
   type GatewayInboundRequest,
 } from "../gateway-router";
+import {
+  GATEWAY_CHANNEL_ACCESS_CONFIG_KEY,
+  gatewayChannelAccessKey,
+} from "../gateway-channel-access";
 import type { HarnessGatewaySendInput } from "../gateway-send";
 import { diagnoseGatewayRequest } from "../gateway-diagnostics";
+import { recordHarnessDelivery } from "../delivery-map";
 
 let workspaceId: string;
 let alphaId: string;
@@ -61,34 +65,45 @@ function successfulSender(messageId = `om_sent_${randomUUID()}`) {
 }
 
 async function configureChannel(input: {
-  defaultProjectId?: string;
   allowedProjectIds?: string[];
   defaultWorkspaceId?: string;
 } = {}) {
+  const projectIds = input.allowedProjectIds ?? [];
+  const scope = projectIds.length > 0
+    ? { mode: "PROJECTS", projectIds }
+    : input.defaultWorkspaceId === ""
+      ? { mode: "WORKSPACE", workspaceId: "missing-workspace" }
+      : { mode: "WORKSPACE", workspaceId: input.defaultWorkspaceId ?? workspaceId };
+  const record = {
+    gateway: "openclaw",
+    platform: "feishu",
+    chatId: "oc_gateway_test",
+    status: "AUTHORIZED",
+    scope,
+    authorizedBy: "ou_owner",
+    authorizedAt: new Date().toISOString(),
+    updatedBy: "ou_owner",
+    updatedAt: new Date().toISOString(),
+    revision: 1,
+  };
   await db.systemConfig.upsert({
-    where: { key: GATEWAY_CHANNEL_BINDINGS_KEY },
+    where: { key: GATEWAY_CHANNEL_ACCESS_CONFIG_KEY },
     update: {
-      value: JSON.stringify([{
-        gateway: "openclaw",
-        platform: "feishu",
-        chatId: "oc_gateway_test",
-        defaultWorkspaceId: input.defaultWorkspaceId === undefined
-          ? workspaceId
-          : input.defaultWorkspaceId || undefined,
-        ...input,
-      }]),
+      value: JSON.stringify({
+        version: 1,
+        revision: 1,
+        channels: { [gatewayChannelAccessKey(record)]: record },
+        mutationReceipts: {},
+      }),
     },
     create: {
-      key: GATEWAY_CHANNEL_BINDINGS_KEY,
-      value: JSON.stringify([{
-        gateway: "openclaw",
-        platform: "feishu",
-        chatId: "oc_gateway_test",
-        defaultWorkspaceId: input.defaultWorkspaceId === undefined
-          ? workspaceId
-          : input.defaultWorkspaceId || undefined,
-        ...input,
-      }]),
+      key: GATEWAY_CHANNEL_ACCESS_CONFIG_KEY,
+      value: JSON.stringify({
+        version: 1,
+        revision: 1,
+        channels: { [gatewayChannelAccessKey(record)]: record },
+        mutationReceipts: {},
+      }),
     },
   });
 }
@@ -122,7 +137,7 @@ afterEach(async () => {
   });
   await db.workspace.delete({ where: { id: workspaceId } });
   await db.systemConfig.deleteMany({
-    where: { key: { in: [GATEWAY_CHANNEL_BINDINGS_KEY, "assistant.historyTurns"] } },
+    where: { key: { in: [GATEWAY_CHANNEL_ACCESS_CONFIG_KEY, "assistant.historyTurns"] } },
   });
   await db.gatewayInbound.deleteMany({ where: { chatId: "oc_gateway_test" } });
   vi.restoreAllMocks();
@@ -268,11 +283,37 @@ describe("gateway inbound routing", () => {
   });
 
   it("fails closed when a non-owner channel has no configured project scope", async () => {
-    await db.systemConfig.delete({ where: { key: GATEWAY_CHANNEL_BINDINGS_KEY } });
+    await db.systemConfig.delete({ where: { key: GATEWAY_CHANNEL_ACCESS_CONFIG_KEY } });
 
     await expect(routeGatewayProjectQuery(inbound({ project: alphaId }))).resolves.toMatchObject({
+      mode: "channel_access_denied",
+      reason: "CHANNEL_UNAUTHORIZED",
+    });
+  });
+
+  it("does not apply a trusted-channel project scope to the owner route", async () => {
+    const ownerOnly = await db.project.create({
+      data: {
+        name: "Owner Cross Workspace Project",
+        alias: "owner-cross-scope",
+        workspaceId,
+        localPath: process.cwd(),
+      },
+    });
+    await configureChannel({ allowedProjectIds: [alphaId, betaId] });
+
+    await expect(routeGatewayInbound(inbound({
+      project: ownerOnly.id,
+      intent: "PROJECT_DISCUSSION",
+    }), vi.fn())).resolves.toMatchObject({
+      mode: "project_discussion",
+      project: { projectId: ownerOnly.id },
+    });
+
+    await expect(routeGatewayProjectQuery(inbound({
+      project: ownerOnly.id,
+    }))).resolves.toMatchObject({
       mode: "needs_project_selection",
-      candidates: [],
       reason: "not_allowed",
     });
   });
@@ -281,9 +322,8 @@ describe("gateway inbound routing", () => {
     await configureChannel({ defaultWorkspaceId: "", allowedProjectIds: [] });
 
     await expect(routeGatewayProjectQuery(inbound({ project: alphaId }))).resolves.toMatchObject({
-      mode: "needs_project_selection",
-      candidates: [],
-      reason: "not_allowed",
+      mode: "channel_access_denied",
+      reason: "SCOPE_INVALID",
     });
   });
 
@@ -292,7 +332,7 @@ describe("gateway inbound routing", () => {
     expect(routed).toMatchObject({ mode: "project_discussion" });
     if (routed.mode !== "project_discussion") return;
 
-    await db.systemConfig.delete({ where: { key: GATEWAY_CHANNEL_BINDINGS_KEY } });
+    await db.systemConfig.delete({ where: { key: GATEWAY_CHANNEL_ACCESS_CONFIG_KEY } });
 
     await expect(readGatewayProjectContext(routed.inboundId, "status"))
       .rejects.toThrow("not authorized");
@@ -327,6 +367,56 @@ describe("gateway inbound routing", () => {
       expect(result.candidates.map((item) => item.projectId).sort()).toEqual([alphaId, betaId].sort());
     }
     expect(await db.workbenchEvent.count()).toBe(0);
+  });
+
+  it("resolves a product shorthand to one grouped knowledge discussion", async () => {
+    const group = await db.productGroup.create({
+      data: { name: "南京分班", workspaceId },
+    });
+    const [frontend, backend, trace] = await Promise.all([
+      db.project.create({
+        data: {
+          name: "enrollment-class-division-static",
+          alias: "南招分班前端",
+          workspaceId,
+          groupId: group.id,
+          localPath: process.cwd(),
+        },
+      }),
+      db.project.create({
+        data: {
+          name: "enrollment-class-division",
+          alias: "南招分班后端",
+          workspaceId,
+          groupId: group.id,
+          localPath: process.cwd(),
+        },
+      }),
+      db.project.create({
+        data: {
+          name: "enrollment-class-division-trace",
+          alias: "南招分班自动化&知识库",
+          workspaceId,
+          groupId: group.id,
+          localPath: process.cwd(),
+        },
+      }),
+    ]);
+    await configureChannel({
+      allowedProjectIds: [frontend.id, backend.id, trace.id],
+    });
+
+    const result = await routeGatewayInbound(inbound({
+      project: "南招分班系统",
+      intent: "PROJECT_DISCUSSION",
+      content: "南招分班系统主流程是怎么样的？",
+    }), vi.fn());
+
+    expect(result).toMatchObject({
+      mode: "project_discussion",
+      project: { projectId: trace.id },
+      resolution: "identify_product_group",
+    });
   });
 
   it("prioritizes reply task binding, then thread session binding, over an explicit project", async () => {
@@ -445,6 +535,56 @@ describe("gateway inbound routing", () => {
     expect(await db.taskExecution.count({ where: { taskId: task.id } })).toBe(beforeExecutions);
     expect(await db.task.findUnique({ where: { id: task.id }, select: { status: true } }))
       .toEqual({ status: "DONE" });
+  });
+
+  it("resolves a Feishu P2P card reply across chat_id and open_id aliases", async () => {
+    const task = await db.task.create({
+      data: { title: "Feishu card reply target", projectId: alphaId, status: "IN_PROGRESS" },
+    });
+    await recordHarnessDelivery({
+      harnessMessageId: `ask-${randomUUID()}`,
+      taskId: task.id,
+      platform: "feishu",
+      chatId: "feishu:oc_direct_chat",
+      platformMessageId: "om_feishu_card_reply",
+      scope: "unattended",
+      expectReply: true,
+    });
+    const context = await resolveGatewayTaskContext({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "user:ou_direct_user",
+      replyToMessageId: "om_feishu_card_reply",
+    });
+
+    expect(context).toMatchObject({
+      bound: true,
+      bindingSource: "harness_delivery",
+      subjectTaskId: task.id,
+      producerTaskId: task.id,
+    });
+  });
+
+  it("does not bind a Harness delivery across different Feishu group chats", async () => {
+    const task = await db.task.create({
+      data: { title: "Feishu group reply target", projectId: alphaId },
+    });
+    await recordHarnessDelivery({
+      harnessMessageId: `ask-${randomUUID()}`,
+      taskId: task.id,
+      platform: "feishu",
+      chatId: "feishu:oc_original_group",
+      platformMessageId: "om_feishu_group_reply",
+      scope: "work",
+      expectReply: false,
+    });
+
+    await expect(resolveGatewayTaskContext({
+      gateway: "openclaw",
+      platform: "feishu",
+      chatId: "oc_different_group",
+      replyToMessageId: "om_feishu_group_reply",
+    })).resolves.toEqual({ bound: false, reason: "not_found" });
   });
 
   it("continues a bound task once for duplicate platform callbacks", async () => {
@@ -615,8 +755,8 @@ describe("gateway inbound routing", () => {
     expect(executor).not.toHaveBeenCalled();
   });
 
-  it("uses the sender's recent project before the channel default", async () => {
-    await configureChannel({ allowedProjectIds: [alphaId, betaId], defaultProjectId: alphaId });
+  it("uses the sender's recent project before asking for project selection", async () => {
+    await configureChannel({ allowedProjectIds: [alphaId, betaId] });
     await routeGatewayInbound(inbound({
       project: betaId,
       threadId: "recent-thread",
@@ -637,14 +777,13 @@ describe("gateway inbound routing", () => {
       resolution: "recent_user_project",
     });
 
-    const fallback = await routeGatewayInbound(inbound({
+    const selection = await routeGatewayInbound(inbound({
       platformMessageId: "om_channel_default",
       senderId: "ou_new",
     }), vi.fn());
-    expect(fallback).toMatchObject({
-      mode: "project_discussion",
-      project: { projectId: alphaId },
-      resolution: "channel_default_project",
+    expect(selection).toMatchObject({
+      mode: "needs_project_selection",
+      reason: "ambiguous",
     });
   });
 
@@ -712,14 +851,16 @@ describe("gateway inbound routing", () => {
   });
 
   it("isolates unthreaded discussion sessions by sender in a group chat", async () => {
-    await configureChannel({ allowedProjectIds: [alphaId, betaId], defaultProjectId: alphaId });
+    await configureChannel({ allowedProjectIds: [alphaId, betaId] });
     const first = await routeGatewayInbound(inbound({
       platformMessageId: "om_sender_a",
       senderId: "ou_sender_a",
+      project: alphaId,
     }), vi.fn());
     const second = await routeGatewayInbound(inbound({
       platformMessageId: "om_sender_b",
       senderId: "ou_sender_b",
+      project: alphaId,
     }), vi.fn());
 
     expect(first.mode).toBe("project_discussion");
@@ -730,7 +871,7 @@ describe("gateway inbound routing", () => {
   });
 
   it("does not use an expired session as the sender's recent project", async () => {
-    await configureChannel({ allowedProjectIds: [alphaId, betaId], defaultProjectId: betaId });
+    await configureChannel({ allowedProjectIds: [alphaId, betaId] });
     const first = await routeGatewayInbound(inbound({
       platformMessageId: "om_expired_first",
       project: alphaId,
@@ -747,11 +888,7 @@ describe("gateway inbound routing", () => {
       platformMessageId: "om_after_expiry",
       senderId: "ou_expired_sender",
     }), vi.fn());
-    expect(next).toMatchObject({
-      mode: "project_discussion",
-      project: { projectId: betaId },
-      resolution: "channel_default_project",
-    });
+    expect(next).toMatchObject({ mode: "needs_project_selection", reason: "ambiguous" });
   });
 
   it("persists discussion turns and restores only the configured recent context", async () => {

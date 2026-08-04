@@ -3,6 +3,22 @@ import type { TranslationKey } from "@/lib/i18n/types";
 
 export type ExtensionId = "rg" | "monaco" | "tower-agent-openclaw" | "tower-agent-hermes";
 
+export type LocalExtensionKind = "tower-component" | "gateway-adapter";
+
+export type GatewayId = "openclaw" | "hermes";
+
+export type GatewaySettingsCapability =
+  | "gateway.profile"
+  | "gateway.display-name"
+  | "gateway.runtime-env"
+  | "gateway.owner-policy"
+  | "gateway.channel-access";
+
+export type LocalExtensionCapability =
+  | "code-search"
+  | "code-editor"
+  | GatewaySettingsCapability;
+
 export interface ExtensionStatus {
   installed: boolean;
   version?: string;
@@ -22,6 +38,8 @@ export interface ExtensionResult {
  */
 export interface ExtensionMetadata {
   id: ExtensionId;
+  kind: LocalExtensionKind;
+  capabilities: readonly LocalExtensionCapability[];
   name: string;
   nameKey?: TranslationKey;
   description: string;
@@ -42,6 +60,31 @@ export interface ExtensionMetadata {
    * delegation). Rendered via `t(hintKey)` — no hardcoded copy in the UI.
    */
   hintKey?: TranslationKey;
+  /** Gateway deployment target. Required when kind is gateway-adapter. */
+  gateway?: GatewayId;
+}
+
+export type GatewayAdapterExtensionMetadata = ExtensionMetadata & {
+  kind: "gateway-adapter";
+  gateway: GatewayId;
+  capabilities: readonly GatewaySettingsCapability[];
+};
+
+const GATEWAY_SETTINGS_CAPABILITIES = new Set<GatewaySettingsCapability>([
+  "gateway.profile",
+  "gateway.display-name",
+  "gateway.runtime-env",
+  "gateway.owner-policy",
+  "gateway.channel-access",
+]);
+
+export function isGatewayAdapterExtension(
+  extension: ExtensionMetadata,
+): extension is GatewayAdapterExtensionMetadata {
+  return extension.kind === "gateway-adapter"
+    && extension.gateway !== undefined
+    && extension.capabilities.every((capability) =>
+      GATEWAY_SETTINGS_CAPABILITIES.has(capability as GatewaySettingsCapability));
 }
 
 /**

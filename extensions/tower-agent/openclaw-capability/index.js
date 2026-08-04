@@ -15,24 +15,34 @@ function fail(respond, error) {
   });
 }
 
+// OpenClaw may register the same plugin entry in more than one runtime scope.
+// Completion hooks and gateway methods must therefore share one callback
+// registry at module scope; a register-local Map loses the callback when the
+// hook is invoked by a sibling runtime scope.
+const callbacks = new Map();
+
 export default definePluginEntry({
   id: "tower-capability-bridge",
   name: "Tower Capability Bridge",
   description: "Maps Tower capability Jobs to private OpenClaw Operators.",
   register(api) {
     const entries = normalizeCapabilityConfig(api.pluginConfig);
-    const callbacks = new Map();
 
     api.on("subagent_ended", async (event) => {
-      const callback = callbacks.get(event.targetSessionKey);
+      const callback = callbacks.get(event.targetSessionKey)
+        || (event.runId ? callbacks.get(event.runId) : null);
       if (!callback) return;
       try {
         await sendCompletionCallback(callback, event);
-        callbacks.delete(event.targetSessionKey);
       } catch (error) {
         api.logger.warn(
           `Tower capability completion callback failed: ${error instanceof Error ? error.message : String(error)}`,
         );
+      } finally {
+        // Completion is emitted once. Tower's durable recovery scan owns any
+        // retry, so do not retain callback bearer material in plugin memory.
+        callbacks.delete(callback.sessionKey);
+        if (event.runId) callbacks.delete(event.runId);
       }
     });
 
@@ -48,7 +58,8 @@ export default definePluginEntry({
       try {
         const request = parseJobSubmission(params, entries, validateJsonSchemaValue);
         const sessionKey = `agent:${request.entry.agentId}:subagent:tower-capability-${request.requestId}`;
-        callbacks.set(sessionKey, { ...request.callback, requestId: request.requestId });
+        const callback = { ...request.callback, requestId: request.requestId, sessionKey };
+        callbacks.set(sessionKey, callback);
         const result = await api.runtime.subagent.run({
           sessionKey,
           message: buildOperatorMessage(request),
@@ -56,6 +67,10 @@ export default definePluginEntry({
           deliver: false,
           idempotencyKey: `tower-capability:${request.requestId}`,
         });
+        // Current OpenClaw completion events carry both a target session and a
+        // durable run id. Index both so canonicalization differences cannot
+        // silently drop the primary completion callback.
+        callbacks.set(result.runId, callback);
         respond(true, {
           requestId: request.requestId,
           jobRef: result.runId,

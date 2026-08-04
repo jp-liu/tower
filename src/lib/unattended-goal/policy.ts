@@ -10,6 +10,7 @@ export type GoalPolicyDb = Pick<
   | "task"
   | "taskExecution"
   | "capabilityRequest"
+  | "capabilityGrant"
   | "harnessMessage"
   | "workbenchEvent"
   | "workbenchBatch"
@@ -201,6 +202,10 @@ async function blockGoal(
       where: { id: taskId },
       data: { unattended: false },
       select: { id: true },
+    });
+    await tx.capabilityGrant.updateMany({
+      where: { taskId, revokedAt: null },
+      data: { revokedAt: new Date() },
     });
     return tx.unattendedGoalRuntime.update({
       where: { taskId },
