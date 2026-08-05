@@ -140,15 +140,31 @@ function pruneNodePty(packageRoot, platform, arch) {
   }
 }
 
+function normalizePrismaGeneratedSource(source, buildRoots) {
+  const replacements = new Set();
+  for (const root of buildRoots) {
+    for (const variant of [root, root.replaceAll("\\", "/"), root.replaceAll("/", "\\")]) {
+      replacements.add(variant);
+      replacements.add(JSON.stringify(variant).slice(1, -1));
+    }
+  }
+  for (const buildRoot of [...replacements].sort((left, right) => right.length - left.length)) {
+    source = source.split(buildRoot).join("/tower-portable/runtime/package");
+  }
+  return source;
+}
+
 function normalizePrismaGeneratedPaths(packageRoot) {
   const generatedRoot = path.join(packageRoot, "node_modules", ".prisma", "client");
-  const buildRoots = new Set([path.resolve(packageRoot), fs.realpathSync(packageRoot)]);
-  const replacements = [...buildRoots].flatMap((root) => [root, JSON.stringify(root).slice(1, -1)]);
+  const buildRoots = new Set([
+    path.resolve(packageRoot),
+    fs.realpathSync(packageRoot),
+    fs.realpathSync.native(packageRoot),
+  ]);
   for (const name of ["edge.js", "index.js", "wasm.js"]) {
     const file = path.join(generatedRoot, name);
     if (!fs.existsSync(file)) continue;
-    let source = fs.readFileSync(file, "utf8");
-    for (const buildRoot of replacements) source = source.split(buildRoot).join("/tower-portable/runtime/package");
+    const source = normalizePrismaGeneratedSource(fs.readFileSync(file, "utf8"), buildRoots);
     if (source.includes("tower-portable-build-")) fail(`Prisma generated client contains a temporary build path: ${name}`);
     fs.writeFileSync(file, source);
   }
@@ -328,6 +344,7 @@ module.exports = {
   createNpmInstallInvocation,
   makeAbsoluteLinksPortable,
   normalizePrismaGeneratedPaths,
+  normalizePrismaGeneratedSource,
   platformPackageRoot,
   pruneNodePty,
   runNpmInstall,
