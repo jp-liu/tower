@@ -25,6 +25,10 @@ const EMBEDDED_PACKAGES = {
   "@tower-org/ai-provider-codex": "packages/ai-provider-codex",
   "@tower-org/ai-provider-gemini": "packages/ai-provider-gemini",
 };
+const NPM_INSTALL_ARGS = Object.freeze([
+  "ci", "--omit=dev", "--include=optional", "--no-audit", "--no-fund", "--foreground-scripts",
+  "--registry=https://registry.npmjs.org/",
+]);
 
 function option(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -33,6 +37,25 @@ function option(name, fallback) {
 
 function fail(message) {
   throw new Error(`[release:portable:build] ${message}`);
+}
+
+function createNpmInstallInvocation(platform = process.platform, env = process.env) {
+  const npmArgs = [...NPM_INSTALL_ARGS];
+  if (!isWindows(platform)) return { command: "npm", args: npmArgs };
+
+  return {
+    command: env.ComSpec || env.COMSPEC || "cmd.exe",
+    args: ["/d", "/s", "/c", "npm.cmd", ...npmArgs],
+  };
+}
+
+function runNpmInstall({ cwd, cacheDir, platform = process.platform, env = process.env, execute = execFileSync }) {
+  const invocation = createNpmInstallInvocation(platform, env);
+  return execute(invocation.command, invocation.args, {
+    cwd,
+    stdio: "inherit",
+    env: { ...env, npm_config_cache: cacheDir },
+  });
 }
 
 function validatePortableDependencies() {
@@ -216,13 +239,9 @@ async function buildPortableRelease(options) {
 
     fs.copyFileSync(path.join(portableDependenciesRoot, "package.json"), path.join(packageRoot, "package.json"));
     fs.copyFileSync(path.join(portableDependenciesRoot, "package-lock.json"), path.join(packageRoot, "package-lock.json"));
-    execFileSync(isWindows() ? "npm.cmd" : "npm", [
-      "ci", "--omit=dev", "--include=optional", "--no-audit", "--no-fund", "--foreground-scripts",
-      "--registry=https://registry.npmjs.org/",
-    ], {
+    runNpmInstall({
       cwd: packageRoot,
-      stdio: "inherit",
-      env: { ...process.env, npm_config_cache: path.join(temporary, "npm-cache") },
+      cacheDir: path.join(temporary, "npm-cache"),
     });
     fs.copyFileSync(path.join(packedPackage, "package.json"), path.join(packageRoot, "package.json"));
     fs.rmSync(path.join(packageRoot, "package-lock.json"), { force: true });
@@ -306,10 +325,12 @@ module.exports = {
   SUPPORTED_TARGETS,
   assertLinksContained,
   buildPortableRelease,
+  createNpmInstallInvocation,
   makeAbsoluteLinksPortable,
   normalizePrismaGeneratedPaths,
   platformPackageRoot,
   pruneNodePty,
+  runNpmInstall,
   validatePortableDependencies,
 };
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exit(1); });
