@@ -12,6 +12,7 @@ const {
   normalizePrismaGeneratedPaths,
   normalizePrismaGeneratedSource,
   runNpmInstall,
+  temporaryBuildPathContext,
 } = require("../../../scripts/build-portable-release.js");
 const roots: string[] = [];
 
@@ -137,6 +138,58 @@ describe("portable Prisma path normalization", () => {
       expect(normalized).not.toContain("runneradmin");
     }
   });
+
+  it("normalizes the relative traversal emitted by Prisma without consuming its suffix", () => {
+    const relativeRoot = String.raw`.\..\..\..\..\runneradmin\AppData\Local\Temp\tower-portable-build-84VlnQ\tower-v0.3.1-windows-x64\runtime\package`;
+    const sources = [
+      JSON.stringify({ sourceFilePath: `${relativeRoot}\\prisma\\schema.prisma` }),
+      `const sourceFilePath = String.raw\`${relativeRoot}\\prisma\\schema.prisma\`;`,
+      `const sourceFilePath = "${relativeRoot.replaceAll("\\", "/")}/prisma/schema.prisma";`,
+    ];
+
+    for (const source of sources) {
+      const normalized = normalizePrismaGeneratedSource(source, []);
+      expect(normalized).toContain("/tower-portable/runtime/package");
+      expect(normalized).toContain("prisma");
+      expect(normalized).toContain("schema.prisma");
+      expect(normalized).not.toContain("tower-portable-build-");
+      expect(normalized).not.toContain("runneradmin");
+    }
+  });
+
+  it("does not rewrite unbounded temporary build markers", () => {
+    const source = "const diagnostic = 'tower-portable-build-leaked/runtime/package';";
+    expect(normalizePrismaGeneratedSource(source, [])).toBe(source);
+  });
+
+  it("limits and JSON-escapes residual marker diagnostics", () => {
+    const source = `before-sentinel${"x".repeat(200)}\\tower-portable-build-leaked\\${"y".repeat(200)}after-sentinel`;
+    const context = temporaryBuildPathContext(source, 40);
+
+    expect(context).toContain("tower-portable-build-leaked");
+    expect(context).toContain("\\\\tower-portable-build-leaked\\\\");
+    expect(context).not.toContain("before-sentinel");
+    expect(context).not.toContain("after-sentinel");
+    expect(JSON.parse(context)).toMatch(/^\.\.\..*\.\.\.$/);
+  });
+
+  it("includes only bounded marker context when a generated file still fails", () => {
+    const { root, manifest } = fixture();
+    const packageRoot = path.join(root, ...manifest.packageRoot.split("/"));
+    const source = `before-sentinel${"x".repeat(200)}\\tower-portable-build-unmatched\\${"y".repeat(200)}after-sentinel`;
+    file(root, `${manifest.packageRoot}/node_modules/.prisma/client/edge.js`, source);
+    let message = "";
+
+    try {
+      normalizePrismaGeneratedPaths(packageRoot);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain("temporary build path: edge.js; context=\"");
+    expect(message).toContain("\\\\tower-portable-build-unmatched\\\\");
+    expect(message).not.toContain("before-sentinel");
+    expect(message).not.toContain("after-sentinel");
+  });
 });
 
 describe("portable release canary", () => {
@@ -169,11 +222,11 @@ describe("portable release canary", () => {
   it("removes temporary build roots from every generated Prisma entry", () => {
     const { root, manifest } = fixture();
     const packageRoot = path.join(root, ...manifest.packageRoot.split("/"));
-    const backslashRoot = packageRoot.replaceAll("/", "\\");
+    const relativeRoot = String.raw`.\..\..\..\..\..\..\..\..\runneradmin\AppData\Local\Temp\tower-portable-build-84VlnQ\tower-v0.3.1-windows-x64\runtime\package`;
     const sources = {
-      "edge.js": JSON.stringify({ sourceFilePath: `${backslashRoot}\\prisma\\schema.prisma` }),
-      "index.js": `const sourceFilePath = "${packageRoot}/prisma/schema.prisma";`,
-      "wasm.js": JSON.stringify({ sourceFilePath: `${packageRoot}/prisma/schema.prisma` }),
+      "edge.js": JSON.stringify({ sourceFilePath: `${relativeRoot}\\prisma\\schema.prisma` }),
+      "index.js": `const sourceFilePath = String.raw\`${relativeRoot}\\prisma\\schema.prisma\`;`,
+      "wasm.js": `const sourceFilePath = "${relativeRoot.replaceAll("\\", "/")}/prisma/schema.prisma";`,
     };
     for (const [name, source] of Object.entries(sources)) {
       file(root, `${manifest.packageRoot}/node_modules/.prisma/client/${name}`, source);
@@ -183,8 +236,10 @@ describe("portable release canary", () => {
     for (const name of Object.keys(sources)) {
       const generated = readFileSync(path.join(packageRoot, "node_modules/.prisma/client", name), "utf8");
       expect(generated).toContain("/tower-portable/runtime/package");
+      expect(generated).toContain("prisma");
+      expect(generated).toContain("schema.prisma");
       expect(generated).not.toContain("tower-portable-build-");
-      expect(generated).not.toContain(packageRoot);
+      expect(generated).not.toContain("runneradmin");
     }
   });
 });

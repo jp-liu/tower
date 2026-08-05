@@ -29,6 +29,8 @@ const NPM_INSTALL_ARGS = Object.freeze([
   "ci", "--omit=dev", "--include=optional", "--no-audit", "--no-fund", "--foreground-scripts",
   "--registry=https://registry.npmjs.org/",
 ]);
+// Prisma can emit Windows temp roots as relative traversals with raw or JSON-escaped separators.
+const PRISMA_RELATIVE_BUILD_ROOT_PATTERN = /(?<![A-Za-z0-9_.-])(?:\.(?:\/|\\{1,2}))?(?:\.\.(?:\/|\\{1,2}))+(?:[^/\\\r\n"'`]+(?:\/|\\{1,2}))*tower-portable-build-[^/\\\r\n"'`]+(?:\/|\\{1,2})(?:[^/\\\r\n"'`]+(?:\/|\\{1,2}))*runtime(?:\/|\\{1,2})package/g;
 
 function option(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -151,7 +153,17 @@ function normalizePrismaGeneratedSource(source, buildRoots) {
   for (const buildRoot of [...replacements].sort((left, right) => right.length - left.length)) {
     source = source.split(buildRoot).join("/tower-portable/runtime/package");
   }
-  return source;
+  return source.replace(PRISMA_RELATIVE_BUILD_ROOT_PATTERN, "/tower-portable/runtime/package");
+}
+
+function temporaryBuildPathContext(source, radius = 120) {
+  const marker = "tower-portable-build-";
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) return null;
+  const start = Math.max(0, markerIndex - radius);
+  const end = Math.min(source.length, markerIndex + marker.length + radius);
+  const excerpt = `${start > 0 ? "..." : ""}${source.slice(start, end)}${end < source.length ? "..." : ""}`;
+  return JSON.stringify(excerpt);
 }
 
 function normalizePrismaGeneratedPaths(packageRoot) {
@@ -165,7 +177,9 @@ function normalizePrismaGeneratedPaths(packageRoot) {
     const file = path.join(generatedRoot, name);
     if (!fs.existsSync(file)) continue;
     const source = normalizePrismaGeneratedSource(fs.readFileSync(file, "utf8"), buildRoots);
-    if (source.includes("tower-portable-build-")) fail(`Prisma generated client contains a temporary build path: ${name}`);
+    if (source.includes("tower-portable-build-")) {
+      fail(`Prisma generated client contains a temporary build path: ${name}; context=${temporaryBuildPathContext(source)}`);
+    }
     fs.writeFileSync(file, source);
   }
 }
@@ -348,6 +362,7 @@ module.exports = {
   platformPackageRoot,
   pruneNodePty,
   runNpmInstall,
+  temporaryBuildPathContext,
   validatePortableDependencies,
 };
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exit(1); });
