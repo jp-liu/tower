@@ -38,6 +38,68 @@ describe("release asset assembly", () => {
       .toContain("--rollback");
   });
 
+  it("assembles an explicitly unpublished Candidate with metadata and platform manifests", () => {
+    const input = mkdtempSync(path.join(tmpdir(), "tower-candidate-input-"));
+    const output = mkdtempSync(path.join(tmpdir(), "tower-candidate-output-"));
+    roots.push(input, output);
+    const commit = "c".repeat(40);
+    for (const [platform, arch, extension] of TARGETS) {
+      const name = `tower-portable-${platform}-${arch}.${extension}`;
+      writeFileSync(path.join(input, name), `${platform}-${arch}`);
+      writeFileSync(path.join(input, `${name}.manifest.json`), JSON.stringify({
+        version: "0.3.1", platform, arch, sourceCommit: commit,
+      }));
+    }
+    writeFileSync(path.join(input, "tower-org-cli-0.3.1.tgz"), "npm-pack");
+
+    const result = assemble(input, output, commit, { candidate: {
+      ref: "refs/heads/candidate-preview",
+      dispatchRef: "refs/heads/main",
+      runId: "123456789",
+      runAttempt: "2",
+      generatedAt: "2026-08-05T04:03:02Z",
+    } });
+
+    const metadata = JSON.parse(readFileSync(path.join(output, "CANDIDATE_METADATA.json"), "utf8"));
+    expect(metadata).toEqual({
+      schema: 1,
+      kind: "release-candidate",
+      published: false,
+      commit,
+      ref: "refs/heads/candidate-preview",
+      dispatchRef: "refs/heads/main",
+      packageName: "@tower-org/cli",
+      packageVersion: "0.3.1",
+      workflow: { runId: "123456789", runAttempt: "2" },
+      generatedAt: "2026-08-05T04:03:02Z",
+    });
+    expect(result.copied).toHaveLength(14);
+    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(14);
+    for (const [platform, arch, extension] of TARGETS) {
+      expect(readFileSync(path.join(output, `tower-portable-${platform}-${arch}.${extension}.manifest.json`), "utf8"))
+        .toContain(commit);
+    }
+    const notes = readFileSync(path.join(output, "CANDIDATE_RELEASE_NOTES.md"), "utf8");
+    expect(notes).toContain("NOT A RELEASE");
+    expect(notes).toContain("build identity only");
+    expect(notes).toContain("--asset-dir . --verify");
+    expect(notes).not.toContain("releases/download");
+    expect(notes).not.toContain("0.4.0");
+  });
+
+  it("rejects incomplete or non-UTC Candidate identity", () => {
+    const input = mkdtempSync(path.join(tmpdir(), "tower-candidate-invalid-input-"));
+    const output = mkdtempSync(path.join(tmpdir(), "tower-candidate-invalid-output-"));
+    roots.push(input, output);
+    expect(() => assemble(input, output, "d".repeat(40), { candidate: {
+      ref: "refs/heads/main",
+      dispatchRef: "refs/heads/main",
+      runId: "1",
+      runAttempt: "1",
+      generatedAt: "2026-08-05T12:00:00+08:00",
+    } })).toThrow(/UTC timestamp/);
+  });
+
   it("peels an annotated remote tag to its commit", () => {
     const commit = "a".repeat(40);
     const tagObject = "b".repeat(40);

@@ -1,0 +1,181 @@
+name: Build Release Candidate artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Pushed branch, tag, or full ref to build (blank uses the branch selected above)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Validate source and create npm pack
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+      short-sha: ${{ steps.identity.outputs.short-sha }}
+      source-ref: ${{ steps.identity.outputs.source-ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.source_ref || github.ref }}
+      - id: identity
+        name: Record Candidate identity
+        shell: bash
+        env:
+          TOWER_CANDIDATE_SOURCE_REF: ${{ inputs.source_ref || github.ref }}
+        run: |
+          commit="$(git rev-parse HEAD)"
+          {
+            echo "commit=$commit"
+            echo "short-sha=${commit:0:12}"
+            echo "source-ref=$TOWER_CANDIDATE_SOURCE_REF"
+          } >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org/
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Run existing release gates
+        run: pnpm release:prepare
+      - name: Create the exact npm pack input
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-pack"
+          npm pack --pack-destination "$RUNNER_TEMP/npm-pack"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-npm-pack-${{ steps.identity.outputs.short-sha }}
+          path: ${{ runner.temp }}/npm-pack/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  portable:
+    name: Candidate ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin
+            arch: arm64
+            runner: macos-14
+          - platform: darwin
+            arch: x64
+            runner: macos-15-intel
+          - platform: linux
+            arch: x64
+            runner: ubuntu-24.04
+          - platform: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - platform: windows
+            arch: x64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-npm-pack-${{ needs.prepare.outputs.short-sha }}
+          path: ${{ runner.temp }}/npm-pack
+      - name: Build native portable payload
+        env:
+          TOWER_RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: node scripts/build-portable-release.js --tarball "${{ runner.temp }}/npm-pack" --output "${{ runner.temp }}/portable" --platform "${{ matrix.platform }}" --arch "${{ matrix.arch }}"
+      - name: Extract portable payload (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p "$RUNNER_TEMP/extracted"
+          tar -xzf "$RUNNER_TEMP/portable/tower-portable-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz" -C "$RUNNER_TEMP/extracted"
+      - name: Extract portable payload (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\extracted" | Out-Null
+          tar -xzf "$env:RUNNER_TEMP\portable\tower-portable-windows-x64.tar.gz" -C "$env:RUNNER_TEMP\extracted"
+      - name: Block npm and Prisma engine download hosts (Unix)
+        if: runner.os != 'Windows'
+        run: printf '127.0.0.1 registry.npmjs.org binaries.prisma.sh\n' | sudo tee -a /etc/hosts
+      - name: Block npm and Prisma engine download hosts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content "$env:SystemRoot\System32\drivers\etc\hosts" "`n127.0.0.1 registry.npmjs.org binaries.prisma.sh"
+      - name: Offline smoke on Node.js 22
+        run: node scripts/release-portable-smoke.js --root "${{ runner.temp }}/extracted"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Offline smoke on Node.js 24
+        run: node scripts/release-portable-smoke.js --root "${{ runner.temp }}/extracted"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-portable-${{ matrix.platform }}-${{ matrix.arch }}-${{ needs.prepare.outputs.short-sha }}
+          path: |
+            ${{ runner.temp }}/portable/tower-portable-${{ matrix.platform }}-${{ matrix.arch }}.*
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    name: Assemble Candidate checksums, notes, and metadata
+    needs: [prepare, portable]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: candidate-portable-*-${{ needs.prepare.outputs.short-sha }}
+          path: ${{ runner.temp }}/candidate-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-npm-pack-${{ needs.prepare.outputs.short-sha }}
+          path: ${{ runner.temp }}/candidate-input/npm-pack
+      - name: Assemble Candidate assets
+        shell: bash
+        run: |
+          node scripts/assemble-release-assets.js \
+            --input "$RUNNER_TEMP/candidate-input" \
+            --output "$RUNNER_TEMP/candidate-assets" \
+            --commit "${{ needs.prepare.outputs.commit }}" \
+            --candidate-ref "${{ needs.prepare.outputs.source-ref }}" \
+            --dispatch-ref "$GITHUB_REF" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --generated-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tower-release-candidate-${{ needs.prepare.outputs.short-sha }}
+          path: ${{ runner.temp }}/candidate-assets/*
+          if-no-files-found: error
+          retention-days: 7
