@@ -222,8 +222,10 @@ export async function applyUnattendedGoalLifecycleEventInTransaction(
     });
     return snapshot(runtime);
   }
-  const sameState = (existing.state === "ACTIVE") === active;
-  if (sameState && (!active || !input.refreshActive)) return snapshot(existing);
+  const targetState = active ? "ACTIVE" : "ENDED";
+  if (existing.state === targetState && (!active || !input.refreshActive)) {
+    return snapshot(existing);
+  }
   const runtime = await database.unattendedGoalRuntime.update({
     where: { taskId: input.taskId },
     data: {

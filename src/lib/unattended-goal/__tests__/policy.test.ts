@@ -227,6 +227,33 @@ describe("unattended Goal policy", () => {
       .rejects.toThrow(/Unattended Goal is blocked/);
   });
 
+  it("allows child creation after a blocked Goal is explicitly deactivated", async () => {
+    const prisma = await database();
+    await activateUnattendedGoal(prisma as never, "goal-1", { maxChildTasks: 1 });
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "Task" ("id", "title", "projectId", "parentTaskId")
+      VALUES ('child-1', 'Existing child', 'project-1', 'goal-1')
+    `);
+    await expect(assertUnattendedGoalOperationAllowed("goal-1", "CREATE_CHILD", prisma as never))
+      .rejects.toThrow(/Child task count 1 reached limit 1/);
+
+    const ended = await endUnattendedGoal(prisma as never, "goal-1", "DEACTIVATED");
+
+    expect(ended).toMatchObject({
+      state: "ENDED",
+      lastEventKind: "DEACTIVATED",
+      endedAt: expect.any(Date),
+    });
+    await expect(assertUnattendedGoalOperationAllowed("goal-1", "CREATE_CHILD", prisma as never))
+      .resolves.toBeUndefined();
+    expect(await prisma.workbenchEvent.count({
+      where: { parentTaskId: "goal-1", kind: "GOAL_BLOCKED" },
+    })).toBe(1);
+
+    const repeated = await endUnattendedGoal(prisma as never, "goal-1", "DEACTIVATED");
+    expect(repeated.endedAt).toEqual(ended.endedAt);
+  });
+
   it("atomically blocks every minimum F02 hard-limit class and publishes one event", async () => {
     const assertBlockedOnce = async (prisma: PrismaClient, reason: string) => {
       expect(await prisma.unattendedGoalRuntime.findUniqueOrThrow({ where: { taskId: "goal-1" } }))

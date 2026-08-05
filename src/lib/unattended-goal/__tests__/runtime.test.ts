@@ -8,6 +8,7 @@ vi.mock("@/lib/harness/unattended-signal", () => ({
 
 import {
   activateUnattendedGoal,
+  endUnattendedGoal,
   endUnattendedGoalIfActive,
   readUnattendedGoalMode,
 } from "../runtime";
@@ -177,5 +178,42 @@ describe("unattended goal runtime", () => {
       where: { taskId: "task-1", revokedAt: null },
       data: { revokedAt: expect.any(Date) },
     });
+  });
+
+  it("ends a blocked Goal on explicit deactivation and keeps repeated deactivation idempotent", async () => {
+    const activatedAt = new Date("2026-08-01T00:00:00.000Z");
+    const { db, unattendedGoalRuntime, capabilityGrant } = createDb({
+      runtime: {
+        ...runtimeDefaults,
+        taskId: "task-1",
+        state: "BLOCKED",
+        lastEventKind: "BUDGET_MAX_CHILD_TASKS",
+        activatedAt,
+        endedAt: null,
+        blockedAt: new Date("2026-08-01T01:00:00.000Z"),
+        blockedReason: "Child task budget reached",
+      },
+    });
+
+    const ended = await endUnattendedGoal(db as never, "task-1", "DEACTIVATED");
+
+    expect(ended).toMatchObject({
+      active: false,
+      state: "ENDED",
+      lastEventKind: "DEACTIVATED",
+      endedAt: expect.any(Date),
+    });
+    expect(unattendedGoalRuntime.update).toHaveBeenCalledTimes(1);
+    expect(capabilityGrant.updateMany).toHaveBeenCalledWith({
+      where: { taskId: "task-1", revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
+    expect(setSignal).toHaveBeenLastCalledWith("task-1", false);
+
+    const repeated = await endUnattendedGoal(db as never, "task-1", "DEACTIVATED");
+
+    expect(repeated.endedAt).toEqual(ended.endedAt);
+    expect(unattendedGoalRuntime.update).toHaveBeenCalledTimes(1);
+    expect(setSignal).toHaveBeenLastCalledWith("task-1", false);
   });
 });
