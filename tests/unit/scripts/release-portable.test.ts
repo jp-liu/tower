@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -7,6 +8,7 @@ import { isWindows } from "@/lib/platform";
 
 const require = createRequire(import.meta.url);
 const { assertPortableRoot } = require("../../../scripts/release-portable-canary.js");
+const { createNativeProbeSource } = require("../../../scripts/release-portable-smoke.js");
 const {
   createNpmInstallInvocation,
   normalizePrismaGeneratedPaths,
@@ -65,6 +67,44 @@ function fixture() {
   file(root, "runtime/package/node_modules/@vscode/ripgrep-test/bin/rg");
   file(root, "runtime/package/node_modules/@vscode/ripgrep-deadbeef/package.json");
   return { root, manifest };
+}
+
+interface NativeProbeFixtureOptions {
+  prismaError?: string;
+  ptyOutput?: string;
+  ripgrepExists?: boolean;
+}
+
+function runNativeProbe(options: NativeProbeFixtureOptions = {}) {
+  const root = mkdtempSync(path.join(tmpdir(), "tower-native-probe-test-"));
+  roots.push(root);
+  const rgPath = path.join(root, "rg");
+  file(root, "package.json", JSON.stringify({ name: "native-probe-fixture" }));
+  if (options.ripgrepExists !== false) file(root, "rg");
+  file(root, "node_modules/@vscode/ripgrep/index.js", `module.exports = { rgPath: ${JSON.stringify(rgPath)} };`);
+  file(root, "node_modules/node-pty/index.js", `
+    setInterval(() => {}, 1000);
+    module.exports = {
+      spawn() {
+        return {
+          onData(callback) { callback(${JSON.stringify(options.ptyOutput ?? "pty-ok")}); },
+          onExit(callback) { setImmediate(callback); },
+        };
+      },
+    };
+  `);
+  file(root, "node_modules/@prisma/client/index.js", `
+    class PrismaClient {
+      async $connect() { ${options.prismaError ? `throw new Error(${JSON.stringify(options.prismaError)});` : ""} }
+      async $disconnect() {}
+    }
+    module.exports = { PrismaClient };
+  `);
+  return spawnSync(process.execPath, ["-e", createNativeProbeSource(), root], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 5_000,
+  });
 }
 
 afterEach(() => {
@@ -189,6 +229,28 @@ describe("portable Prisma path normalization", () => {
     expect(message).toContain("\\\\tower-portable-build-unmatched\\\\");
     expect(message).not.toContain("before-sentinel");
     expect(message).not.toContain("after-sentinel");
+  });
+});
+
+describe("portable native runtime probe", () => {
+  it("flushes native-ok and exits explicitly despite active native handles", () => {
+    const result = runNativeProbe();
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("native-ok");
+  });
+
+  it.each([
+    ["ripgrep", { ripgrepExists: false }, "ripgrep binary missing"],
+    ["node-pty", { ptyOutput: "missing" }, "node-pty output missing"],
+    ["Prisma", { prismaError: "Prisma connection failed" }, "Prisma connection failed"],
+  ])("keeps %s failures visible", (_name, options, expectedError) => {
+    const result = runNativeProbe(options);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("native-ok");
+    expect(result.stderr).toContain(expectedError);
   });
 });
 

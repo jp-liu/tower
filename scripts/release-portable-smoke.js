@@ -82,6 +82,34 @@ function poisonNetworkEnv(dataDir, proxyUrl) {
   };
 }
 
+function createNativeProbeSource() {
+  return `
+    const path = require('node:path');
+    const { createRequire } = require('node:module');
+    const root = process.argv[1];
+    const localRequire = createRequire(path.join(root, 'package.json'));
+    const { PrismaClient } = localRequire('@prisma/client');
+    const pty = localRequire('node-pty');
+    const ripgrep = localRequire('@vscode/ripgrep');
+    if (!ripgrep.rgPath || !require('node:fs').existsSync(ripgrep.rgPath)) throw new Error('ripgrep binary missing');
+    const child = pty.spawn(process.execPath, ['-e', 'process.stdout.write("pty-ok")'], { cols: 80, rows: 24 });
+    let output = '';
+    child.onData((data) => { output += data; });
+    child.onExit(() => {
+      void (async () => {
+        if (!output.includes('pty-ok')) throw new Error('node-pty output missing');
+        const db = new PrismaClient();
+        await db.$connect();
+        await db.$disconnect();
+        process.stdout.write('native-ok', () => process.exit(0));
+      })().catch((error) => {
+        const message = error && error.stack ? error.stack : String(error);
+        process.stderr.write(message + '\\n', () => process.exit(1));
+      });
+    });
+  `;
+}
+
 async function main() {
   const root = option("--root");
   if (!root) throw new Error("Usage: node scripts/release-portable-smoke.js --root DIR");
@@ -116,26 +144,7 @@ async function main() {
     const proxyUrl = `http://127.0.0.1:${proxy.address().port}`;
     const env = poisonNetworkEnv(temporary, proxyUrl);
 
-    const nativeProbe = `
-      const path = require('node:path');
-      const { createRequire } = require('node:module');
-      const root = process.argv[1];
-      const localRequire = createRequire(path.join(root, 'package.json'));
-      const { PrismaClient } = localRequire('@prisma/client');
-      const pty = localRequire('node-pty');
-      const ripgrep = localRequire('@vscode/ripgrep');
-      if (!ripgrep.rgPath || !require('node:fs').existsSync(ripgrep.rgPath)) throw new Error('ripgrep binary missing');
-      const child = pty.spawn(process.execPath, ['-e', 'process.stdout.write("pty-ok")'], { cols: 80, rows: 24 });
-      let output = '';
-      child.onData((data) => { output += data; });
-      child.onExit(async () => {
-        if (!output.includes('pty-ok')) throw new Error('node-pty output missing');
-        const db = new PrismaClient();
-        await db.$connect();
-        await db.$disconnect();
-        process.stdout.write('native-ok');
-      });
-    `;
+    const nativeProbe = createNativeProbeSource();
 
     const port = await findPort();
     const log = fs.openSync(logPath, "a");
@@ -228,4 +237,7 @@ async function main() {
   }
 }
 
-main().catch((error) => { console.error(`[release:portable:smoke] ${error.message}`); process.exit(1); });
+module.exports = { createNativeProbeSource };
+if (require.main === module) {
+  main().catch((error) => { console.error(`[release:portable:smoke] ${error.message}`); process.exit(1); });
+}
