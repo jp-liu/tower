@@ -133,14 +133,15 @@ call `route_gateway_message`. Old clients that still send `DIRECT` receive
 | Route | Responsibility | Workbench | User task creation | Reply and persistence |
 |---|---|---:|---:|---|
 | `TOWER` | Tower MCP query or simple command in the gateway | No | Not by routing itself; only an explicitly requested successful MCP mutation may create one | The gateway replies directly. Confirm a mutation only after the tool succeeds. |
-| `PROJECT_DISCUSSION` | A separate project-bound Assistant discussion session | No | **No WorkItem or child task** | Each turn is stored in `AssistantMessage`; `complete_gateway_discussion` persists a native card replying to the current inbound message while preserving the thread. |
+| `PROJECT_DISCUSSION` | Repository-aware discussion in the resident project Workbench | Yes, through `GATEWAY_DISCUSSION_REQUEST` | **No WorkItem or child task** | The Workbench calls `complete_gateway_discussion` to reply to the current inbound message. |
 | `PROJECT_WORK` | Research, dispatch, and review by the project's resident Workbench | Yes, only through the durable event queue | Only after the Workbench successfully calls `create_task` | Tower sends native queued, real-data task-created, and reviewed final-result cards. |
 
 Project discussion and project work are deliberately separate:
 
-- Discussion reuses an independent project-bound session. It does not enter the
-  Workbench or create a WorkItem, child task, or `WorkbenchEvent`.
-- Only project work persists a `GATEWAY_WORK_REQUEST` in the Workbench safe-boundary queue.
+- Discussion persists `GATEWAY_DISCUSSION_REQUEST` and enters the resident
+  Workbench, but creates no WorkItem or child task.
+- Only a later explicit create/start request persists `GATEWAY_WORK_REQUEST`;
+  the same Workbench then creates and supervises a child task.
 - The resident Workbench is coordination infrastructure, not the task requested
   by the user.
 - `queued: true` means the inbound request and Workbench event are durable. It
@@ -157,13 +158,9 @@ threadless discussions reuse a chat + sender + session-kind binding; the recent
 project fallback expires after seven days. Explicit thread bindings do not use
 that expiry fallback.
 
-Discussion restores the latest `assistant.historyTurns` turns and marks truncated
-context. Per-turn execution resources are released after reply completion while
-the binding and up to 100 Tower-owned turns remain durable. Replying to an old
-discussion card can restore it, and task creation does not close it. Use
-`sessionAction=CLOSE` for an explicit Tower discussion close and
-`sessionAction=NEW` for a fresh discussion/project switch. OpenClaw `/new` is
-not a Tower close signal. Replies to an old task first call
+Project discussion reuses the resident Workbench context. Task creation does
+not create a separate discussion Assistant session; the Workbench distinguishes
+direct-answer and child-task behavior from the durable event type. Replies to an old task first call
 `resolve_gateway_task_context`, which only returns task/project/status, OPEN-ask,
 and latest-execution context. OPEN asks use `reply_to_ask`; status/result questions
 stay read-only; external work is delegated with `towerContext`; only explicit
@@ -206,8 +203,8 @@ Send:
 Discuss <project name>: what is the largest risk in the current gateway design? Do not create a task.
 ```
 
-Expected: a project-aware response and no WorkItem, child task, or project-work
-queue event.
+Expected: a response from the resident project Workbench and one discussion
+queue event, but no WorkItem or child task.
 
 Reply in the same Feishu thread:
 

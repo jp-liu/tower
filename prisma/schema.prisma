@@ -532,9 +532,9 @@ model HarnessDelivery {
   @@index([taskId])
 }
 
-// Durable external-channel binding. WORKBENCH sessions route project work to
-// the resident Tower task; DISCUSSION sessions reuse a project-bound
-// AssistantSession and therefore never occupy the Workbench PTY.
+// Durable external-channel binding. WORKBENCH sessions route project work and
+// OWNER project discussions to the resident Tower task. DISCUSSION remains for
+// compatibility with discussion rows created before Workbench routing.
 model GatewaySession {
   id                 String               @id @default(cuid())
   bindingKey         String               @unique
@@ -1077,6 +1077,7 @@ enum WorkbenchEventKind {
   CHILD_REVIEW_REQUIRED
   CHILD_DECISION_REQUIRED
   CHILD_EXECUTION_FAILED
+  GATEWAY_DISCUSSION_REQUEST
   GATEWAY_WORK_REQUEST
   CAPABILITY_RESULT_AVAILABLE
   GOAL_TIMER_DUE

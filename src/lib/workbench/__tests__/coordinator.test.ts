@@ -1,8 +1,9 @@
 import { PrismaClient } from "@prisma/client";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { WorkbenchDrainBatch } from "@/lib/workbench/coordinator";
 import { up } from "../../../../scripts/migrations/0014-workbench-events";
 import { up as addExecutionReviewKey } from "../../../../scripts/migrations/0015-workbench-execution-review-key";
 import { up as addWorkbenchBatchAck } from "../../../../scripts/migrations/0021-workbench-batch-ack";
@@ -28,7 +29,7 @@ async function database(): Promise<PrismaClient> {
   tempDirs.push(dir);
   const client = new PrismaClient({ datasourceUrl: `file:${join(dir, "coordinator.db")}` });
   await client.$executeRawUnsafe(`PRAGMA foreign_keys=ON`);
-  await client.$executeRawUnsafe(`CREATE TABLE "Task" ("id" TEXT NOT NULL PRIMARY KEY, "title" TEXT NOT NULL DEFAULT '', "parentTaskId" TEXT)`);
+  await client.$executeRawUnsafe(`CREATE TABLE "Task" ("id" TEXT NOT NULL PRIMARY KEY, "title" TEXT NOT NULL DEFAULT '', "status" TEXT NOT NULL DEFAULT 'TODO', "parentTaskId" TEXT)`);
   await client.$executeRawUnsafe(`
     CREATE TABLE "TaskExecution" (
       "id" TEXT NOT NULL PRIMARY KEY,
@@ -249,6 +250,31 @@ describe("Workbench durable coordinator", () => {
     });
   });
 
+  it("uses provider turn completion as the durable fallback receipt", async () => {
+    const {
+      drainWorkbenchEvents,
+      enqueueWorkbenchEvent,
+      recordWorkbenchProviderTurnCompleted,
+    } = await import("@/lib/workbench/coordinator");
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      kind: "CHILD_REVIEW_REQUIRED",
+      dedupKey: "provider-receipt",
+      payload: { childTaskId: "child-a", childTitle: "Child A", childReply: "done" },
+    });
+    const delivered = await drainWorkbenchEvents("parent", async () => {});
+
+    await expect(recordWorkbenchProviderTurnCompleted("parent")).resolves.toBe(true);
+
+    expect(await prisma.workbenchBatch.findUniqueOrThrow({ where: { id: delivered.batchKey! } }))
+      .toMatchObject({ state: "RESOLVED", leaseExpiresAt: null, resolvedAt: expect.any(Date) });
+    expect(await prisma.workbenchEvent.findFirstOrThrow({ where: { dedupKey: "provider-receipt" } }))
+      .toMatchObject({ state: "CONSUMED", consumedAt: expect.any(Date) });
+    expect(await prisma.workbenchRuntime.findUniqueOrThrow({ where: { taskId: "parent" } }))
+      .toMatchObject({ state: "IDLE", activeBatchId: null, pendingEvents: 0 });
+  });
+
   it("builds a durable capability-result wakeup prompt and forbids uncertain replay", async () => {
     const { buildWorkbenchBatchPrompt, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
     const { event } = await enqueueWorkbenchEvent({
@@ -319,6 +345,33 @@ describe("Workbench durable coordinator", () => {
     expect(blockedPrompt).toContain("[Tower unattended Goal blocked]");
     expect(blockedPrompt).toContain("Stop autonomous work");
     expect(blockedPrompt).toContain("Never bypass an expired grant");
+  });
+
+  it("renders a gateway discussion as direct Workbench work without task creation language", async () => {
+    const { buildWorkbenchBatchPrompt, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
+    const discussion = await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "parent",
+      kind: "GATEWAY_DISCUSSION_REQUEST",
+      dedupKey: "gateway-discussion:gateway-in-1",
+      payload: {
+        childTaskId: "parent",
+        childTitle: "Gateway discussion",
+        instruction: [
+          "[Gateway project discussion request]",
+          "Explain the current state machine.",
+          "Do not create a child task merely because a plan becomes clear.",
+          "Call complete_gateway_discussion when ready.",
+        ].join("\n"),
+      },
+    });
+
+    const prompt = buildWorkbenchBatchPrompt([discussion.event], "wb-discussion");
+    expect(prompt).toContain("[Gateway project discussion request]");
+    expect(prompt).toContain("Explain the current state machine.");
+    expect(prompt).toContain("Do not create a child task");
+    expect(prompt).toContain("complete_gateway_discussion");
+    expect(prompt).not.toContain("create_task");
   });
 
   it("delivers a gateway request through the durable boundary and advances its queue state", async () => {
@@ -573,6 +626,30 @@ describe("Workbench durable coordinator", () => {
       .toMatchObject({ state: "FAILED" });
     expect(await prisma.workbenchEvent.findFirstOrThrow({ where: { dedupKey: "acked-crash" } }))
       .toMatchObject({ state: "PENDING", batchId: null, consumedAt: null });
+  });
+
+  it("never revives a consumed event from a failed batch", async () => {
+    const { drainWorkbenchEvents, enqueueWorkbenchEvent, recoverWorkbenchEventClaims } = await import("@/lib/workbench/coordinator");
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      kind: "CHILD_REVIEW_REQUIRED",
+      dedupKey: "consumed-is-terminal",
+      payload: { childTaskId: "child-a", childTitle: "Child A" },
+    });
+    const batch = await drainWorkbenchEvents("parent", async () => {});
+    await prisma.workbenchEvent.updateMany({
+      where: { batchId: batch.batchKey },
+      data: { state: "CONSUMED", consumedAt: new Date() },
+    });
+    await prisma.workbenchBatch.update({
+      where: { id: batch.batchKey! },
+      data: { state: "FAILED", leaseExpiresAt: null },
+    });
+
+    await expect(recoverWorkbenchEventClaims()).resolves.toBe(0);
+    expect(await prisma.workbenchEvent.findFirstOrThrow({ where: { dedupKey: "consumed-is-terminal" } }))
+      .toMatchObject({ state: "CONSUMED", batchId: batch.batchKey });
   });
 
   it("rejects ACK and resolve callbacks from a stale delivery lease", async () => {
@@ -946,6 +1023,112 @@ describe("Workbench durable coordinator", () => {
       state: "PENDING",
       attempts: 0,
     });
+  });
+
+  it("coalesces accumulated review turns from the same child execution", async () => {
+    const { drainWorkbenchEvents, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('child-exec', 'child-a', 'RUNNING')`,
+    );
+    for (const [dedupKey, childReply] of [["turn-1", "old"], ["turn-2", "latest"]] as const) {
+      await enqueueWorkbenchEvent({
+        parentTaskId: "parent",
+        sourceTaskId: "child-a",
+        executionId: "child-exec",
+        kind: "CHILD_REVIEW_REQUIRED",
+        dedupKey,
+        reviewProducer: "STOP_HOOK",
+        payload: { childTaskId: "child-a", childTitle: "Child A", childReply },
+      });
+    }
+    const delivered: WorkbenchDrainBatch[] = [];
+
+    await expect(drainWorkbenchEvents("parent", async (batch) => {
+      delivered.push(batch);
+    })).resolves.toMatchObject({ eventCount: 1, delivered: true });
+
+    expect(delivered[0].events).toHaveLength(1);
+    expect(delivered[0].prompt).toContain("latest");
+    expect(delivered[0].prompt).not.toContain("old");
+    expect(await prisma.workbenchEvent.findUnique({ where: { dedupKey: "turn-1" } }))
+      .toMatchObject({ state: "CONSUMED", batchId: null });
+    expect(await prisma.workbenchEvent.findUnique({ where: { dedupKey: "turn-2" } }))
+      .toMatchObject({ state: "PROCESSING" });
+  });
+
+  it("discards pending reviews after the child task is terminal", async () => {
+    const { drainWorkbenchEvents, enqueueWorkbenchEvent } = await import("@/lib/workbench/coordinator");
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TaskExecution" ("id", "taskId", "status") VALUES ('child-exec', 'child-a', 'COMPLETED')`,
+    );
+    await prisma.$executeRawUnsafe(`UPDATE "Task" SET "status" = 'DONE' WHERE "id" = 'child-a'`);
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "child-a",
+      executionId: "child-exec",
+      kind: "CHILD_REVIEW_REQUIRED",
+      dedupKey: "stale-review",
+      reviewProducer: "STOP_HOOK",
+      payload: { childTaskId: "child-a", childTitle: "Child A", childReply: "done" },
+    });
+    const deliver = vi.fn();
+
+    await expect(drainWorkbenchEvents("parent", deliver)).resolves.toEqual({
+      eventCount: 0,
+      delivered: false,
+    });
+
+    expect(deliver).not.toHaveBeenCalled();
+    expect(await prisma.workbenchEvent.findUnique({ where: { dedupKey: "stale-review" } }))
+      .toMatchObject({ state: "CONSUMED", batchId: null });
+  });
+
+  it("recovers a missed Codex completion boundary from the durable transcript", async () => {
+    const { getSession, markSessionTurnComplete } = await import("@/lib/pty/session-store");
+    const { hasWorkbenchDrainBoundary } = await import("@/lib/workbench/boundary");
+    const { restoreWorkbenchBoundaryFromProviderTranscript } = await import("@/lib/workbench/coordinator");
+    vi.mocked(getSession).mockReturnValue({ killed: false } as never);
+    await prisma.$executeRawUnsafe(
+      `UPDATE "TaskExecution" SET "agent" = 'CODEX_CLI', "sessionId" = 'codex-thread' WHERE "id" = 'parent-exec'`,
+    );
+    const sessionsDir = join(tempDirs[0], "codex-sessions");
+    const dayDir = join(sessionsDir, "2026", "08", "05");
+    await mkdir(dayDir, { recursive: true });
+    await writeFile(join(dayDir, "rollout-2026-08-05T10-00-00-codex-thread.jsonl"), [
+      JSON.stringify({ timestamp: "2026-08-05T10:00:00.000Z", type: "event_msg", payload: { type: "task_started" } }),
+      JSON.stringify({ timestamp: "2026-08-05T10:01:00.000Z", type: "event_msg", payload: { type: "task_complete" } }),
+      "",
+    ].join("\n"));
+
+    await expect(restoreWorkbenchBoundaryFromProviderTranscript("parent", { codexSessionsDir: sessionsDir }))
+      .resolves.toBe(true);
+
+    expect(markSessionTurnComplete).toHaveBeenCalledWith("parent");
+    expect(hasWorkbenchDrainBoundary("parent", "parent-exec")).toBe(true);
+  });
+
+  it("does not restore an old Codex completion after newer terminal input", async () => {
+    const { getSession, markSessionTurnComplete } = await import("@/lib/pty/session-store");
+    const { restoreWorkbenchBoundaryFromProviderTranscript } = await import("@/lib/workbench/coordinator");
+    vi.mocked(getSession).mockReturnValue({
+      killed: false,
+      lastInputAt: Date.parse("2026-08-05T10:02:00.000Z"),
+    } as never);
+    await prisma.$executeRawUnsafe(
+      `UPDATE "TaskExecution" SET "agent" = 'CODEX_CLI', "sessionId" = 'codex-thread' WHERE "id" = 'parent-exec'`,
+    );
+    const sessionsDir = join(tempDirs[0], "codex-sessions-stale");
+    await mkdir(sessionsDir, { recursive: true });
+    await writeFile(join(sessionsDir, "rollout-codex-thread.jsonl"), [
+      JSON.stringify({ timestamp: "2026-08-05T10:00:00.000Z", type: "event_msg", payload: { type: "task_started" } }),
+      JSON.stringify({ timestamp: "2026-08-05T10:01:00.000Z", type: "event_msg", payload: { type: "task_complete" } }),
+      "",
+    ].join("\n"));
+
+    await expect(restoreWorkbenchBoundaryFromProviderTranscript("parent", { codexSessionsDir: sessionsDir }))
+      .resolves.toBe(false);
+
+    expect(markSessionTurnComplete).not.toHaveBeenCalled();
   });
 
   it("associates a final failed execution with its parent-owned high-priority event", async () => {

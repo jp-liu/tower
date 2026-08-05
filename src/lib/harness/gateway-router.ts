@@ -1,17 +1,15 @@
 import "server-only";
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type {
   GatewayDeliveryKind,
   GatewayRequestKind,
-  GatewaySessionKind,
   ProjectAccessMode,
   Prisma,
 } from "@prisma/client";
 import { continueOrStartTaskExecution } from "@/actions/agent-actions";
 import { TOWER_LABEL_NAME } from "@/lib/constants";
 import { db } from "@/lib/db";
-import { readConfigValue } from "@/lib/config-reader";
 import {
   decideGatewayChannelAccess,
   gatewayScopeAllowsProject,
@@ -21,7 +19,6 @@ import { ensureTowerTask } from "@/lib/instrumentation-tasks";
 import { logger } from "@/lib/logger";
 import { queryProjectKnowledge } from "@/lib/knowledge";
 import { scoreProject } from "@/lib/project-score";
-import { getSession } from "@/lib/pty/session-store";
 import { getOpenAsk } from "@/lib/harness/harness-message";
 import {
   activateWorkbenchCommandConsumer,
@@ -31,6 +28,7 @@ import {
 import { extractTowerTaskId, findHarnessDeliveryByPlatformMessageId } from "./delivery-map";
 import { parseGatewaySendOutput } from "./gateway-output";
 import {
+  discussionQueuedPresentation,
   discussionPresentation,
   extractTaskGoal,
   finalResultPresentation,
@@ -53,7 +51,6 @@ const GATEWAY_PROJECT_QUEUE_LIMIT = 100;
 const WORKBENCH_ACTIVE_EVENT_LIMIT = 100;
 const DELIVERY_RETRY_BASE_MS = 5_000;
 const DELIVERY_RETRY_MAX_MS = 5 * 60_000;
-const DISCUSSION_HISTORY_CHAR_LIMIT = 12_000;
 const log = logger.create("gateway-router");
 
 export interface GatewayChannelBinding {
@@ -81,6 +78,15 @@ export interface GatewayInboundRequest {
   content: string;
   sessionAction?: "CONTINUE" | "NEW" | "CLOSE";
   startNewWork?: boolean;
+}
+
+export interface GatewayProjectQueryRequest {
+  gateway: string;
+  platform: string;
+  chatId: string;
+  senderId?: string;
+  project?: string;
+  question: string;
 }
 
 export interface GatewayTaskContextRequest {
@@ -235,15 +241,14 @@ export type GatewayRouteResult =
       mode: "project_discussion";
       inboundId: string;
       sessionId: string;
-      assistantSessionId: string;
+      workbenchTaskId: string;
       project: GatewayProjectCandidate;
       resolution: string;
       deduped: boolean;
+      queued: true;
+      acknowledgement: { ok: boolean; deduped?: boolean; error?: string };
+      workbench: { mode: string; executionId: string | null } | { error: string };
       instructions: string;
-      history: {
-        messages: Array<{ role: "USER" | "ASSISTANT"; text: string }>;
-        truncated: boolean;
-      };
     }
   | {
       mode: "project_work";
@@ -265,6 +270,50 @@ export type GatewayRouteResult =
       deduped: boolean;
       instructions: string;
     };
+
+export type GatewayProjectQueryResult =
+  | {
+      mode: "channel_access_denied";
+      noOp: true;
+      reason: "CHANNEL_UNAUTHORIZED" | "CHANNEL_REVOKED" | "SCOPE_INVALID";
+      instructions: string;
+    }
+  | {
+      mode: "needs_project_selection";
+      candidates: GatewayProjectCandidate[];
+      reason: "ambiguous" | "not_found" | "not_allowed";
+    }
+  | ({
+      mode: "project_query";
+      project: GatewayProjectCandidate;
+      resolution: string;
+      instructions: string;
+    } & GatewayProjectContext);
+
+type GatewayProjectContext = {
+  question: string;
+  tasks: Array<{
+    title: string;
+    status: string;
+    priority: string;
+    updatedAt: Date;
+  }>;
+  knowledge: {
+    query: string;
+    projects: Array<{
+      projectId: string;
+      name: string;
+      groupId: string | null;
+      knowledgeDir: string;
+    }>;
+    facts: Awaited<ReturnType<typeof queryProjectKnowledge>>["facts"];
+    versions: Awaited<ReturnType<typeof queryProjectKnowledge>>["versions"];
+    knowledgeFiles: Awaited<ReturnType<typeof queryProjectKnowledge>>["knowledgeFiles"];
+    indexes: Awaited<ReturnType<typeof queryProjectKnowledge>>["indexes"];
+    notes: Awaited<ReturnType<typeof queryProjectKnowledge>>["notes"];
+    warnings: Awaited<ReturnType<typeof queryProjectKnowledge>>["warnings"];
+  };
+};
 
 type EnsureWorkbench = (taskId: string) => Promise<{
   mode: string;
@@ -366,13 +415,13 @@ function sessionAnchor(input: GatewayInboundRequest): string {
   return sender ? `sender:${sender}` : `message:${input.platformMessageId.trim()}`;
 }
 
-function sessionBindingKey(input: GatewayInboundRequest, kind: GatewaySessionKind, projectId: string): string {
+function sessionBindingKey(input: GatewayInboundRequest, projectId: string): string {
   return `gateway-session:${digest([
     normalize(input.gateway),
     normalize(input.platform),
     normalizeChatId(input.chatId),
     sessionAnchor(input),
-    kind,
+    "WORKBENCH",
     projectId,
   ].join("\n"))}`;
 }
@@ -617,7 +666,7 @@ async function resolveBoundSession(input: GatewayInboundRequest) {
         ...base,
         status: "ACTIVE",
         senderId,
-        kind: input.intent === "PROJECT_DISCUSSION" ? "DISCUSSION" : "WORKBENCH",
+        kind: "WORKBENCH",
         lastActivityAt: { gte: new Date(Date.now() - GATEWAY_RECENT_SESSION_TTL_MS) },
       },
       orderBy: { lastActivityAt: "desc" },
@@ -744,7 +793,7 @@ async function resolveProject(
     return { candidates: [], reason: unrestricted ? "not_allowed" : "not_found" };
   }
 
-  if (input.senderId?.trim()) {
+  if (!options.ignoreSessionBindings && input.senderId?.trim()) {
     const recent = await db.gatewaySession.findFirst({
       where: {
         gateway: normalize(input.gateway),
@@ -1059,11 +1108,10 @@ async function saveRoute(
 
 async function ensureSession(
   input: GatewayInboundRequest,
-  kind: GatewaySessionKind,
   project: GatewayProject,
-  workbenchTaskId?: string,
+  workbenchTaskId: string,
 ) {
-  const bindingKey = sessionBindingKey(input, kind, project.projectId);
+  const bindingKey = sessionBindingKey(input, project.projectId);
   const existing = await db.gatewaySession.findUnique({ where: { bindingKey } });
   if (existing) {
     return db.gatewaySession.update({
@@ -1072,29 +1120,14 @@ async function ensureSession(
         status: "ACTIVE",
         senderId: input.senderId?.trim() || existing.senderId,
         lastActivityAt: new Date(),
-        ...(workbenchTaskId ? { workbenchTaskId } : {}),
+        workbenchTaskId,
       },
     });
   }
 
   try {
-    return await db.$transaction(async (transaction) => {
-      let assistantSessionId: string | null = null;
-      if (kind === "DISCUSSION") {
-        assistantSessionId = `as_${randomUUID()}`;
-        await transaction.assistantSession.create({
-          data: {
-            id: assistantSessionId,
-            title: `${project.name} gateway discussion`,
-            origin: "GATEWAY",
-            workspaceId: project.workspaceId,
-            workspaceNameSnapshot: project.workspaceName,
-            projectId: project.projectId,
-            projectNameSnapshot: project.name,
-          },
-        });
-      }
-      return transaction.gatewaySession.create({
+    return await db.$transaction(async (transaction) =>
+      transaction.gatewaySession.create({
         data: {
           bindingKey,
           gateway: normalize(input.gateway),
@@ -1103,13 +1136,13 @@ async function ensureSession(
           threadId: input.threadId?.trim() || null,
           rootMessageId: input.rootMessageId?.trim() || input.platformMessageId.trim(),
           senderId: input.senderId?.trim() || null,
-          kind,
+          kind: "WORKBENCH",
           projectId: project.projectId,
-          workbenchTaskId: workbenchTaskId ?? null,
-          assistantSessionId,
+          workbenchTaskId,
+          assistantSessionId: null,
         },
-      });
-    });
+      }),
+    );
   } catch (error) {
     if (!isUniqueConstraintError(error)) throw error;
     return db.gatewaySession.update({
@@ -1118,7 +1151,7 @@ async function ensureSession(
         status: "ACTIVE",
         senderId: input.senderId?.trim() || null,
         lastActivityAt: new Date(),
-        ...(workbenchTaskId ? { workbenchTaskId } : {}),
+        workbenchTaskId,
       },
     });
   }
@@ -1126,12 +1159,6 @@ async function ensureSession(
 
 function discussionClientTurnId(inboundId: string): string {
   return `gateway_${inboundId}`;
-}
-
-async function discussionHistoryTurns(): Promise<number> {
-  const configured = await readConfigValue<number>("assistant.historyTurns", 20);
-  if (!Number.isFinite(configured)) return 20;
-  return Math.min(100, Math.max(1, Math.trunc(configured)));
 }
 
 async function closeDiscussionSessions(
@@ -1175,53 +1202,6 @@ async function closeDiscussionSessions(
   return rows.map((row) => row.id);
 }
 
-async function beginDiscussionTurn(sessionId: string, inboundId: string, content: string): Promise<void> {
-  const clientTurnId = discussionClientTurnId(inboundId);
-  await db.$transaction(async (transaction) => {
-    const existing = await transaction.assistantTurn.findUnique({
-      where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
-      select: { id: true },
-    });
-    if (existing) return;
-    const last = await transaction.assistantMessage.findFirst({
-      where: { sessionId },
-      orderBy: { sequence: "desc" },
-      select: { sequence: true },
-    });
-    const turnId = `at_${randomUUID()}`;
-    const userMessageId = `am_${randomUUID()}`;
-    const assistantMessageId = `am_${randomUUID()}`;
-    const sequence = (last?.sequence ?? -1) + 1;
-    await transaction.assistantTurn.create({
-      data: { id: turnId, sessionId, clientTurnId, userMessageId, assistantMessageId },
-    });
-    await transaction.assistantMessage.createMany({ data: [
-      {
-        id: userMessageId,
-        sessionId,
-        turnId,
-        sequence,
-        role: "USER",
-        partsJson: JSON.stringify([{ type: "text", text: content.trim() }]),
-        status: "COMPLETE",
-      },
-      {
-        id: assistantMessageId,
-        sessionId,
-        turnId,
-        sequence: sequence + 1,
-        role: "ASSISTANT",
-        partsJson: "[]",
-        status: "STREAMING",
-      },
-    ] });
-    await transaction.assistantSession.update({
-      where: { id: sessionId },
-      data: { lastMessageAt: new Date() },
-    });
-  });
-}
-
 function textFromParts(partsJson: string): string {
   try {
     const parts = JSON.parse(partsJson) as Array<{ type?: string; text?: string }>;
@@ -1232,33 +1212,6 @@ function textFromParts(partsJson: string): string {
   } catch {
     return "";
   }
-}
-
-async function loadDiscussionHistory(sessionId: string): Promise<{
-  messages: Array<{ role: "USER" | "ASSISTANT"; text: string }>;
-  truncated: boolean;
-}> {
-  const keepTurns = await discussionHistoryTurns();
-  const turns = await db.assistantTurn.findMany({
-    where: { sessionId, status: "COMPLETE" },
-    orderBy: [{ completedAt: "desc" }, { startedAt: "desc" }],
-    take: keepTurns + 1,
-    include: { messages: { orderBy: { sequence: "asc" } } },
-  });
-  let truncated = turns.length > keepTurns;
-  const messages = turns.slice(0, keepTurns).reverse().flatMap((turn) =>
-    turn.messages.flatMap((message) => {
-      if (message.role !== "USER" && message.role !== "ASSISTANT") return [];
-      const text = textFromParts(message.partsJson);
-      return text ? [{ role: message.role, text }] : [];
-    }),
-  );
-  let chars = messages.reduce((sum, message) => sum + message.text.length, 0);
-  while (messages.length > 0 && chars > DISCUSSION_HISTORY_CHAR_LIMIT) {
-    chars -= messages.shift()!.text.length;
-    truncated = true;
-  }
-  return { messages, truncated };
 }
 
 async function completeDiscussionTurn(inboundId: string, response: string): Promise<string> {
@@ -1322,34 +1275,6 @@ async function defaultEnsureWorkbench(taskId: string) {
   };
 }
 
-async function requeueAbandonedWorkbenchEvent(input: {
-  eventId: string;
-  parentTaskId: string;
-  reason: string;
-  atTurnBoundary?: boolean;
-}): Promise<boolean> {
-  const live = getSession(input.parentTaskId);
-  if (live && !live.killed && !input.atTurnBoundary) return false;
-  if (!input.atTurnBoundary) {
-    const running = await db.taskExecution.count({
-      where: { taskId: input.parentTaskId, status: "RUNNING" },
-    });
-    if (running > 0) return false;
-  }
-  const reset = await db.workbenchEvent.updateMany({
-    where: { id: input.eventId, state: "CONSUMED" },
-    data: {
-      state: "PENDING",
-      claimToken: null,
-      claimedAt: null,
-      consumedAt: null,
-      batchId: null,
-      lastError: input.reason.slice(0, 2000),
-    },
-  });
-  return reset.count > 0;
-}
-
 function workbenchPrompt(input: GatewayInboundRequest, inboundId: string, project: GatewayProject): string {
   return [
     "[Gateway project work request]",
@@ -1369,11 +1294,34 @@ function workbenchPrompt(input: GatewayInboundRequest, inboundId: string, projec
   ].filter((line) => line !== null).join("\n");
 }
 
+function workbenchDiscussionPrompt(
+  input: GatewayInboundRequest,
+  inboundId: string,
+  project: GatewayProject,
+): string {
+  return [
+    "[Gateway project discussion]",
+    `Project: ${project.name} (id: ${project.projectId})`,
+    `Gateway inbound ID: ${inboundId}`,
+    `Source: ${input.platform}:${input.chatId}`,
+    `Repository safety mode: ${project.accessMode}`,
+    input.threadId ? `Thread: ${input.threadId}` : null,
+    input.rootMessageId ? `Root message: ${input.rootMessageId}` : null,
+    "",
+    input.content.trim(),
+    "",
+    "Handle this discussion inside the resident project Workbench. Inspect the repository when useful and answer the question directly. Do not create a child task merely because a plan becomes clear.",
+    project.accessMode === "REVIEW_ONLY"
+      ? "This project is REVIEW_ONLY. Do not modify files, install dependencies, run repository scripts, create executable tasks, or commit changes."
+      : null,
+    `When the answer is ready, call complete_gateway_discussion with inboundId=${inboundId} and the response. Only a later, explicit OWNER request to create/start work may enter GATEWAY_WORK_REQUEST and call create_task.`,
+  ].filter((line) => line !== null).join("\n");
+}
+
 export async function routeGatewayInbound(
   input: GatewayInboundRequest,
   ensureWorkbench: EnsureWorkbench = defaultEnsureWorkbench,
   sender: DeliverySender = sendViaHarnessGateway,
-  options: { projectQueryOnly?: boolean } = {},
 ): Promise<GatewayRouteResult> {
   if (input.intent === "DIRECT") {
     return {
@@ -1451,38 +1399,6 @@ export async function routeGatewayInbound(
     };
   }
 
-  let binding: GatewayChannelBinding | null = null;
-  if (options.projectQueryOnly) {
-    const decision = await decideGatewayChannelAccess(input);
-    if (!decision.allowed) {
-      const recentInbounds = await db.gatewayInbound.count({
-        where: {
-          gateway: normalize(input.gateway),
-          platform: normalize(input.platform),
-          chatId: normalizeChatId(input.chatId),
-          createdAt: { gte: new Date(Date.now() - GATEWAY_RATE_WINDOW_MS) },
-        },
-      });
-      const silent = recentInbounds > 1;
-      const result: GatewayRouteResult = {
-        mode: "channel_access_denied",
-        inboundId: created.inbound.id,
-        deduped: created.deduped,
-        noOp: true,
-        silent,
-        reason: decision.reason,
-        instructions: silent
-          ? "Return NO_REPLY. This channel's deterministic authorization denial is rate-limited. Do not call another Tower tool."
-          : decision.reason === "SCOPE_INVALID"
-            ? "本群的 Tower 授权范围已失效，请联系 OWNER 重新绑定工作区或项目。不要调用其他 Tower 工具。"
-            : "本群尚未获得 Tower OWNER 授权，暂时无法使用。请联系 OWNER 在本群发送“@Tower 授权本群”或直接绑定工作区/项目。不要调用其他 Tower 工具。",
-      };
-      await saveRoute(created.inbound.id, result, "PROCESSED");
-      return result;
-    }
-    binding = bindingForScope(decision.scope);
-  }
-
   const rateWindowStart = new Date(Date.now() - GATEWAY_RATE_WINDOW_MS);
   const [senderCount, chatCount, queuedCount, globalQueuedCount] = await Promise.all([
     input.senderId
@@ -1552,25 +1468,10 @@ export async function routeGatewayInbound(
   }
   if (input.sessionAction === "NEW") await closeDiscussionSessions(input, true);
 
-  const reply = options.projectQueryOnly || explicitlyStartsNewWork(input) || input.sessionAction === "NEW"
+  const reply = explicitlyStartsNewWork(input) || input.sessionAction === "NEW"
     ? null
     : await resolveTaskBinding(input);
   if (reply) {
-    if (!projectAllowed(
-      reply.project.projectId,
-      options.projectQueryOnly ? binding : null,
-      reply.project.workspaceId,
-    )) {
-      const denied: GatewayRouteResult = {
-        mode: "needs_project_selection",
-        inboundId: created.inbound.id,
-        deduped: created.deduped,
-        candidates: [],
-        reason: "not_allowed",
-      };
-      await saveRoute(created.inbound.id, denied, "PROCESSED");
-      return denied;
-    }
     const context = await resolveGatewayTaskContext(input);
     if (!context.bound) {
       const denied: GatewayRouteResult = {
@@ -1609,12 +1510,9 @@ export async function routeGatewayInbound(
     return result;
   }
 
-  const resolved = await resolveProject(input, binding, {
+  const resolved = await resolveProject(input, null, {
     ignoreSessionBindings: input.sessionAction === "NEW",
-    // Channel scopes are a hard boundary for NON_OWNER queries. The OWNER
-    // route still uses the binding for default-project hints, but searches all
-    // registered Tower projects.
-    enforceProjectScope: Boolean(options.projectQueryOnly),
+    enforceProjectScope: false,
   });
   if ("candidates" in resolved) {
     const result: GatewayRouteResult = {
@@ -1628,34 +1526,9 @@ export async function routeGatewayInbound(
     return result;
   }
 
-  if (input.intent === "PROJECT_DISCUSSION" || resolved.project.accessMode === "REVIEW_ONLY") {
-    const session = await ensureSession(input, "DISCUSSION", resolved.project);
-    await beginDiscussionTurn(session.assistantSessionId!, created.inbound.id, input.content);
-    const history = await loadDiscussionHistory(session.assistantSessionId!);
-    const result: GatewayRouteResult = {
-      mode: "project_discussion",
-      inboundId: created.inbound.id,
-      sessionId: session.id,
-      assistantSessionId: session.assistantSessionId!,
-      project: candidate(resolved.project),
-      resolution: resolved.resolution,
-      deduped: created.deduped,
-      history,
-      instructions: [
-        `You are discussing the ${resolved.project.name} project with Tower-owned history.`,
-        resolved.project.accessMode === "REVIEW_ONLY"
-          ? "This project is REVIEW_ONLY: answer from read-only project context and produce review findings in the discussion; no task or terminal execution may be created until the owner explicitly changes it to FULL_WORK."
-          : null,
-        `Use projectId=${resolved.project.projectId} for ask_project_knowledge and other scoped Tower tools. Use the returned history messages as recent context${history.truncated ? "; earlier turns were truncated" : ""}. Do not answer as an unbound general Tower assistant. Prepare the project-aware response, then call complete_gateway_discussion with inboundId=${created.inbound.id}; that tool persists the assistant turn, sends one idempotent native card replying to the current inbound message, and releases this turn's execution resources.`,
-      ].filter(Boolean).join(" "),
-    };
-    await db.gatewayInbound.update({ where: { id: created.inbound.id }, data: { sessionId: session.id } });
-    await saveRoute(created.inbound.id, result, "PROCESSING");
-    return result;
-  }
-
+  const discussion = input.intent === "PROJECT_DISCUSSION" || resolved.project.accessMode === "REVIEW_ONLY";
   const workbenchTaskId = await ensureTowerTask(resolved.project.projectId, resolved.project.name);
-  const session = await ensureSession(input, "WORKBENCH", resolved.project, workbenchTaskId);
+  const session = await ensureSession(input, resolved.project, workbenchTaskId);
   const admission = await db.$transaction(async (tx) => {
     const [projectQueued, workbenchEvents, globalQueued] = await Promise.all([
       tx.gatewayInbound.count({
@@ -1706,13 +1579,15 @@ export async function routeGatewayInbound(
   await publishWorkbenchCommand({
     parentTaskId: workbenchTaskId,
     sourceTaskId: workbenchTaskId,
-    kind: "GATEWAY_WORK_REQUEST",
+    kind: discussion ? "GATEWAY_DISCUSSION_REQUEST" : "GATEWAY_WORK_REQUEST",
     priority: "NORMAL",
-    dedupKey: `gateway-work:${created.inbound.id}`,
+    dedupKey: `gateway-${discussion ? "discussion" : "work"}:${created.inbound.id}`,
     payload: {
       childTaskId: workbenchTaskId,
-      childTitle: `${resolved.project.name} gateway request`,
-      instruction: workbenchPrompt(input, created.inbound.id, resolved.project),
+      childTitle: `${resolved.project.name} gateway ${discussion ? "discussion" : "request"}`,
+      instruction: discussion
+        ? workbenchDiscussionPrompt(input, created.inbound.id, resolved.project)
+        : workbenchPrompt(input, created.inbound.id, resolved.project),
       sourceReference: { namespace: "gateway_inbound", id: created.inbound.id },
     },
   });
@@ -1729,25 +1604,39 @@ export async function routeGatewayInbound(
       data: { lastError: message.slice(0, 2000) },
     });
   }
-  const result: GatewayRouteResult = {
-    mode: "project_work",
+  const acknowledgement = await deliverGatewayResponse({
+    inboundId: created.inbound.id,
+    kind: "QUEUED_ACK",
+    content: discussion
+      ? `Queued for ${resolved.project.name} Workbench discussion. No task will be created without an explicit work request.`
+      : `Queued for ${resolved.project.name} Workbench. No task has been created yet.`,
+    presentation: discussion
+      ? discussionQueuedPresentation({ projectName: resolved.project.name, inboundId: created.inbound.id })
+      : queuedPresentation({ projectName: resolved.project.name, inboundId: created.inbound.id }),
+    dedupKey: `gateway-${discussion ? "discussion-queued" : "queued"}:${created.inbound.id}`,
+  }, sender);
+  const common = {
     inboundId: created.inbound.id,
     sessionId: session.id,
     workbenchTaskId,
     project: candidate(resolved.project),
     resolution: resolved.resolution,
     deduped: created.deduped,
-    queued: true,
-    acknowledgement: await deliverGatewayResponse({
-      inboundId: created.inbound.id,
-      kind: "QUEUED_ACK",
-      content: `Queued for ${resolved.project.name} Workbench. No task has been created yet.`,
-      presentation: queuedPresentation({ projectName: resolved.project.name, inboundId: created.inbound.id }),
-      dedupKey: `gateway-queued:${created.inbound.id}`,
-    }, sender),
+    queued: true as const,
+    acknowledgement,
     workbench,
-    instructions: `Tower already sent an idempotent native card saying the request is queued for the ${resolved.project.name} Workbench. Do not restate it and do not say a task was created yet. Tower will send a separate confirmation only after create_task succeeds, then a final result after Workbench review.`,
   };
+  const result: GatewayRouteResult = discussion
+    ? {
+        mode: "project_discussion",
+        ...common,
+        instructions: `Tower already sent an idempotent native card saying the discussion entered the ${resolved.project.name} Workbench. Do not answer the discussion in the ingress agent and do not restate the queue acknowledgement. The Workbench will send the answer without creating a task.`,
+      }
+    : {
+        mode: "project_work",
+        ...common,
+        instructions: `Tower already sent an idempotent native card saying the request is queued for the ${resolved.project.name} Workbench. Do not restate it and do not say a task was created yet. Tower will send a separate confirmation only after create_task succeeds, then a final result after Workbench review.`,
+      };
   await saveRoute(created.inbound.id, result, "QUEUED");
   return result;
 }
@@ -1755,79 +1644,80 @@ export async function routeGatewayInbound(
 /**
  * Capability-scoped routing surface for non-owner gateway users.
  *
- * OpenClaw decides whether the sender may see this tool. Tower deliberately
- * does not identify the owner here; it only guarantees that this capability
- * can create a project discussion and can never relay task replies or enqueue
- * project work.
+ * This is a pure read boundary: it performs authorization, project resolution,
+ * and bounded retrieval in one call without creating any Gateway/Assistant/
+ * Workbench state.
  */
 export async function routeGatewayProjectQuery(
-  input: Omit<GatewayInboundRequest, "intent" | "taskId" | "startNewWork">,
-): Promise<GatewayRouteResult> {
-  return routeGatewayInbound(
-    {
-      ...input,
-      intent: "PROJECT_DISCUSSION",
-      taskId: undefined,
-      startNewWork: false,
-    },
-    defaultEnsureWorkbench,
-    sendViaHarnessGateway,
-    { projectQueryOnly: true },
-  );
-}
-
-export async function readGatewayProjectContext(inboundId: string, question: string) {
-  const inbound = await db.gatewayInbound.findUnique({
-    where: { id: inboundId },
-    select: {
-      id: true,
-      intent: true,
-      gateway: true,
-      platform: true,
-      chatId: true,
-      senderId: true,
-      session: {
-        select: {
-          kind: true,
-          project: {
-            select: {
-              id: true,
-              name: true,
-              alias: true,
-              groupId: true,
-              workspace: { select: { id: true, name: true } },
-            },
-          },
-        },
-      },
-    },
+  input: GatewayProjectQueryRequest,
+): Promise<GatewayProjectQueryResult> {
+  const decision = await decideGatewayChannelAccess(input);
+  if (!decision.allowed) {
+    return {
+      mode: "channel_access_denied",
+      noOp: true,
+      reason: decision.reason,
+      instructions: decision.reason === "SCOPE_INVALID"
+        ? "本群的 Tower 授权范围已失效，请联系 OWNER 重新绑定工作区或项目。"
+        : "本群尚未获得 Tower OWNER 授权，暂时无法查询项目。",
+    };
+  }
+  const binding = bindingForScope(decision.scope);
+  const routingInput: GatewayInboundRequest = {
+    gateway: input.gateway,
+    platform: input.platform,
+    chatId: input.chatId,
+    platformMessageId: "read-only-query",
+    senderId: input.senderId,
+    project: input.project,
+    intent: "PROJECT_DISCUSSION",
+    content: input.question,
+  };
+  const resolved = await resolveProject(routingInput, binding, {
+    ignoreSessionBindings: true,
+    enforceProjectScope: true,
   });
-  if (!inbound?.session || inbound.session.kind !== "DISCUSSION") {
-    throw new Error("Gateway inbound is not bound to a project discussion");
+  if ("candidates" in resolved) {
+    return {
+      mode: "needs_project_selection",
+      candidates: resolved.candidates,
+      reason: resolved.reason,
+    };
   }
-  const project = inbound.session.project;
-  const decision = await decideGatewayChannelAccess(inbound);
-  if (!decision.allowed || !gatewayScopeAllowsProject(decision.scope, {
-    id: project.id,
-    workspaceId: project.workspace.id,
-  })) {
-    throw new Error("Gateway channel is not authorized to read this project");
-  }
-  const groupedProjects = project.groupId
+  const groupedProjects = resolved.project.groupId
     ? await db.project.findMany({
-        where: { groupId: project.groupId },
+        where: { groupId: resolved.project.groupId },
         select: { id: true, workspaceId: true },
       })
     : [];
-  if (project.groupId && groupedProjects.some((item) =>
+  if (resolved.project.groupId && groupedProjects.some((item) =>
     !gatewayScopeAllowsProject(decision.scope, item)
   )) {
-    throw new Error("Gateway channel is not authorized to read every project in this product group");
+    return {
+      mode: "channel_access_denied",
+      noOp: true,
+      reason: "SCOPE_INVALID",
+      instructions: "本群未获授权读取该产品组的全部项目，请联系 OWNER 调整项目范围。",
+    };
   }
+  const context = await loadGatewayProjectContext(resolved.project, input.question);
+  return {
+    mode: "project_query",
+    project: candidate(resolved.project),
+    resolution: resolved.resolution,
+    instructions: "Answer only from this bounded result. Do not create a task, start a terminal, enter a Workbench, or retain a project discussion session.",
+    ...context,
+  };
+}
+
+async function loadGatewayProjectContext(
+  project: GatewayProject,
+  question: string,
+): Promise<GatewayProjectContext> {
   const [knowledge, tasks] = await Promise.all([
-    queryProjectKnowledge(db, project.id, question.trim()),
+    queryProjectKnowledge(db, project.projectId, question.trim()),
     db.task.findMany({
-      where: { projectId: project.id },
+      where: { projectId: project.projectId },
       orderBy: [{ updatedAt: "desc" }],
       take: 50,
       select: {
@@ -1839,14 +1729,6 @@ export async function readGatewayProjectContext(inboundId: string, question: str
     }),
   ]);
   return {
-    inboundId: inbound.id,
-    project: {
-      projectId: project.id,
-      name: project.name,
-      alias: project.alias,
-      workspaceId: project.workspace.id,
-      workspaceName: project.workspace.name,
-    },
     question: question.trim(),
     tasks,
     knowledge: {
@@ -2088,36 +1970,66 @@ export async function deliverGatewayResponse(
 export async function completeGatewayDiscussion(
   inboundId: string,
   response: string,
+  reviewerOrSender?: string | DeliverySender,
   sender: DeliverySender = sendViaHarnessGateway,
 ) {
+  const reviewerTaskId = typeof reviewerOrSender === "string" ? reviewerOrSender : undefined;
+  const effectiveSender = typeof reviewerOrSender === "function" ? reviewerOrSender : sender;
   const inbound = await db.gatewayInbound.findUnique({
     where: { id: inboundId },
     select: {
+      intent: true,
       gateway: true,
       platform: true,
       chatId: true,
       senderId: true,
       session: {
         select: {
+          kind: true,
+          workbenchTaskId: true,
           project: { select: { id: true, name: true, workspaceId: true } },
         },
       },
     },
   });
   if (!inbound?.session) throw new Error("Gateway discussion session not found");
-  const decision = await decideGatewayChannelAccess(inbound);
-  if (!decision.allowed || !gatewayScopeAllowsProject(decision.scope, inbound.session.project)) {
-    throw new Error("Gateway channel authorization changed before the discussion completed");
+  if (inbound.session.kind === "WORKBENCH") {
+    const discussionEvent = await db.workbenchEvent.findUnique({
+      where: { dedupKey: `gateway-discussion:${inboundId}` },
+      select: { id: true },
+    });
+    if (!discussionEvent) throw new Error("Gateway inbound is not a Workbench discussion");
+    const reviewer = reviewerTaskId?.trim() || process.env.TOWER_TASK_ID?.trim();
+    if (!reviewer || reviewer !== inbound.session.workbenchTaskId) {
+      throw new Error("Discussion must be completed by the bound project Workbench");
+    }
+  } else {
+    // Compatibility only for discussion inbounds created before project
+    // discussions moved into the resident Workbench.
+    if (inbound.intent !== "PROJECT_DISCUSSION") throw new Error("Gateway inbound is not a legacy discussion");
+    const decision = await decideGatewayChannelAccess(inbound);
+    if (!decision.allowed || !gatewayScopeAllowsProject(decision.scope, inbound.session.project)) {
+      throw new Error("Gateway channel authorization changed before the discussion completed");
+    }
   }
-  const canonical = await completeDiscussionTurn(inboundId, response);
+  const canonical = inbound.session.kind === "DISCUSSION"
+    ? await completeDiscussionTurn(inboundId, response)
+    : response.trim();
   const result = await deliverGatewayResponse({
     inboundId,
     kind: "DISCUSSION_REPLY",
     content: canonical,
     presentation: discussionPresentation(inbound.session.project.name, canonical),
     dedupKey: `gateway-discussion:${inboundId}`,
-  }, sender);
-  if (result.ok) await completeGatewayInbound(inboundId, { mode: "project_discussion", delivered: true, response: canonical });
+  }, effectiveSender);
+  if (result.ok) {
+    await completeGatewayInbound(inboundId, {
+      mode: "project_discussion",
+      owner: inbound.session.kind === "WORKBENCH" ? "workbench" : "legacy_gateway",
+      delivered: true,
+      response: canonical,
+    });
+  }
   return result;
 }
 
@@ -2181,7 +2093,14 @@ export async function confirmGatewayTaskCreated(
     });
     await tx.workbenchEvent.updateMany({
       where: { dedupKey: `gateway-work:${inboundId}`, state: { not: "CONSUMED" } },
-      data: { state: "CONSUMED", claimToken: null, claimedAt: null, consumedAt: new Date() },
+      data: {
+        state: "CONSUMED",
+        claimToken: null,
+        claimedAt: null,
+        batchId: null,
+        consumedAt: new Date(),
+        lastError: null,
+      },
     });
   });
   const content = [
@@ -2406,7 +2325,7 @@ export async function recoverQueuedGatewayWork(
 ) {
   const rows = await db.gatewayInbound.findMany({
     where: {
-      intent: "PROJECT_WORK",
+      intent: { in: ["PROJECT_DISCUSSION", "PROJECT_WORK"] },
       state: { in: ["QUEUED", "PROCESSING"] },
       sessionId: { not: null },
       ...(options.inboundId ? { id: options.inboundId } : {}),
@@ -2422,6 +2341,73 @@ export async function recoverQueuedGatewayWork(
     const taskId = inbound.session?.workbenchTaskId;
     if (!taskId) continue;
     try {
+      const existingDiscussionEvent = await db.workbenchEvent.findUnique({
+        where: { dedupKey: `gateway-discussion:${inbound.id}` },
+        select: { id: true },
+      });
+      if (inbound.intent === "PROJECT_DISCUSSION" || existingDiscussionEvent) {
+        const delivered = await db.gatewayDelivery.findFirst({
+          where: { inboundId: inbound.id, kind: "DISCUSSION_REPLY", state: "DELIVERED" },
+          select: { content: true },
+        });
+        if (delivered) {
+          await completeGatewayInbound(inbound.id, {
+            mode: "project_discussion",
+            owner: "workbench",
+            delivered: true,
+            response: delivered.content,
+          });
+          continue;
+        }
+        const project = inbound.session!.project;
+        const gatewayProject: GatewayProject = {
+          projectId: project.id,
+          name: project.name,
+          alias: project.alias,
+          description: project.description,
+          accessMode: project.accessMode,
+          workspaceId: project.workspaceId,
+          workspaceName: project.workspace.name,
+        };
+        const queuedInput: GatewayInboundRequest = {
+          gateway: inbound.gateway,
+          platform: inbound.platform,
+          chatId: inbound.chatId,
+          platformMessageId: inbound.platformMessageId,
+          senderId: inbound.senderId ?? undefined,
+          threadId: inbound.threadId ?? undefined,
+          rootMessageId: inbound.rootMessageId ?? undefined,
+          replyToMessageId: inbound.replyToMessageId ?? undefined,
+          intent: "PROJECT_DISCUSSION",
+          content: inbound.content,
+        };
+        await publishWorkbenchCommand({
+          parentTaskId: taskId,
+          sourceTaskId: taskId,
+          kind: "GATEWAY_DISCUSSION_REQUEST",
+          priority: "NORMAL",
+          dedupKey: `gateway-discussion:${inbound.id}`,
+          payload: {
+            childTaskId: taskId,
+            childTitle: `${project.name} gateway discussion`,
+            instruction: workbenchDiscussionPrompt(queuedInput, inbound.id, gatewayProject),
+            sourceReference: { namespace: "gateway_inbound", id: inbound.id },
+          },
+        });
+        await deliverGatewayResponse({
+          inboundId: inbound.id,
+          kind: "QUEUED_ACK",
+          content: `Queued for ${project.name} Workbench discussion. No task will be created without an explicit work request.`,
+          presentation: discussionQueuedPresentation({ projectName: project.name, inboundId: inbound.id }),
+          dedupKey: `gateway-discussion-queued:${inbound.id}`,
+        }, sender);
+        const resumed = await ensureWorkbench(taskId);
+        if (resumed.mode !== "already_running") activateWorkbenchCommandConsumer(taskId, resumed);
+        else restoreBoundary(taskId);
+        started++;
+        await db.gatewayInbound.update({ where: { id: inbound.id }, data: { lastError: null } });
+        continue;
+      }
       const durableLink = await db.gatewayTaskLink.findUnique({
         where: { inboundId: inbound.id },
         select: { taskId: true },
@@ -2510,7 +2496,7 @@ export async function recoverQueuedGatewayWork(
           continue;
         }
         if (linkedState?.status === "IN_REVIEW") {
-          const unresolvedReview = await db.workbenchEvent.findFirst({
+          const resolvedReview = await db.workbenchEvent.findFirst({
             where: {
               parentTaskId: taskId,
               sourceTaskId: linkedTask.id,
@@ -2520,14 +2506,16 @@ export async function recoverQueuedGatewayWork(
             orderBy: { consumedAt: "desc" },
             select: { id: true },
           });
-          if (unresolvedReview) {
-            const atTurnBoundary = restoreBoundary(taskId);
-            await requeueAbandonedWorkbenchEvent({
-              eventId: unresolvedReview.id,
-              parentTaskId: taskId,
-              reason: `Workbench exited before resolving review for gateway inbound ${inbound.id}`,
-              atTurnBoundary,
+          if (resolvedReview) {
+            await db.gatewayInbound.update({
+              where: { id: inbound.id },
+              data: {
+                state: "FAILED",
+                lastError: "Workbench resolved the child review but left the task IN_REVIEW; manual reconciliation is required",
+              },
             });
+            failed++;
+            continue;
           }
         }
         const resumed = await ensureWorkbench(taskId);
@@ -2577,16 +2565,15 @@ export async function recoverQueuedGatewayWork(
         },
       });
       if (event.event.state === "CONSUMED") {
-        const atTurnBoundary = restoreBoundary(taskId);
-        await requeueAbandonedWorkbenchEvent({
-          eventId: event.event.id,
-          parentTaskId: taskId,
-          reason: `Workbench exited before creating a task for gateway inbound ${inbound.id}`,
-          atTurnBoundary,
+        await db.gatewayInbound.update({
+          where: { id: inbound.id },
+          data: {
+            state: "FAILED",
+            lastError: "Workbench resolved the gateway request without a durable task link; manual reconciliation is required",
+          },
         });
-      }
-      if (event.event.state === "CONSUMED" && inbound.state === "QUEUED") {
-        await db.gatewayInbound.update({ where: { id: inbound.id }, data: { state: "PROCESSING" } });
+        failed++;
+        continue;
       }
       await deliverGatewayResponse({
         inboundId: inbound.id,

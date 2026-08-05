@@ -44,7 +44,7 @@ OWNER 在当前群内通过 `manage_gateway_channel_access` 授权、绑定、�
 | 类型 | 行为 | 是否创建任务 |
 |---|---|---|
 | `GENERAL` | 普通对话或非 Tower 内容 | 否 |
-| `PROJECT_DISCUSSION` | 使用项目会话历史与只读上下文回答 | 否 |
+| `PROJECT_DISCUSSION` | 以 `GATEWAY_DISCUSSION_REQUEST` 交给项目 Workbench 直接回答 | 否 |
 | `PROJECT_WORK` | 持久化入站事件并交给驻留 Workbench | Workbench 审核后创建 |
 | `REMOTE_PROJECT` | OWNER 提供 Git 与落盘位置后接入项目 | 根据模式决定 |
 

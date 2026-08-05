@@ -88,7 +88,7 @@ Tower queries, project discussion, new project work, and explicit task actions.
 | Intent | Owner | Enters Workbench | Creates a user task | Reply and persistence |
 |---|---|---:|---:|---|
 | `TOWER` | `o-tower` through Tower MCP | No | Not by routing itself | Query or simple mutation runs in the gateway. Confirm a mutation only after its MCP call succeeds. |
-| `PROJECT_DISCUSSION` | A separate project-bound Assistant session | No | No | Each turn is stored in `AssistantMessage`; a native-card reply is persisted and anchored to the current inbound message. |
+| `PROJECT_DISCUSSION` | Project-aware discussion in the resident Workbench | Yes, through `GATEWAY_DISCUSSION_REQUEST` | No | The Workbench inspects project context and sends the final discussion reply. |
 | `PROJECT_WORK` | The project's resident Workbench | Yes, through a durable event | Only after the Workbench successfully calls `create_task` | Native queue card first; a real-data task-created card follows, then a reviewed final-result card. |
 
 Replies to Tower deliveries use a separate decision boundary:
@@ -112,6 +112,13 @@ The generated MCP subprocess also selects Tower's bounded `gateway` capability
 profile. This reduces discovery at the process boundary; `toolsBySender` remains
 the mandatory authorization boundary between OWNER and NON_OWNER callers.
 
+The bundled OpenClaw plugin exposes `tower_sender_role`, whose per-turn factory
+reads the platform-verified `senderIsOwner` boolean directly from OpenClaw's
+trusted tool context. Agent instructions call it before OWNER-sensitive
+decisions and do not infer identity from visible tools. Tool filtering remains
+enforcement, while the trusted role prevents a verified OWNER from being
+mislabeled when an OWNER capability is unavailable.
+
 Tower's OpenClaw installer writes platform OWNER IDs into the sender tool
 policy. OpenClaw enforces those identities before routing and
 uses per-agent `toolsBySender` to expose two surfaces on the same `o-tower`
@@ -121,8 +128,9 @@ profile:
   remote-provisioning tools required by the personal assistant; direct
   task/project mutation and terminal-control tools remain unavailable at
   ingress;
-- NON_OWNER: `route_gateway_query`,
-  `read_gateway_project_context`, and `complete_gateway_discussion` only.
+- NON_OWNER: `route_gateway_query` only. The call performs authorization,
+  scoped project resolution, and bounded reading without creating Gateway or
+  Workbench state.
 
 Configured group platforms use `groupPolicy=open` with `requireMention=true` so
 new groups can reach the authorization decision. Tower stores dynamic group

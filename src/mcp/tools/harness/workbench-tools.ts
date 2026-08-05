@@ -95,6 +95,28 @@ export const workbenchTools = {
     },
   },
 
+  complete_gateway_discussion: {
+    description:
+      "Workbench-only: send the answer for a PROJECT_DISCUSSION request back to the original external thread. " +
+      "No child task is created. Tower verifies that the caller is the project's bound resident Workbench, persists " +
+      "an idempotent native reply, and completes the gateway inbound. Call once after the discussion answer is ready.",
+    schema: z.object({
+      inboundId: z.string().min(1).max(128),
+      response: z.string().min(1).max(16000),
+    }),
+    handler: async (args: { inboundId: string; response: string }) => {
+      const reviewerTaskId = process.env.TOWER_TASK_ID?.trim();
+      if (!reviewerTaskId) return { error: "complete_gateway_discussion must run inside the bound Workbench terminal" };
+      const res = await fetch(GATEWAY_BRIDGE, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "discussion", reviewerTaskId, ...args }),
+      });
+      const data = await res.json().catch(() => ({}));
+      return res.ok ? data : { error: (data as { error?: unknown }).error ?? "discussion delivery failed", status: res.status };
+    },
+  },
+
   complete_gateway_work: {
     description:
       "Workbench-only: after reviewing and accepting a gateway-created child task, reply to the original external " +

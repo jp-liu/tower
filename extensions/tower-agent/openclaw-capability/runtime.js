@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 const CAPABILITY_NAME = /^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*){2,7}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RISKS = new Set(["R0", "R1", "R2", "R3"]);
+const VERIFIED_SENDER_ROLE_SCHEMA = "tower.openclaw_sender_role.v1";
 
 function object(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
@@ -29,6 +30,14 @@ function localCallback(value) {
   } catch {
     return null;
   }
+}
+
+export function buildVerifiedSenderRole(senderIsOwner) {
+  return {
+    schema: VERIFIED_SENDER_ROLE_SCHEMA,
+    verified: typeof senderIsOwner === "boolean",
+    sender_is_owner: typeof senderIsOwner === "boolean" ? senderIsOwner : null,
+  };
 }
 
 export function normalizeCapabilityConfig(value) {

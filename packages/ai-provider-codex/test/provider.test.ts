@@ -253,7 +253,7 @@ describe("Codex provider", () => {
     expect(writes.find((item) => item.path.endsWith("hooks.json"))?.contents)
       .toContain("request_user_input");
     expect(writes.findLast((item) => item.path.endsWith("config.toml"))?.contents)
-      .toContain('notify = ["node","/opt/tower/scripts/tower-codex-notify.js"]');
+      .not.toContain("tower-codex-notify.js");
     await expect(adapter.mcp.install({
       name: "tower",
       command: "node",
@@ -278,10 +278,11 @@ describe("Codex provider", () => {
     );
   });
 
-  it("keeps the turn-complete notifier beside user hooks and chains an existing notifier", async () => {
+  it("removes the legacy Tower notifier and restores its chained user notifier", async () => {
     const ctx = host();
+    const chain = Buffer.from(JSON.stringify(["notify-send", "Codex"]), "utf8").toString("base64");
     const files = new Map<string, string>([
-      ["/tmp/.codex/config.toml", 'notify = ["notify-send","Codex"]\n\n[features]\nhooks = true\n'],
+      ["/tmp/.codex/config.toml", `notify = ["node","/opt/tower/scripts/tower-codex-notify.js","--chain-base64","${chain}"]\n\n[features]\nhooks = true\n`],
       ["/tmp/.codex/hooks.json", JSON.stringify({ hooks: {} })],
     ]);
     ctx.fileSystem!.exists = (filePath) => files.has(filePath) || filePath === "/tmp/.codex";
@@ -293,8 +294,8 @@ describe("Codex provider", () => {
       .resolves.toMatchObject({ installed: true });
 
     const config = files.get("/tmp/.codex/config.toml") ?? "";
-    expect(config).toContain('notify = ["node","/opt/tower/scripts/tower-codex-notify.js","--chain-base64"');
-    expect(config).not.toContain('notify = ["notify-send","Codex"]');
+    expect(config).not.toContain("tower-codex-notify.js");
+    expect(config).toContain('notify = ["notify-send","Codex"]');
     await expect(adapter.hooks.inspect()).resolves.toEqual({ installed: true });
   });
 });

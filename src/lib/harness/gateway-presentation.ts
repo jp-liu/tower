@@ -58,7 +58,26 @@ export function discussionPresentation(projectName: string, response: string): G
     blocks: [
       { type: "section", title: "讨论结论", text: bounded(response, 16_000) },
       { type: "divider" },
-      { type: "context", text: `📁 ${projectName} · 只读讨论` },
+      { type: "context", text: `📁 ${projectName} · 项目 Workbench` },
+    ],
+  };
+}
+
+export function discussionQueuedPresentation(input: {
+  projectName: string;
+  inboundId: string;
+}): GatewayMessagePresentation {
+  return {
+    title: "⏳ 小塔 · 讨论已进入工作台",
+    tone: "info",
+    blocks: [
+      {
+        type: "section",
+        title: "正在分析",
+        text: "项目 Workbench 已接收讨论，将结合仓库和当前项目上下文回复。本次讨论不会自动创建任务。",
+      },
+      { type: "divider" },
+      { type: "context", text: `📁 ${input.projectName} · 请求 ID ${input.inboundId}` },
     ],
   };
 }

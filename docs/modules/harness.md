@@ -94,12 +94,9 @@ Tower 消息回复 ──► resolve_gateway_task_context（只读）
 
 `list_notify_targets` 是发送前的入口：读取当前 scope 的活跃通道，返回**照做即可的发送指令**，告诉 Agent 走哪个网关、要不要 park。`tower-bridge` 的明确收件人消息路径会先调它、再照指令发；无人值守 OWNER 消息则走同一 skill 内的 bounded CapabilityRequest 路径。
 
-`route_gateway_message` 是 OWNER 的 Tower 相关渠道入站入口；普通问答和外部能力请求在 OpenClaw 内处理，不调用 Tower。旧客户端传入 `DIRECT` 时返回 `direct_not_supported`，且不创建 `GatewayInbound`。`route_gateway_query` 是
-可信群 NON_OWNER 的能力受限入口：它固定为项目讨论，不能转 task reply、创建
-任务、启动终端或排入 Workbench；随后只能通过 inbound 绑定读取项目级上下文。
-有状态路由先持久化去重，再严格按 reply/task binding → thread/session binding →
-显式项目 → 唯一 identify_project → 用户最近项目 → 渠道默认项目解析。项目讨论
-必须以 `complete_gateway_discussion` 回原 thread；项目工作只排入 Workbench。
+`route_gateway_message` 是 OWNER 的 Tower 有状态入站入口；普通问答和外部能力请求在 OpenClaw 内处理，不调用 Tower。旧客户端传入 `DIRECT` 时返回 `direct_not_supported`，且不创建 `GatewayInbound`。`route_gateway_query` 是可信群 NON_OWNER 的单次只读 MCP 查询：一次调用完成渠道授权校验、受限项目解析和上下文读取，不创建 `GatewayInbound`、会话、Workbench 事件或任务。
+
+OWNER 的项目讨论和项目工作才使用有状态路由：先持久化去重，再严格按 reply/task binding → thread/session binding → 显式项目 → 唯一 identify_project → 用户最近项目 → 渠道默认项目解析。讨论以 `GATEWAY_DISCUSSION_REQUEST` 进入项目 Workbench，由 Workbench 调用 `complete_gateway_discussion`回复；只有后续明确的创建/开始请求才以 `GATEWAY_WORK_REQUEST` 创建子任务。
 Workbench 读到持久批次后必须先调用 `ack_workbench_batch`，处理或稳定委派后
 调用 `resolve_workbench_batch`。只有 `create_task` 真正成功后才能调用
 `confirm_gateway_task_created`。审查通过时直接调用 `complete_gateway_work`，
@@ -191,7 +188,7 @@ Workbench event/batch/runtime、子任务和平台 delivery 关联为一条阶�
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
 - `resolve_gateway_task_context` / `continue_bound_task`
-- `route_gateway_message` / `route_gateway_query` / `read_gateway_project_context`
+- `route_gateway_message` / `route_gateway_query`
 - `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
 - `diagnose_gateway_request` / `recover_gateway_request` / `get_gateway_runtime_health`
 - `provision_remote_project`

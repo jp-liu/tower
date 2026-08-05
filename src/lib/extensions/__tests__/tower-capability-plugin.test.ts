@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 // OpenClaw without a Tower build step.
 import {
   buildOperatorMessage,
+  buildVerifiedSenderRole,
   normalizeCapabilityConfig,
   parseJobSubmission,
   publicDiscovery,
@@ -26,6 +27,36 @@ const validateSchema = ({ schema, value }: { schema: object; value: unknown }) =
 };
 
 describe("Tower OpenClaw capability plugin contract", () => {
+  it("represents only OpenClaw's verified sender role", () => {
+    expect(buildVerifiedSenderRole(true)).toEqual({
+      schema: "tower.openclaw_sender_role.v1",
+      verified: true,
+      sender_is_owner: true,
+    });
+    expect(buildVerifiedSenderRole(false).sender_is_owner).toBe(false);
+    expect(buildVerifiedSenderRole(undefined)).toMatchObject({
+      verified: false,
+      sender_is_owner: null,
+    });
+  });
+
+  it("reads the owner decision directly from the trusted tool context", () => {
+    const source = readFileSync(fileURLToPath(new URL(
+      "../../../../extensions/tower-agent/openclaw-capability/index.js",
+      import.meta.url,
+    )), "utf8");
+    expect(source).toContain("api.registerTool((ctx)");
+    expect(source).toContain("buildVerifiedSenderRole(ctx.senderIsOwner)");
+    expect(source).toContain('const VERIFIED_SENDER_ROLE_TOOL = "tower_sender_role"');
+    expect(source).not.toContain('api.on("inbound_claim"');
+    expect(source).not.toContain('api.on("agent_turn_prepare"');
+    const manifest = JSON.parse(readFileSync(fileURLToPath(new URL(
+      "../../../../extensions/tower-agent/openclaw-capability/openclaw.plugin.json",
+      import.meta.url,
+    )), "utf8")) as { contracts?: { tools?: string[] } };
+    expect(manifest.contracts?.tools).toContain("tower_sender_role");
+  });
+
   it("shares pending callbacks across OpenClaw runtime scopes", () => {
     const source = readFileSync(fileURLToPath(new URL(
       "../../../../extensions/tower-agent/openclaw-capability/index.js",

@@ -10,13 +10,13 @@ The visible Tower tool set is an authorization boundary:
 
 - OWNER: `manage_gateway_channel_access`, `resolve_gateway_task_context`, `continue_bound_task`,
   `reply_to_ask`, `route_gateway_message`, and the bounded Tower query surface.
-- NON_OWNER: only `route_gateway_query`,
-  `read_gateway_project_context`, and `complete_gateway_discussion`.
+- NON_OWNER: only `route_gateway_query`.
 
-`route_gateway_query` is the mandatory authorization decision for every
-NON_OWNER turn. A visible query tool does not mean the current group is
-authorized. On `channel_access_denied`, return only its fixed instructions (or
-`NO_REPLY` when `silent=true`) and do not load project context.
+`route_gateway_query` is the complete NON_OWNER project-query operation. It
+authorizes the channel, resolves the scoped project, reads bounded project
+context, and returns the result without creating durable Gateway or Workbench
+state. On `channel_access_denied`, return only its fixed instructions (or
+`NO_REPLY` when `silent=true`) and do not call another Tower tool.
 
 Never replace an unavailable Tower tool with `exec`, filesystem access, a
 generic MCP bridge, or another agent.

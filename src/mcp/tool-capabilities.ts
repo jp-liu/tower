@@ -62,12 +62,11 @@ export const toolCapabilityGroups = {
     "heartbeat_workbench_batch",
     "resolve_workbench_batch",
     "confirm_gateway_task_created",
+    "complete_gateway_discussion",
     "complete_gateway_work",
   ],
   gatewayQuery: [
     "route_gateway_query",
-    "read_gateway_project_context",
-    "complete_gateway_discussion",
   ],
   gatewayOwner: [
     "manage_gateway_channel_access",

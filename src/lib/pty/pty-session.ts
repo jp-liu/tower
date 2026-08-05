@@ -31,6 +31,7 @@ export class PtySession {
   private _acceptedInputKeys = new Set<string>();
   private static readonly INPUT_KEY_HISTORY_MAX = 256;
   private _turnState: "BUSY" | "IDLE";
+  private _lastInputAt: number | null = null;
 
   constructor(
     taskId: string,
@@ -145,6 +146,7 @@ export class PtySession {
   write(data: string): void {
     if (!this.killed) {
       this._turnState = "BUSY";
+      this._lastInputAt = Date.now();
       notifyPtyInputStarted(this.taskId);
       // NTFY-07: user input resets idle timer
       this._resetIdleTimer();
@@ -208,6 +210,11 @@ export class PtySession {
   /** True only after the provider reported that the current turn completed. */
   get isAtTurnBoundary(): boolean {
     return this._turnState === "IDLE";
+  }
+
+  /** Timestamp fence used when recovering a missed provider completion. */
+  get lastInputAt(): number | null {
+    return this._lastInputAt;
   }
 
   /** Called by the provider stop/turn-complete callback, never by output-idle heuristics. */

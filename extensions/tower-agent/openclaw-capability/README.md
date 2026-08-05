@@ -4,6 +4,14 @@ This optional plugin keeps concrete Operator routing inside OpenClaw. Tower
 submits business capability names and receives an OpenClaw `runId`/task
 reference; it never sees the configured Operator `agentId`.
 
+The plugin also exposes `tower_sender_role`. Its per-turn tool factory reads
+OpenClaw's platform-verified `senderIsOwner` value directly from trusted runtime
+context and returns it as `sender_is_owner`. The agent calls this tool before
+OWNER-sensitive decisions, while OpenClaw's `toolsBySender` policy remains the
+actual authorization boundary.
+Missing tools therefore mean that a capability is unavailable, not that a
+verified OWNER has become a NON_OWNER.
+
 Configure mappings under `plugins.entries.tower-capability-bridge.config`:
 
 ```json

@@ -47,7 +47,7 @@ final data-scope check from the versioned extension configuration.
 | Class | Behavior | Creates a task |
 |---|---|---|
 | `GENERAL` | General conversation or content unrelated to Tower | No |
-| `PROJECT_DISCUSSION` | Answers with project history and read-only context | No |
+| `PROJECT_DISCUSSION` | Enqueues `GATEWAY_DISCUSSION_REQUEST` for the project Workbench to answer directly | No |
 | `PROJECT_WORK` | Persists the inbound event and dispatches it to Workbench | After Workbench review |
 | `REMOTE_PROJECT` | Adds a Git project after the OWNER provides its destination | Depends on access mode |
 

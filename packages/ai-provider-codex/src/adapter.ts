@@ -408,35 +408,32 @@ export class CodexCliAdapter implements CliAdapter {
 
       if (managedOnlyPolicyPath) {
         if (this.hasManagedTowerHooks(managedOnlyPolicyPath)) {
-          this.ensureCodexTurnNotifier();
+          this.removeCodexTurnNotifier();
           return {
             ok: true,
             method: "file",
-            detail: `${managedOnlyPolicyPath} (managed Tower hooks and turn-complete notifier active)`,
+            detail: `${managedOnlyPolicyPath} (managed Tower hooks active)`,
           };
         }
 
         // `--dangerously-bypass-hook-trust` cannot override managed-only source
-        // filtering. The notifier below is also required when managed hooks do
-        // run: it is an independent, idempotent Codex turn-complete producer.
-        this.ensureCodexTurnNotifier();
+        // filtering. Do not silently fall back to Codex's global notify setting:
+        // Tower completion is owned by Stop hooks, and transcript recovery covers
+        // a missed callback without adding a second event producer.
+        this.removeCodexTurnNotifier();
         return {
-          ok: true,
+          ok: false,
           method: "file",
-          detail:
-            `${this.getHooksPath()} (turn-complete notifier active; ` +
-            `managed hooks policy: ${managedOnlyPolicyPath})`,
+          detail: this.getHooksPath(),
+          error: `Codex allows managed hooks only, but Tower managed hooks are missing from ${managedOnlyPolicyPath}`,
         };
       }
 
-      // Keep Codex's documented external turn-complete notifier alongside the
-      // Stop hook. Both carry the same turn id, so Tower deduplicates them while
-      // retaining a callback if either delivery path misses a turn.
-      this.ensureCodexTurnNotifier();
+      this.removeCodexTurnNotifier();
       return {
         ok: true,
         method: "file",
-        detail: `${this.getHooksPath()} (turn-complete notifier active)`,
+        detail: `${this.getHooksPath()} (Stop hook active)`,
       };
     } catch (err) {
       return {
@@ -453,7 +450,8 @@ export class CodexCliAdapter implements CliAdapter {
    * contain entries that 0.2.5/0.2.6 wrote with broken paths under
    * `.next/standalone/scripts/`. Rewrite ONLY existing entries to the
    * current `TOWER_PACKAGE_ROOT`; never adds new hook entries. It also restores
-   * the independent Codex turn-complete notifier when an older install removed it.
+   * and removes Tower's legacy global notify adapter while preserving any user
+   * notifier that it previously chained.
    */
   async repairHookPaths(): Promise<void> {
     try {
@@ -486,7 +484,7 @@ export class CodexCliAdapter implements CliAdapter {
         this.writeHooks(hooks);
         this.ensureHooksFeatureEnabled();
       }
-      this.ensureCodexTurnNotifier();
+      this.removeCodexTurnNotifier();
     } catch {
       // Best-effort -- never throw out of a repair call.
     }
@@ -553,7 +551,7 @@ export class CodexCliAdapter implements CliAdapter {
   async isHooksInstalled(): Promise<boolean> {
     const managedOnlyPolicyPath = this.getManagedOnlyHooksPolicyPath();
     if (managedOnlyPolicyPath && this.hasManagedTowerHooks(managedOnlyPolicyPath)) {
-      return this.isCodexTurnNotifierInstalled();
+      return true;
     }
 
     const hooks = this.readHooks();
@@ -566,7 +564,7 @@ export class CodexCliAdapter implements CliAdapter {
     const hooksInstalled = required.every(([event, filename]) =>
       this.hasHook(this.getHookArray(hooks, event), filename)
     ) && this.isHooksFeatureEnabled();
-    return hooksInstalled && this.isCodexTurnNotifierInstalled();
+    return hooksInstalled;
   }
 
   // ===========================================================================
@@ -981,37 +979,11 @@ export class CodexCliAdapter implements CliAdapter {
       .replace(/\\/g, "/");
   }
 
-  private ensureCodexTurnNotifier(): void {
-    const existing = this.readTopLevelNotify();
-    const scriptPath = this.getCodexNotifyScriptPath();
-    let chain: string[] = [];
-
-    if (existing?.some((part) => part.includes("tower-codex-notify.js"))) {
-      chain = this.decodeNotifyChain(existing);
-    } else if (existing) {
-      chain = existing;
-    }
-
-    const notify = ["node", scriptPath];
-    if (chain.length > 0) {
-      notify.push(
-        "--chain-base64",
-        Buffer.from(JSON.stringify(chain), "utf-8").toString("base64"),
-      );
-    }
-    this.writeTopLevelNotify(notify);
-  }
-
   private removeCodexTurnNotifier(): void {
     const existing = this.readTopLevelNotify();
     if (!existing?.some((part) => part.includes("tower-codex-notify.js"))) return;
     const chain = this.decodeNotifyChain(existing);
     this.writeTopLevelNotify(chain.length > 0 ? chain : null);
-  }
-
-  private isCodexTurnNotifierInstalled(): boolean {
-    const existing = this.readTopLevelNotify();
-    return existing?.includes(this.getCodexNotifyScriptPath()) ?? false;
   }
 
   private decodeNotifyChain(notify: string[]): string[] {

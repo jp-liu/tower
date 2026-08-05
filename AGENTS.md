@@ -252,14 +252,13 @@ handoff, diagnostics, scoped recovery, and remote project provisioning.
 
 - Messaging: `list_notify_targets`, `push_to_human`, `ask_human`,
   `notify_human`
-- Gateway query: `route_gateway_query`, `read_gateway_project_context`,
-  `complete_gateway_discussion`
+- Gateway query: `route_gateway_query`
 - Gateway owner: `manage_gateway_channel_access`, `relay_channel_reply`, `route_gateway_message`,
   `resolve_gateway_task_context`, `continue_bound_task`,
   `diagnose_gateway_request`, `provision_remote_project`, `reply_to_ask`
 - Workbench: `ack_workbench_batch`, `resolve_workbench_batch`,
   `heartbeat_workbench_batch`, `confirm_gateway_task_created`,
-  `complete_gateway_work`
+  `complete_gateway_discussion`, `complete_gateway_work`
 - Operations: `recover_gateway_request`, `get_gateway_runtime_health`
 - Gateway capability: `discover_gateway_capabilities`,
   `submit_capability_request`, `get_capability_request_status`,
@@ -273,8 +272,9 @@ idempotency key, completion wakes Workbench by `requestId + revision`, and
 `SIDE_EFFECT_UNKNOWN` is terminal. `get_capability_job_status` remains the
 read-only OpenClaw Job reconciliation path.
 
-`route_gateway_query` is the capability-scoped NON_OWNER entry and cannot
-create work. `resolve_gateway_task_context` is read-only. `continue_bound_task`
+`route_gateway_query` is the single-call, capability-scoped NON_OWNER read
+boundary and creates no durable Gateway or Workbench state.
+`resolve_gateway_task_context` is read-only. `continue_bound_task`
 is an explicit, idempotent OWNER action; it refuses to bypass an OPEN ask.
 Mutating/diagnostic/provisioning tools are exposed only to OWNER by the
 OpenClaw sender tool policy.

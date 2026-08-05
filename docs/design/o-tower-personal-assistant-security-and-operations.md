@@ -49,7 +49,7 @@ OpenClaw 的 per-agent `toolsBySender` 根据平台 sender ID 决定工具集合
 | 调用者 | 工具面 | 能力 |
 |---|---|---|
 | OWNER | 网关路由、项目/任务查询、只读绑定解析、显式续跑、诊断 + `session_status` | 可以表达全部意图；项目写操作仍经 Workbench，只有显式续跑可幂等恢复已绑定任务 |
-| 可信群 NON_OWNER | 3 个 project-reader 工具 | 项目只读讨论 |
+| 可信群 NON_OWNER | 1 个受限 project-query 工具 | 单次项目只读查询 |
 | 其他来源 | 无 o-tower 路由 | 拒绝 |
 
 OWNER 的“完整能力”由 **Tower Control Plane + Workbench** 提供，不等于把
@@ -63,13 +63,9 @@ OWNER 的“完整能力”由 **Tower Control Plane + Workbench** 提供，不�
 入口模型在排队后继续推理，也无法绕开 `GatewayInbound` / `GatewayTaskLink` 再创建第二个任务。
 普通回复只能调用 `resolve_gateway_task_context` 读取上下文，不能隐式恢复终端。
 
-NON_OWNER 的三个工具是：
-
-1. `route_gateway_query`
-2. `read_gateway_project_context`
-3. `complete_gateway_discussion`
-
-这组能力从服务端结构上不能：
+NON_OWNER 只有 `route_gateway_query`。该 MCP 调用在一次请求内完成渠道
+授权校验、受限项目解析和上下文读取，不创建 `GatewayInbound`、
+会话、Workbench 事件或任务。该能力从服务端结构上不能：
 
 - 路由成 task reply；
 - 创建任务；
@@ -105,16 +101,15 @@ OpenClaw agent。它们是同一个 `o-tower` profile 在不同 sender 下得到
 
 ### 4.2 可信群中的同事查询
 
-1. OpenClaw 只暴露 project-reader 工具。
-2. `route_gateway_query` 固定按 `PROJECT_DISCUSSION` 路由。
+1. OpenClaw 只暴露 `route_gateway_query`。
+2. `route_gateway_query` 重新校验当前群授权，不依赖之前的入站或会话。
 3. 项目不明确时返回候选项，模型必须追问，不能猜。
-4. `read_gateway_project_context` 只接受上一步生成的 `inboundId`，从绑定项目
-   读取：
+4. 同一次调用从授权项目读取：
    - 项目知识；
    - 最近任务状态；
    - 项目级事实。
 5. 返回内容不含 `localPath`，不含个人任务、日报和 todo。
-6. `complete_gateway_discussion` 将结果持久化并引用原平台消息回复。
+6. OpenClaw 使用 MCP 返回结果直接回复，Tower 不保留讨论状态。
 
 即使同事用自然语言要求“创建任务、运行命令、修改代码”，该回合也没有相应
 工具，路由能力本身也不会进入 Workbench。

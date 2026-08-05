@@ -17,9 +17,9 @@ import {
   retryGatewayDeliveries,
   routeGatewayInbound,
   routeGatewayProjectQuery,
-  readGatewayProjectContext,
   resolveGatewayTaskContext,
   type GatewayInboundRequest,
+  type GatewayProjectQueryRequest,
 } from "../gateway-router";
 import {
   GATEWAY_CHANNEL_ACCESS_CONFIG_KEY,
@@ -42,6 +42,17 @@ function inbound(overrides: Partial<GatewayInboundRequest> = {}): GatewayInbound
     senderId: "ou_gateway_user",
     intent: "PROJECT_DISCUSSION",
     content: "Discuss the next release",
+    ...overrides,
+  };
+}
+
+function projectQuery(overrides: Partial<GatewayProjectQueryRequest> = {}): GatewayProjectQueryRequest {
+  return {
+    gateway: "openclaw",
+    platform: "feishu",
+    chatId: "oc_gateway_test",
+    senderId: "ou_gateway_user",
+    question: "What is the current project status?",
     ...overrides,
   };
 }
@@ -235,57 +246,54 @@ describe("gateway inbound routing", () => {
   });
 
   it("keeps the non-owner capability project-read-only even when the message asks for work", async () => {
-    const task = await db.task.create({ data: { title: "Existing private task", projectId: alphaId } });
-    const request = inbound({
+    await db.task.create({ data: { title: "Existing private task", projectId: alphaId } });
+    const request = projectQuery({
       project: alphaId,
-      intent: "PROJECT_WORK",
-      taskId: task.id,
-      content: "Create a task, run the terminal, and modify the repository",
+      question: "Create a task, run the terminal, and modify the repository",
     });
 
     const routed = await routeGatewayProjectQuery(request);
 
     expect(routed).toMatchObject({
-      mode: "project_discussion",
+      mode: "project_query",
       project: { projectId: alphaId },
     });
-    expect(routed.mode).not.toBe("task_reply");
-    expect(routed.mode).not.toBe("project_work");
-    expect(await db.workbenchEvent.count({ where: { kind: "GATEWAY_WORK_REQUEST" } })).toBe(0);
-    if (routed.mode !== "project_discussion") return;
-
-    const context = await readGatewayProjectContext(routed.inboundId, "What is the current project status?");
-    expect(context).toMatchObject({
-      inboundId: routed.inboundId,
-      project: { projectId: alphaId, workspaceId },
-    });
-    expect(context.tasks).toContainEqual(expect.objectContaining({ title: "Existing private task" }));
-    expect(context.knowledge.projects[0]).not.toHaveProperty("localPath");
+    expect(await db.gatewayInbound.count({ where: { chatId: "oc_gateway_test" } })).toBe(0);
+    expect(await db.gatewaySession.count({ where: { projectId: alphaId } })).toBe(0);
+    expect(await db.assistantSession.count({ where: { projectId: alphaId, origin: "GATEWAY" } })).toBe(0);
+    expect(await db.workbenchEvent.count()).toBe(0);
+    expect(await db.gatewayDelivery.count()).toBe(0);
+    expect(await db.task.count({ where: { projectId: alphaId } })).toBe(1);
+    if (routed.mode !== "project_query") return;
+    expect(routed.tasks).toContainEqual(expect.objectContaining({ title: "Existing private task" }));
+    expect(routed.knowledge.projects[0]).not.toHaveProperty("localPath");
   });
 
-  it("routes work requests for REVIEW_ONLY projects into discussion without starting a Workbench", async () => {
+  it("routes REVIEW_ONLY work requests into a read-only Workbench discussion", async () => {
     await db.project.update({ where: { id: alphaId }, data: { accessMode: "REVIEW_ONLY" } });
+    const ensure = vi.fn(async () => ({ mode: "started", executionId: "review-workbench" }));
 
     const routed = await routeGatewayInbound(inbound({
       project: alphaId,
       intent: "PROJECT_WORK",
       content: "Install dependencies and implement the requested change",
-    }), vi.fn());
+    }), ensure, successfulSender());
 
     expect(routed).toMatchObject({
       mode: "project_discussion",
       project: { projectId: alphaId },
     });
-    if (routed.mode === "project_discussion") {
-      expect(routed.instructions).toContain("REVIEW_ONLY");
-    }
+    expect(ensure).toHaveBeenCalledOnce();
+    expect(await db.workbenchEvent.findFirst({
+      where: { kind: "GATEWAY_DISCUSSION_REQUEST" },
+    })).toMatchObject({ payload: expect.stringContaining("REVIEW_ONLY") });
     expect(await db.workbenchEvent.count({ where: { kind: "GATEWAY_WORK_REQUEST" } })).toBe(0);
   });
 
   it("fails closed when a non-owner channel has no configured project scope", async () => {
     await db.systemConfig.delete({ where: { key: GATEWAY_CHANNEL_ACCESS_CONFIG_KEY } });
 
-    await expect(routeGatewayProjectQuery(inbound({ project: alphaId }))).resolves.toMatchObject({
+    await expect(routeGatewayProjectQuery(projectQuery({ project: alphaId }))).resolves.toMatchObject({
       mode: "channel_access_denied",
       reason: "CHANNEL_UNAUTHORIZED",
     });
@@ -310,7 +318,7 @@ describe("gateway inbound routing", () => {
       project: { projectId: ownerOnly.id },
     });
 
-    await expect(routeGatewayProjectQuery(inbound({
+    await expect(routeGatewayProjectQuery(projectQuery({
       project: ownerOnly.id,
     }))).resolves.toMatchObject({
       mode: "needs_project_selection",
@@ -321,21 +329,18 @@ describe("gateway inbound routing", () => {
   it("fails closed when a non-owner channel binding has neither a workspace nor projects", async () => {
     await configureChannel({ defaultWorkspaceId: "", allowedProjectIds: [] });
 
-    await expect(routeGatewayProjectQuery(inbound({ project: alphaId }))).resolves.toMatchObject({
+    await expect(routeGatewayProjectQuery(projectQuery({ project: alphaId }))).resolves.toMatchObject({
       mode: "channel_access_denied",
       reason: "SCOPE_INVALID",
     });
   });
 
-  it("rechecks non-owner project scope when project context is read", async () => {
-    const routed = await routeGatewayProjectQuery(inbound({ project: alphaId }));
-    expect(routed).toMatchObject({ mode: "project_discussion" });
-    if (routed.mode !== "project_discussion") return;
-
+  it("does not retain authorization state between non-owner queries", async () => {
+    await expect(routeGatewayProjectQuery(projectQuery({ project: alphaId })))
+      .resolves.toMatchObject({ mode: "project_query" });
     await db.systemConfig.delete({ where: { key: GATEWAY_CHANNEL_ACCESS_CONFIG_KEY } });
-
-    await expect(readGatewayProjectContext(routed.inboundId, "status"))
-      .rejects.toThrow("not authorized");
+    await expect(routeGatewayProjectQuery(projectQuery({ project: alphaId })))
+      .resolves.toMatchObject({ mode: "channel_access_denied" });
   });
 
   it("does not process a concurrent duplicate while its first route is still claimed", async () => {
@@ -464,7 +469,7 @@ describe("gateway inbound routing", () => {
     }), vi.fn());
     expect(betaDiscussion.mode).toBe("project_discussion");
     if (betaDiscussion.mode !== "project_discussion") return;
-    await completeGatewayDiscussion(betaDiscussion.inboundId, "Beta project answer", vi.fn(async (input: HarnessGatewaySendInput) => ({
+    await completeGatewayDiscussion(betaDiscussion.inboundId, "Beta project answer", betaDiscussion.workbenchTaskId, vi.fn(async (input: HarnessGatewaySendInput) => ({
       ok: true as const,
       output: JSON.stringify({ message_id: "om_beta_answer", channel: "feishu" }),
       metadata: { chat_id: "oc_gateway_test", message_id: "om_beta_answer", reply_to_message_id: input.replyToMessageId!, msg_type: "interactive", send_mode: "reply" as const },
@@ -787,24 +792,37 @@ describe("gateway inbound routing", () => {
     });
   });
 
-  it("keeps project discussions independent from the Workbench terminal", async () => {
-    const ensure = vi.fn();
-    const result = await routeGatewayInbound(inbound({ project: alphaId }), ensure);
+  it("routes OWNER project discussions into the resident Workbench", async () => {
+    const ensure = vi.fn(async () => ({ mode: "started", executionId: "discussion-workbench" }));
+    const result = await routeGatewayInbound(
+      inbound({ project: alphaId }),
+      ensure,
+      successfulSender("om_discussion_queued"),
+    );
 
     expect(result).toMatchObject({
       mode: "project_discussion",
       project: { projectId: alphaId },
+      queued: true,
+      workbench: { executionId: "discussion-workbench" },
     });
-    expect(ensure).not.toHaveBeenCalled();
-    expect(await db.assistantSession.findUnique({
-      where: { id: result.mode === "project_discussion" ? result.assistantSessionId : "missing" },
-    })).toMatchObject({ projectId: alphaId });
-    expect(await db.workbenchEvent.count()).toBe(0);
+    if (result.mode !== "project_discussion") return;
+    expect(ensure).toHaveBeenCalledWith(result.workbenchTaskId);
+    expect(await db.gatewaySession.findUnique({ where: { id: result.sessionId } }))
+      .toMatchObject({ kind: "WORKBENCH", assistantSessionId: null, workbenchTaskId: result.workbenchTaskId });
+    expect(await db.assistantSession.count({ where: { projectId: alphaId, origin: "GATEWAY" } })).toBe(0);
+    expect(await db.workbenchEvent.findUnique({
+      where: { dedupKey: `gateway-discussion:${result.inboundId}` },
+    })).toMatchObject({ kind: "GATEWAY_DISCUSSION_REQUEST", state: "PENDING" });
   });
 
   it("returns no-op results for duplicate discussions before and after delivery", async () => {
     const request = inbound({ project: alphaId, content: "Discuss this once" });
-    const first = await routeGatewayInbound(request, vi.fn());
+    const first = await routeGatewayInbound(
+      request,
+      vi.fn(async () => ({ mode: "started", executionId: "discussion-once" })),
+      successfulSender("om_discussion_once_queued"),
+    );
     expect(first.mode).toBe("project_discussion");
     if (first.mode !== "project_discussion") return;
 
@@ -813,13 +831,13 @@ describe("gateway inbound routing", () => {
       mode: "in_progress",
       inboundId: first.inboundId,
       noOp: true,
-      state: "PROCESSING",
+      state: "QUEUED",
       originalMode: "project_discussion",
     });
     expect(concurrent).not.toHaveProperty("instructions");
 
     const sender = successfulSender("om_discussion_once");
-    await completeGatewayDiscussion(first.inboundId, "One answer", sender);
+    await completeGatewayDiscussion(first.inboundId, "One answer", first.workbenchTaskId, sender);
     const completed = await routeGatewayInbound(request, vi.fn());
     expect(completed).toMatchObject({
       mode: "already_processed",
@@ -845,7 +863,7 @@ describe("gateway inbound routing", () => {
     expect(first.mode).toBe("project_discussion");
     expect(second.mode).toBe("project_discussion");
     if (first.mode !== "project_discussion" || second.mode !== "project_discussion") return;
-    expect(second.assistantSessionId).toBe(first.assistantSessionId);
+    expect(second.workbenchTaskId).toBe(first.workbenchTaskId);
     expect(second.sessionId).toBe(first.sessionId);
     expect(second.resolution).toBe("thread_session_binding");
   });
@@ -866,7 +884,7 @@ describe("gateway inbound routing", () => {
     expect(first.mode).toBe("project_discussion");
     expect(second.mode).toBe("project_discussion");
     if (first.mode !== "project_discussion" || second.mode !== "project_discussion") return;
-    expect(second.assistantSessionId).not.toBe(first.assistantSessionId);
+    expect(second.workbenchTaskId).toBe(first.workbenchTaskId);
     expect(second.sessionId).not.toBe(first.sessionId);
   });
 
@@ -891,113 +909,54 @@ describe("gateway inbound routing", () => {
     expect(next).toMatchObject({ mode: "needs_project_selection", reason: "ambiguous" });
   });
 
-  it("persists discussion turns and restores only the configured recent context", async () => {
-    await db.systemConfig.upsert({
-      where: { key: "assistant.historyTurns" },
-      create: { key: "assistant.historyTurns", value: "2" },
-      update: { value: "2" },
-    });
-    let sessionId = "";
-    for (let index = 1; index <= 3; index++) {
-      const routed = await routeGatewayInbound(inbound({
-        platformMessageId: `om_history_${index}`,
-        project: index === 1 ? alphaId : undefined,
-        threadId: "omt_history",
-        content: `question ${index}`,
-      }), vi.fn());
-      expect(routed.mode).toBe("project_discussion");
-      if (routed.mode !== "project_discussion") return;
-      sessionId = routed.assistantSessionId;
-      await completeGatewayDiscussion(routed.inboundId, `answer ${index}`, successfulSender(`om_history_answer_${index}`));
-    }
-
-    const followup = await routeGatewayInbound(inbound({
-      platformMessageId: "om_history_4",
-      threadId: "omt_history",
-      content: "question 4",
-    }), vi.fn());
-    expect(followup.mode).toBe("project_discussion");
-    if (followup.mode !== "project_discussion") return;
-    expect(followup.assistantSessionId).toBe(sessionId);
-    expect(followup.history.truncated).toBe(true);
-    expect(followup.history.messages.map((message) => message.text)).toEqual([
-      "question 2", "answer 2", "question 3", "answer 3",
-    ]);
-    expect(await db.assistantMessage.count({ where: { sessionId } })).toBe(8);
-    expect(await db.assistantTurn.count({ where: { sessionId } })).toBe(4);
-  });
-
-  it("completes a discussion turn after Assistant startup reconciliation interrupts it", async () => {
-    const routed = await routeGatewayInbound(inbound({
-      platformMessageId: "om_reconciled_turn",
-      project: alphaId,
-      threadId: "omt_reconciled_turn",
-    }), vi.fn());
-    expect(routed.mode).toBe("project_discussion");
-    if (routed.mode !== "project_discussion") return;
-    const turn = await db.assistantTurn.findFirstOrThrow({
-      where: { sessionId: routed.assistantSessionId },
-    });
-    await db.$transaction([
-      db.assistantTurn.update({
-        where: { id: turn.id },
-        data: { status: "INTERRUPTED", completedAt: new Date() },
-      }),
-      db.assistantMessage.updateMany({
-        where: { turnId: turn.id, role: "ASSISTANT" },
-        data: { status: "INTERRUPTED" },
-      }),
-    ]);
-
-    await completeGatewayDiscussion(
-      routed.inboundId,
-      "Recovered discussion answer",
-      successfulSender("om_reconciled_answer"),
-    );
-    expect(await db.assistantTurn.findUnique({ where: { id: turn.id } }))
-      .toMatchObject({ status: "COMPLETE" });
-    expect(await db.assistantMessage.findFirst({ where: { turnId: turn.id, role: "ASSISTANT" } }))
-      .toMatchObject({ status: "COMPLETE", partsJson: expect.stringContaining("Recovered discussion answer") });
-  });
-
-  it("closes an explicit discussion and restores it when an old reply is used", async () => {
+  it("keeps discussion context in the Workbench and creates no Assistant turns", async () => {
     const first = await routeGatewayInbound(inbound({
-      platformMessageId: "om_lifecycle_first",
+      platformMessageId: "om_context_first",
       project: alphaId,
-      threadId: "omt_lifecycle",
-    }), vi.fn());
+      threadId: "omt_context",
+      content: "Compare two approaches",
+    }), vi.fn(async () => ({ mode: "started", executionId: "context-workbench" })), successfulSender());
     expect(first.mode).toBe("project_discussion");
     if (first.mode !== "project_discussion") return;
-    await completeGatewayDiscussion(first.inboundId, "Lifecycle answer", successfulSender("om_lifecycle_answer"));
 
-    const closed = await routeGatewayInbound(inbound({
-      platformMessageId: "om_lifecycle_close",
-      replyToMessageId: "om_lifecycle_answer",
-      threadId: "omt_lifecycle",
-      sessionAction: "CLOSE",
-      content: "结束讨论",
-    }), vi.fn());
-    expect(closed).toMatchObject({ mode: "discussion_closed", closedSessionIds: [first.sessionId] });
-    expect(await db.gatewaySession.findUnique({ where: { id: first.sessionId } }))
-      .toMatchObject({ status: "CLOSED" });
-
-    const restored = await routeGatewayInbound(inbound({
-      platformMessageId: "om_lifecycle_restore",
-      replyToMessageId: "om_lifecycle_answer",
-      threadId: "omt_lifecycle",
-      content: "继续旧讨论",
-    }), vi.fn());
-    expect(restored).toMatchObject({
-      mode: "project_discussion",
+    await completeGatewayDiscussion(
+      first.inboundId,
+      "Use approach B",
+      first.workbenchTaskId,
+      successfulSender("om_context_answer"),
+    );
+    const followup = await routeGatewayInbound(inbound({
+      platformMessageId: "om_context_work",
+      project: alphaId,
+      threadId: "omt_context",
+      intent: "PROJECT_WORK",
+      startNewWork: true,
+      content: "按刚才的方案创建任务并开始做",
+    }), vi.fn(async () => ({ mode: "already_running", executionId: "context-workbench" })), successfulSender());
+    expect(followup).toMatchObject({
+      mode: "project_work",
       sessionId: first.sessionId,
-      assistantSessionId: first.assistantSessionId,
-      resolution: "reply_message_binding",
+      workbenchTaskId: first.workbenchTaskId,
     });
-    expect(await db.gatewaySession.findUnique({ where: { id: first.sessionId } }))
-      .toMatchObject({ status: "ACTIVE" });
+    expect(await db.workbenchEvent.findUnique({
+      where: { dedupKey: `gateway-work:${followup.inboundId}` },
+    })).toMatchObject({ kind: "GATEWAY_WORK_REQUEST" });
+    expect(await db.assistantTurn.count()).toBe(0);
   });
 
-  it("closes the old binding and creates a new one on an explicit project switch", async () => {
+  it("rejects a discussion reply from any task except the bound Workbench", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId }),
+      vi.fn(async () => ({ mode: "started", executionId: "bound-workbench" })),
+      successfulSender(),
+    );
+    expect(routed.mode).toBe("project_discussion");
+    if (routed.mode !== "project_discussion") return;
+    await expect(completeGatewayDiscussion(routed.inboundId, "answer", "wrong-task"))
+      .rejects.toThrow("bound project Workbench");
+  });
+
+  it("selects the other project's resident Workbench on an explicit project switch", async () => {
     const first = await routeGatewayInbound(inbound({
       platformMessageId: "om_switch_first",
       project: alphaId,
@@ -1020,9 +979,9 @@ describe("gateway inbound routing", () => {
     });
     if (switched.mode !== "project_discussion") return;
     expect(switched.sessionId).not.toBe(first.sessionId);
-    expect(switched.assistantSessionId).not.toBe(first.assistantSessionId);
+    expect(switched.workbenchTaskId).not.toBe(first.workbenchTaskId);
     expect(await db.gatewaySession.findUnique({ where: { id: first.sessionId } }))
-      .toMatchObject({ status: "CLOSED" });
+      .toMatchObject({ status: "ACTIVE" });
   });
 
   it("lets an explicit new-work intent override an old task reply binding", async () => {
@@ -1185,7 +1144,35 @@ describe("gateway inbound routing", () => {
     })).toMatchObject({ kind: "GATEWAY_WORK_REQUEST", state: "PENDING" });
   });
 
-  it("requeues a consumed gateway event when a resident Workbench returned to a turn boundary", async () => {
+  it("recreates a missing discussion event without converting it into project work", async () => {
+    const routed = await routeGatewayInbound(
+      inbound({ project: alphaId, intent: "PROJECT_DISCUSSION", content: "Recover this discussion" }),
+      vi.fn(async () => ({ mode: "started", executionId: "initial-discussion-exec" })),
+      successfulSender("om_initial_discussion_ack"),
+    );
+    expect(routed.mode).toBe("project_discussion");
+    if (routed.mode !== "project_discussion") return;
+
+    await db.workbenchEvent.deleteMany({ where: { dedupKey: `gateway-discussion:${routed.inboundId}` } });
+    const ensure = vi.fn(async () => ({
+      mode: "continued" as const,
+      executionId: "recovered-discussion-exec",
+      startsAtInputBoundary: true,
+    }));
+
+    await expect(recoverQueuedGatewayWork(ensure, 100, successfulSender(), undefined, { projectId: alphaId }))
+      .resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
+    expect(ensure).toHaveBeenCalledWith(routed.workbenchTaskId);
+    expect(await db.workbenchEvent.findFirst({
+      where: {
+        parentTaskId: routed.workbenchTaskId,
+        dedupKey: `gateway-discussion:${routed.inboundId}`,
+      },
+    })).toMatchObject({ kind: "GATEWAY_DISCUSSION_REQUEST", state: "PENDING" });
+    expect(await db.workbenchEvent.count({ where: { kind: "GATEWAY_WORK_REQUEST" } })).toBe(0);
+  });
+
+  it("never requeues a consumed gateway event during startup recovery", async () => {
     const routed = await routeGatewayInbound(
       inbound({ project: alphaId, intent: "PROJECT_WORK", content: "Recover abandoned delivery" }),
       vi.fn(async () => ({ mode: "started", executionId: "initial-exec" })),
@@ -1217,15 +1204,16 @@ describe("gateway inbound routing", () => {
       successfulSender("om_abandoned_retry"),
       restore,
       { projectId: alphaId },
-    )).resolves.toEqual({ scanned: 1, started: 1, failed: 0 });
+    )).resolves.toEqual({ scanned: 1, started: 0, failed: 1 });
     expect(await db.workbenchEvent.findUnique({
       where: { dedupKey: `gateway-work:${routed.inboundId}` },
     })).toMatchObject({
-      state: "PENDING",
-      lastError: expect.stringContaining("exited before creating a task"),
+      state: "CONSUMED",
     });
-    expect(restore).toHaveBeenCalledWith(routed.workbenchTaskId);
-    expect(ensure).toHaveBeenCalledWith(routed.workbenchTaskId);
+    expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
+      .toMatchObject({ state: "FAILED", lastError: expect.stringContaining("without a durable task link") });
+    expect(restore).not.toHaveBeenCalled();
+    expect(ensure).not.toHaveBeenCalled();
   });
 
   it("restores a lost boundary for an already-running idle Workbench", async () => {
@@ -1570,13 +1558,17 @@ describe("gateway confirmations and delivery retry", () => {
 
   it("persists a failed discussion delivery and retries it against the original message", async () => {
     const request = inbound({ project: alphaId, rootMessageId: "om_original", threadId: "omt_discussion" });
-    const routed = await routeGatewayInbound(request, vi.fn());
+    const routed = await routeGatewayInbound(
+      request,
+      vi.fn(async () => ({ mode: "started", executionId: "failed-delivery-workbench" })),
+      successfulSender("om_failed_delivery_queued"),
+    );
     expect(routed.mode).toBe("project_discussion");
     if (routed.mode !== "project_discussion") return;
     const failedSender = vi.fn(async () => ({ ok: false as const, output: "temporary gateway failure" }));
-    await expect(completeGatewayDiscussion(routed.inboundId, "Project-aware answer", failedSender))
+    await expect(completeGatewayDiscussion(routed.inboundId, "Project-aware answer", routed.workbenchTaskId, failedSender))
       .resolves.toMatchObject({ ok: false, error: "temporary gateway failure" });
-    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
+    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId, kind: "DISCUSSION_REPLY" } }))
       .toMatchObject({ state: "FAILED", attempts: 1, lastError: "temporary gateway failure" });
 
     const retrySender = vi.fn(async (input: HarnessGatewaySendInput) => ({
@@ -1591,7 +1583,7 @@ describe("gateway confirmations and delivery retry", () => {
       threadId: "omt_discussion",
       presentation: expect.objectContaining({ title: "💬 小塔 · 项目讨论" }),
     }));
-    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
+    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId, kind: "DISCUSSION_REPLY" } }))
       .toMatchObject({ state: "DELIVERED", attempts: 2, platformMessageId: "om_retry_success" });
     expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
       .toMatchObject({ state: "PROCESSED" });
@@ -1599,7 +1591,11 @@ describe("gateway confirmations and delivery retry", () => {
 
   it("does not replay a platform send whose native reply target cannot be verified", async () => {
     const request = inbound({ project: alphaId, rootMessageId: "om_unverified_root" });
-    const routed = await routeGatewayInbound(request, vi.fn());
+    const routed = await routeGatewayInbound(
+      request,
+      vi.fn(async () => ({ mode: "started", executionId: "unverified-workbench" })),
+      successfulSender("om_unverified_queued"),
+    );
     expect(routed.mode).toBe("project_discussion");
     if (routed.mode !== "project_discussion") return;
     vi.useFakeTimers({ now: new Date("2026-07-28T04:00:00.000Z") });
@@ -1609,9 +1605,9 @@ describe("gateway confirmations and delivery retry", () => {
       output: "platform message exists but has no parent_id",
       metadata: { message_id: "om_unverified_send" },
     }));
-    await expect(completeGatewayDiscussion(routed.inboundId, "Do not duplicate this", sender))
+    await expect(completeGatewayDiscussion(routed.inboundId, "Do not duplicate this", routed.workbenchTaskId, sender))
       .resolves.toMatchObject({ ok: false });
-    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
+    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId, kind: "DISCUSSION_REPLY" } }))
       .toMatchObject({
         state: "SENT_UNVERIFIED",
         attempts: 1,
@@ -1620,7 +1616,7 @@ describe("gateway confirmations and delivery retry", () => {
         lastError: "platform message exists but has no parent_id",
       });
 
-    await expect(completeGatewayDiscussion(routed.inboundId, "Do not duplicate this", sender))
+    await expect(completeGatewayDiscussion(routed.inboundId, "Do not duplicate this", routed.workbenchTaskId, sender))
       .resolves.toMatchObject({
         ok: false,
         deduped: true,
@@ -1632,7 +1628,9 @@ describe("gateway confirmations and delivery retry", () => {
       .resolves.toEqual({ scanned: 0, delivered: 0, failed: 0 });
     expect(vi.getTimerCount()).toBe(0);
 
-    const delivery = await db.gatewayDelivery.findFirstOrThrow({ where: { inboundId: routed.inboundId } });
+    const delivery = await db.gatewayDelivery.findFirstOrThrow({
+      where: { inboundId: routed.inboundId, kind: "DISCUSSION_REPLY" },
+    });
     await db.gatewayDelivery.update({
       where: { id: delivery.id },
       data: { state: "SENDING", updatedAt: new Date(Date.now() - 2 * 60_000) },
@@ -1649,7 +1647,7 @@ describe("gateway confirmations and delivery retry", () => {
       project: alphaId,
       rootMessageId: "om_auto_retry_root",
       threadId: "omt_auto_retry",
-    }), vi.fn());
+    }), vi.fn(async () => ({ mode: "started", executionId: "auto-retry-workbench" })), successfulSender("om_auto_retry_queued"));
     expect(routed.mode).toBe("project_discussion");
     if (routed.mode !== "project_discussion") return;
 
@@ -1662,27 +1660,26 @@ describe("gateway confirmations and delivery retry", () => {
         metadata: { chat_id: "oc_gateway_test", message_id: "om_auto_retry_success", reply_to_message_id: input.replyToMessageId!, msg_type: "interactive", send_mode: "reply" as const },
       }));
 
-    await expect(completeGatewayDiscussion(routed.inboundId, "Retry this answer", sender))
+    await expect(completeGatewayDiscussion(routed.inboundId, "Retry this answer", routed.workbenchTaskId, sender))
       .resolves.toMatchObject({ ok: false, error: "temporary automatic retry failure" });
     expect(sender).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(1);
 
-    await expect(completeGatewayDiscussion(routed.inboundId, "A changed retry answer", sender))
+    await expect(completeGatewayDiscussion(routed.inboundId, "A changed retry answer", routed.workbenchTaskId, sender))
       .resolves.toMatchObject({ ok: false, deduped: true, pendingRetry: true });
     expect(sender).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(1);
 
     await vi.advanceTimersByTimeAsync(5_000);
     await vi.waitFor(() => expect(sender).toHaveBeenCalledTimes(2));
-    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId } }))
+    expect(await db.gatewayDelivery.findFirst({ where: { inboundId: routed.inboundId, kind: "DISCUSSION_REPLY" } }))
       .toMatchObject({ state: "DELIVERED", attempts: 2, platformMessageId: "om_auto_retry_success" });
     expect(await db.gatewayInbound.findUnique({ where: { id: routed.inboundId } }))
       .toMatchObject({ state: "PROCESSED" });
-    const storedAssistant = await db.assistantMessage.findFirst({
-      where: { sessionId: routed.assistantSessionId, role: "ASSISTANT" },
+    const storedDelivery = await db.gatewayDelivery.findFirstOrThrow({
+      where: { inboundId: routed.inboundId, kind: "DISCUSSION_REPLY" },
     });
-    expect(storedAssistant?.partsJson).toContain("Retry this answer");
-    expect(storedAssistant?.partsJson).not.toContain("changed retry answer");
+    expect(storedDelivery.content).toBe("Retry this answer");
     expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -9,16 +9,22 @@ import { gatewayOwnerToolNames, gatewayQueryToolNames } from "@/mcp/tool-capabil
 
 export type TowerAgentGateway = "openclaw" | "hermes";
 
-const TOWER_AGENT_PACKAGE_VERSION = "7";
+const TOWER_AGENT_PACKAGE_VERSION = "9";
 const OPENCLAW_CAPABILITY_PLUGIN_ID = "tower-capability-bridge";
+const OPENCLAW_SENDER_ROLE_TOOL = "tower_sender_role";
 const TOWER_GATEWAY_SKILL_NAMES = ["tower"] as const;
 const OPENCLAW_PROJECT_READER_TOOLS = gatewayQueryToolNames.map((name) => `tower__${name}`);
 const OPENCLAW_OWNER_GATEWAY_TOOLS = gatewayOwnerToolNames.map((name) => `tower__${name}`);
 const OPENCLAW_OPERATOR_DELEGATION_TOOLS = ["agents_list", "sessions_send", "message"] as const;
 const OPENCLAW_TOWER_GROUP_PROMPT =
+  "Before every OWNER-sensitive decision or action, call tower_sender_role and use its trusted sender_is_owner value. " +
+  "Tool availability is only a capability decision and must never be used to infer OWNER identity. " +
+  "If sender_is_owner is true but an OWNER tool is missing, report that capability as unavailable; never claim " +
+  "the sender is not OWNER. If the trusted role is absent, do not perform OWNER actions. " +
   "Use only the Tower tools exposed for the verified sender. Ordinary Q&A and third-party/operator requests " +
-  "stay in OpenClaw and must not be persisted or routed through Tower. Tower-related non-reply messages use " +
-  "tower__route_gateway_message. A reply to a Tower delivery must first use tower__resolve_gateway_task_context; " +
+  "stay in OpenClaw and must not be persisted or routed through Tower. OWNER Tower-related non-reply messages use " +
+  "tower__route_gateway_message; NON_OWNER project questions use only tower__route_gateway_query. " +
+  "A reply to a Tower delivery must first use tower__resolve_gateway_task_context; " +
   "finding a task never authorizes terminal resume. Read-only status questions use query tools without continuation, " +
   "open ask_human answers use tower__reply_to_ask. For an OWNER request that needs a computer, browser, SaaS, " +
   "or another external system, discover only the configured private Operator with agents_list, then send exactly one " +
@@ -36,8 +42,10 @@ const OPENCLAW_TOWER_GROUP_PROMPT =
   "after it returns project_work, stop the turn with NO_REPLY because the resident Workbench exclusively owns " +
   "task creation, execution, review, and external callbacks. Never call a direct mutation tool from this ingress " +
   "agent, never retry by omitting gatewayInboundId, and never start a second task for a queued request. " +
-  "For read-only project questions, route through tower__route_gateway_query, read only the returned bound " +
-  "project context, and finish with tower__complete_gateway_discussion. NON_OWNER senders are read-only. " +
+  "For a NON_OWNER read-only project question, call tower__route_gateway_query exactly once and answer only " +
+  "from that result. It creates no Gateway inbound, session, Workbench event, or task. Never call " +
+  "tower__route_gateway_message for NON_OWNER. OWNER project discussions use PROJECT_DISCUSSION and then stop " +
+  "with NO_REPLY because the resident Workbench owns the answer. " +
   "Never claim that a task, terminal action, computer action, or project mutation occurred unless Tower's " +
   "durable gateway path reports it.";
 
@@ -191,6 +199,7 @@ function installOpenClawProfile(input: {
     installOpenClawCapabilityPlugin(resourceDir, input.paths);
     copyTowerSkills(path.join(workspaceDir, "skills"));
     writeMcpConfig(path.join(workspaceDir, "mcp.json"));
+    upsertOpenClawTowerMcpServer(input.paths.openclawConfigPath);
     writeEnvFile(path.join(workspaceDir, "gateway.env"), input.env);
     writeMarker(markerPath, {
       gateway: "openclaw",
@@ -207,6 +216,10 @@ function installOpenClawProfile(input: {
       name: input.profile,
       workspace: workspaceDir,
       agentDir,
+      // This is a Tower ingress profile, not a general OpenClaw assistant.
+      // Replace inherited skill allowlists so reinstalls cannot retain office
+      // or coding skills from an older profile.
+      skills: [...TOWER_GATEWAY_SKILL_NAMES],
       identity: { name: input.displayName, emoji: "🗼" },
       subagents: { allowAgents: operatorAgentIds, requireAgentId: true },
       tools: hasAccessPolicy
@@ -269,16 +282,17 @@ function buildOpenClawTowerToolPolicy(
   const { owners } = normalizedAccessEntries(policy);
   const delegationTools = operatorDelegationEnabled ? [...OPENCLAW_OPERATOR_DELEGATION_TOOLS] : [];
   const allGatewayTools = Array.from(new Set([
+    OPENCLAW_SENDER_ROLE_TOOL,
     ...OPENCLAW_PROJECT_READER_TOOLS,
     ...OPENCLAW_OWNER_GATEWAY_TOOLS,
     ...delegationTools,
   ]));
   const toolsBySender: Record<string, { allow: string[] }> = {
-    "*": { allow: [...OPENCLAW_PROJECT_READER_TOOLS] },
+    "*": { allow: [OPENCLAW_SENDER_ROLE_TOOL, ...OPENCLAW_PROJECT_READER_TOOLS] },
   };
   for (const owner of owners) {
     toolsBySender[`channel:${owner.platform}:${owner.id}`] = {
-      allow: [...OPENCLAW_OWNER_GATEWAY_TOOLS, ...delegationTools, "session_status"],
+      allow: [OPENCLAW_SENDER_ROLE_TOOL, ...OPENCLAW_OWNER_GATEWAY_TOOLS, ...delegationTools, "session_status"],
     };
   }
   return {
@@ -585,6 +599,25 @@ function writeMcpConfig(targetPath: string): void {
     JSON.stringify({ mcpServers: { [cfg.name]: { command: cfg.command, args: cfg.args, env: cfg.env ?? {} } } }, null, 2) + "\n",
     "utf-8",
   );
+}
+
+function upsertOpenClawTowerMcpServer(configPath: string): void {
+  const cfg = readJson<OpenClawConfig>(configPath) ?? {};
+  const mcp = cfg.mcp && typeof cfg.mcp === "object" && !Array.isArray(cfg.mcp)
+    ? cfg.mcp as Record<string, unknown>
+    : {};
+  const servers = mcp.servers && typeof mcp.servers === "object" && !Array.isArray(mcp.servers)
+    ? mcp.servers as Record<string, unknown>
+    : {};
+  const tower = buildTowerMcpConfig({ profile: "gateway" });
+  cfg.mcp = {
+    ...mcp,
+    servers: {
+      ...servers,
+      [tower.name]: { command: tower.command, args: tower.args, env: tower.env ?? {} },
+    },
+  };
+  writeJsonWithBackup(configPath, cfg);
 }
 
 function writeEnvFile(targetPath: string, env: Record<string, string> | undefined): void {

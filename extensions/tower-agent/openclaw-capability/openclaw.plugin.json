@@ -5,6 +5,16 @@
   "activation": {
     "onStartup": true
   },
+  "contracts": {
+    "tools": [
+      "tower_sender_role"
+    ]
+  },
+  "toolMetadata": {
+    "tower_sender_role": {
+      "replaySafe": true
+    }
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

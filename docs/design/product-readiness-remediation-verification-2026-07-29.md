@@ -79,9 +79,10 @@
 | 飞书策略加固复测 | `E2E-POLICY-20260729-1628`：仅调用 route/read/complete；写工具调用 0；任务总数前后均为 819 |
 | 飞书新卡片复测 | `E2E-CARD-20260729-1800`：排队、任务创建、任务完成三张新版卡片均引用原消息成功；字段网格、状态中文化、目标/验收结果分区正确 |
 
-最终飞书复测返回了两个最近任务，并由 `complete_gateway_discussion` 投递到原消息线程。入口会话记录
-显示调用链严格为 `route_gateway_query -> read_gateway_project_context ->
-complete_gateway_discussion`，未调用任何任务写工具。
+最终飞书复测返回了两个最近任务，并由 `complete_gateway_discussion` 投递到原消息线程。当时的入口会话记录显示三段调用链且未调用任务写工具。
+
+> 2026-08-05 后续架构更新：上述三段链路只是历史验收证据，已被单次
+> `route_gateway_query` 取代。新链路不创建 `GatewayInbound`、会话或 Workbench 事件。
 
 新版卡片真实截图：[`assets/feishu-card-e2e-2026-07-29.jpeg`](./assets/feishu-card-e2e-2026-07-29.jpeg)。
 

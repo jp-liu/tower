@@ -438,12 +438,67 @@ function parsePayload(event: WorkbenchEventRecord): WorkbenchEventPayload {
   }
 }
 
+/**
+ * Review callbacks are snapshots of one child execution, not an append-only
+ * command log. If several turns accumulate while the parent is busy, only the
+ * newest snapshot is actionable. A terminal child task has already received a
+ * supervisor decision, so any review callback that was still pending is stale.
+ */
+async function discardStalePendingReviews<
+  T extends Pick<WorkbenchEventRecord, "id" | "sourceTaskId" | "executionId" | "kind">,
+>(tx: Prisma.TransactionClient, pending: T[]): Promise<T[]> {
+  const reviews = pending.filter((event) => event.kind === "CHILD_REVIEW_REQUIRED");
+  if (reviews.length === 0) return pending;
+
+  const taskStates = await tx.task.findMany({
+    where: { id: { in: [...new Set(reviews.map((event) => event.sourceTaskId))] } },
+    select: { id: true, status: true },
+  });
+  const terminalTasks = new Set(
+    taskStates
+      .filter((task) => task.status === "DONE" || task.status === "CANCELLED")
+      .map((task) => task.id),
+  );
+  const discarded = new Set(
+    reviews
+      .filter((event) => terminalTasks.has(event.sourceTaskId))
+      .map((event) => event.id),
+  );
+
+  const newestByExecution = new Map<string, string>();
+  for (const event of reviews) {
+    if (discarded.has(event.id) || !event.executionId) continue;
+    const key = `${event.sourceTaskId}:${event.executionId}`;
+    const previous = newestByExecution.get(key);
+    if (previous) discarded.add(previous);
+    newestByExecution.set(key, event.id);
+  }
+
+  if (discarded.size > 0) {
+    const consumedAt = new Date();
+    await tx.workbenchEvent.updateMany({
+      where: { id: { in: [...discarded] }, state: "PENDING" },
+      data: {
+        state: "CONSUMED",
+        claimToken: null,
+        claimedAt: null,
+        batchId: null,
+        consumedAt,
+        lastError: null,
+      },
+    });
+  }
+  return pending.filter((event) => !discarded.has(event.id));
+}
+
 function eventHeading(kind: WorkbenchEventKind): string {
   switch (kind) {
     case "CHILD_DECISION_REQUIRED":
       return "DECISION REQUIRED";
     case "CHILD_EXECUTION_FAILED":
       return "EXECUTION FAILED";
+    case "GATEWAY_DISCUSSION_REQUEST":
+      return "GATEWAY DISCUSSION REQUEST";
     case "GATEWAY_WORK_REQUEST":
       return "GATEWAY WORK REQUEST";
     case "CAPABILITY_RESULT_AVAILABLE":
@@ -481,7 +536,10 @@ export function buildWorkbenchBatchPrompt(
     })}${protocol}`;
   }
 
-  if (events.length === 1 && events[0].kind === "GATEWAY_WORK_REQUEST") {
+  if (
+    events.length === 1
+    && (events[0].kind === "GATEWAY_DISCUSSION_REQUEST" || events[0].kind === "GATEWAY_WORK_REQUEST")
+  ) {
     const payload = parsePayload(events[0]);
     return `${payload.instruction || "[External project work request]\nNo instruction was stored."}${protocol}`;
   }
@@ -528,7 +586,7 @@ export function buildWorkbenchBatchPrompt(
 
   const items = events.map((event, index) => {
     const payload = parsePayload(event);
-    const detail = event.kind === "GATEWAY_WORK_REQUEST"
+    const detail = event.kind === "GATEWAY_DISCUSSION_REQUEST" || event.kind === "GATEWAY_WORK_REQUEST"
       ? (payload.instruction || "(no external work instruction)").slice(0, 8000)
       : event.kind === "CAPABILITY_RESULT_AVAILABLE"
         ? `Capability: ${payload.capability ?? "unknown"}; status: ${payload.status ?? "unknown"}; request: ${payload.requestId ?? "unknown"}; summary: ${(payload.summary || "(no summary)").slice(0, 1600)}`
@@ -565,11 +623,12 @@ async function claimWorkbenchEvents(parentTaskId: string): Promise<{ token: stri
       data: { state: "PENDING", claimToken: null, claimedAt: null, batchId: null },
     });
 
-    const pending = await tx.workbenchEvent.findMany({
+    const candidates = await tx.workbenchEvent.findMany({
       where: { parentTaskId, state: "PENDING" },
-      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }, { id: "asc" }],
       take: WORKBENCH_MAX_BATCH_SIZE,
     });
+    const pending = await discardStalePendingReviews(tx, candidates);
     if (pending.length === 0) return { token: "", events: [] };
 
     const token = randomUUID();
@@ -587,7 +646,7 @@ async function claimWorkbenchEvents(parentTaskId: string): Promise<{ token: stri
     });
     const events = await tx.workbenchEvent.findMany({
       where: { parentTaskId, state: "PROCESSING", claimToken: token },
-      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     });
     return { token, events: events as WorkbenchEventRecord[] };
   });
@@ -919,17 +978,44 @@ export async function resolveWorkbenchBatch(
 }
 
 export async function recordWorkbenchProviderTurnCompleted(parentTaskId: string): Promise<boolean> {
-  const [runtime, activeBatch] = await Promise.all([
-    db.workbenchRuntime.findUnique({
-      where: { taskId: parentTaskId },
-      select: { taskId: true },
-    }),
-    db.workbenchBatch.findFirst({
-      where: { parentTaskId, state: { in: ["CLAIMED", "DISPATCHED", "ACKED"] } },
-      orderBy: { createdAt: "desc" },
-      select: { id: true },
-    }),
-  ]);
+  const completedAt = new Date();
+  const { runtime, activeBatch } = await db.$transaction(async (tx) => {
+    const [runtime, batch] = await Promise.all([
+      tx.workbenchRuntime.findUnique({
+        where: { taskId: parentTaskId },
+        select: { taskId: true },
+      }),
+      tx.workbenchBatch.findFirst({
+        where: { parentTaskId, state: { in: ["CLAIMED", "DISPATCHED", "ACKED"] } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, state: true },
+      }),
+    ]);
+    if (batch && (batch.state === "DISPATCHED" || batch.state === "ACKED")) {
+      await tx.workbenchEvent.updateMany({
+        where: { batchId: batch.id, state: "PROCESSING" },
+        data: {
+          state: "CONSUMED",
+          claimToken: null,
+          claimedAt: null,
+          consumedAt: completedAt,
+          lastError: null,
+        },
+      });
+      await tx.workbenchBatch.update({
+        where: { id: batch.id },
+        data: {
+          state: "RESOLVED",
+          resolvedAt: completedAt,
+          leaseExpiresAt: null,
+          lastHeartbeatAt: completedAt,
+          lastError: null,
+        },
+      });
+      return { runtime, activeBatch: null };
+    }
+    return { runtime, activeBatch: batch };
+  });
   if (!runtime) return false;
   await recordWorkbenchRuntime(parentTaskId, activeBatch ? "BUSY" : "IDLE", {
     activeBatchId: activeBatch?.id ?? null,
@@ -1053,8 +1139,10 @@ export function restoreWorkbenchDrainBoundary(parentTaskId: string): boolean {
   return true;
 }
 
-function claudeTranscriptEndedAtTurnBoundary(sessionId: string): boolean {
-  const projectsDir = path.join(os.homedir(), ".claude", "projects");
+function claudeTranscriptEndedAtTurnBoundary(
+  sessionId: string,
+  projectsDir = path.join(os.homedir(), ".claude", "projects"),
+): boolean {
   let projectDirs: fs.Dirent[];
   try {
     projectDirs = fs.readdirSync(projectsDir, { withFileTypes: true });
@@ -1103,27 +1191,99 @@ function claudeTranscriptEndedAtTurnBoundary(sessionId: string): boolean {
   return false;
 }
 
+function findCodexTranscript(sessionId: string, sessionsDir: string): string | null {
+  const suffix = `${sessionId}.jsonl`;
+  const directories = [sessionsDir];
+  while (directories.length > 0) {
+    const directory = directories.pop()!;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const candidate = path.join(directory, entry.name);
+      if (entry.isDirectory()) directories.push(candidate);
+      else if (entry.isFile() && entry.name.endsWith(suffix)) return candidate;
+    }
+  }
+  return null;
+}
+
+export function codexTranscriptEndedAtTurnBoundary(
+  sessionId: string,
+  sessionsDir = path.join(os.homedir(), ".codex", "sessions"),
+  lastInputAt = 0,
+): boolean {
+  const transcriptPath = findCodexTranscript(sessionId, sessionsDir);
+  if (!transcriptPath) return false;
+
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(transcriptPath, "r");
+    const stat = fs.fstatSync(fd);
+    const length = Math.min(stat.size, 256 * 1024);
+    const buffer = Buffer.alloc(length);
+    fs.readSync(fd, buffer, 0, length, stat.size - length);
+    const lines = buffer.toString("utf8").split("\n");
+    for (let index = lines.length - 1; index >= 0; index--) {
+      const line = lines[index]?.trim();
+      if (!line) continue;
+      let record: { timestamp?: string; type?: string; payload?: { type?: string } };
+      try {
+        record = JSON.parse(line) as typeof record;
+      } catch {
+        continue;
+      }
+      if (record.type !== "event_msg") continue;
+      if (record.payload?.type === "task_complete") {
+        const completedAt = record.timestamp ? Date.parse(record.timestamp) : Number.NaN;
+        return lastInputAt === 0 || (Number.isFinite(completedAt) && completedAt >= lastInputAt);
+      }
+      if (record.payload?.type === "task_started") return false;
+    }
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  return false;
+}
+
 /**
  * Recover the authoritative provider boundary when Tower missed the HTTP Stop
  * callback during a restart. Claude persists `stop_reason=end_turn` before it
  * invokes hooks, so this remains safe when terminal-output idleness would not.
  */
-export async function restoreWorkbenchBoundaryFromProviderTranscript(parentTaskId: string): Promise<boolean> {
+export async function restoreWorkbenchBoundaryFromProviderTranscript(
+  parentTaskId: string,
+  options: { claudeProjectsDir?: string; codexSessionsDir?: string } = {},
+): Promise<boolean> {
   const session = getSession(parentTaskId);
   if (!session || session.killed) return false;
   const execution = await db.taskExecution.findFirst({
     where: {
       taskId: parentTaskId,
       status: "RUNNING",
-      agent: "CLAUDE_CODE",
+      agent: { in: ["CLAUDE_CODE", "CODEX_CLI"] },
       sessionId: { not: null },
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true, sessionId: true },
+    select: { id: true, agent: true, sessionId: true },
   });
-  if (!execution?.sessionId || !claudeTranscriptEndedAtTurnBoundary(execution.sessionId)) return false;
+  if (!execution?.sessionId) return false;
+  const atBoundary = execution.agent === "CODEX_CLI"
+    ? codexTranscriptEndedAtTurnBoundary(
+        execution.sessionId,
+        options.codexSessionsDir,
+        session.lastInputAt ?? 0,
+      )
+    : claudeTranscriptEndedAtTurnBoundary(execution.sessionId, options.claudeProjectsDir);
+  if (!atBoundary) return false;
   if (!markSessionTurnComplete(parentTaskId)) return false;
   openWorkbenchDrainBoundary(parentTaskId, execution.id);
+  await recordWorkbenchProviderTurnCompleted(parentTaskId);
   return true;
 }
 
@@ -1286,7 +1446,7 @@ export async function recoverWorkbenchEventClaims(now = new Date()): Promise<num
           },
           ...(expiredBatchIds.length > 0
             ? [{
-                state: { in: ["PROCESSING", "CONSUMED"] },
+                state: "PROCESSING",
                 batchId: { in: expiredBatchIds },
               } satisfies Prisma.WorkbenchEventWhereInput]
             : []),
@@ -1309,7 +1469,7 @@ export async function recoverWorkbenchEventClaims(now = new Date()): Promise<num
     const result = await tx.workbenchEvent.updateMany({
       where: {
         id: { in: expired.map((event) => event.id) },
-        state: { in: ["PROCESSING", "CONSUMED"] },
+        state: "PROCESSING",
       },
       data: {
         state: "PENDING",

@@ -40,6 +40,7 @@ const completionSchema = z.discriminatedUnion("action", [
     action: z.literal("discussion"),
     inboundId: z.string().min(1).max(128),
     response: z.string().trim().min(1).max(16_000),
+    reviewerTaskId: z.string().min(1).max(128),
   }).strict(),
   z.object({
     action: z.literal("task_created"),
@@ -97,7 +98,11 @@ export async function PUT(request: NextRequest) {
   try {
     switch (parsed.data.action) {
       case "discussion":
-        return NextResponse.json(await completeGatewayDiscussion(parsed.data.inboundId, parsed.data.response));
+        return NextResponse.json(await completeGatewayDiscussion(
+          parsed.data.inboundId,
+          parsed.data.response,
+          parsed.data.reviewerTaskId,
+        ));
       case "task_created":
         return NextResponse.json(await confirmGatewayTaskCreated(
           parsed.data.inboundId,

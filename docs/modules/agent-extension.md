@@ -97,13 +97,13 @@ OpenClaw 先做能力边界判断。普通问答和第三方 operator 工作留�
 | 路由 | 职责边界 | 进入 Workbench | 创建用户任务 | 回复链路与持久化 |
 |------|----------|----------------|--------------|------------------|
 | `TOWER` | 在网关内调用 Tower MCP 做查询或简单操作 | 否 | 路由本身不创建；只有用户明确要求且 MCP 成功时才可能创建 | 网关直接回复；任何写操作只能在工具成功后确认。 |
-| `PROJECT_DISCUSSION` | 使用独立、项目绑定的 Assistant 讨论会话 | 否 | **否，不创建 WorkItem 或子任务** | 每轮写入 `AssistantMessage`；`complete_gateway_discussion` 持久化原生卡片并回复当前入站消息，同时保留 thread。 |
+| `PROJECT_DISCUSSION` | 由项目常驻 Workbench 基于仓库上下文讨论 | 是，通过 `GATEWAY_DISCUSSION_REQUEST` | **否，不创建 WorkItem 或子任务** | Workbench 调用 `complete_gateway_discussion` 回复当前入站消息。 |
 | `PROJECT_WORK` | 把工程工作交给项目常驻 Workbench 调研、下发、审查 | 是，只经持久化事件队列 | Workbench 成功调用 `create_task` 后才创建 | Tower 先发原生“已排队”卡片；随后发真实数据创建卡片；审查通过后发最终结果卡片。 |
 
 项目讨论和项目工作必须严格分开：
 
-- 项目讨论复用独立的项目绑定讨论会话，不进入 Workbench，不创建 `WorkItem`、子任务或 `WorkbenchEvent`。
-- 项目工作才会持久化一个 `GATEWAY_WORK_REQUEST`，进入 Workbench 的安全边界队列。
+- 项目讨论持久化 `GATEWAY_DISCUSSION_REQUEST` 并进入项目 Workbench，但不创建 `WorkItem` 或子任务。
+- 只有后续明确的“创建任务/开始工作”请求才持久化 `GATEWAY_WORK_REQUEST`，由同一 Workbench 创建并监督子任务。
 - PTY 写入只把持久批次标成 `DISPATCHED`；Workbench 必须调用 `ack_workbench_batch` 后事件才算 `CONSUMED`，处理或稳定委派后再调用 `resolve_workbench_batch`。120 秒没有 ACK 会自动重排。
 - 项目常驻 Workbench 是内部协调基础设施，不等于用户请求创建的任务。
 - `PROJECT_WORK` 返回 `queued: true` 只表示入站消息和 Workbench 事件已经持久化，**不表示任务已经创建**。
@@ -112,7 +112,7 @@ OpenClaw 先做能力边界判断。普通问答和第三方 operator 工作留�
 
 项目解析会优先使用回复绑定、现有线程绑定和用户明确提供的项目 id/名称/别名。仍有多个候选时必须让用户选择，不能擅自挑最高分项目。无显式线程的连续讨论按“群聊 + 发送者 + 会话类型”复用，最近项目回退七天后失效；显式线程绑定不使用这项过期回退。
 
-项目讨论按 `assistant.historyTurns` 恢复最近轮次，过长上下文会截断并显式标记。每轮回复完成后释放本轮执行资源，但讨论绑定和最多 100 轮 Tower-owned 历史继续保留；回复旧讨论卡片可以恢复绑定。创建任务不会关闭讨论。用户明确说“结束 Tower 讨论”时传 `sessionAction=CLOSE`；明确开始新讨论或切换项目时传 `sessionAction=NEW`。OpenClaw `/new` 不会透传为 Tower 关闭信号，因此不能用它结束 Tower 讨论。
+项目讨论复用项目常驻 Workbench 上下文。创建任务不会另建一个讨论 Assistant 会话；Workbench 根据后续事件类型区分“直接回答”和“创建子任务”。
 
 回复旧任务卡片时，先调用 `resolve_gateway_task_context` 只读解析任务、项目、状态、OPEN ask 和最近执行摘要。随后按意图选择动作：OPEN ask 用 `reply_to_ask`；状态/结果问题只读查询；外部系统工作带 `towerContext` 委托，不修改 Tower；只有明确“继续/修复/重跑”才调用 OWNER-only `continue_bound_task`。普通解析不会恢复终端。只有用户明确说“创建新任务”或“开始新工作”时才传 `startNewWork=true`，覆盖旧任务回复绑定。
 
@@ -148,7 +148,7 @@ OpenClaw 先做能力边界判断。普通问答和第三方 operator 工作留�
 讨论 <项目名>：当前网关方案最大的风险是什么？不要创建任务。
 ```
 
-预期：回答包含该项目上下文；没有 WorkItem、子任务或项目工作队列事件。
+预期：回答由该项目常驻 Workbench 产生；有一个讨论队列事件，但没有 WorkItem 或子任务。
 
 随后在同一飞书线程回复：
 

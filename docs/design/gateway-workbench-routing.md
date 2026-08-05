@@ -12,9 +12,10 @@ queue service or another worker process.
 | Durable Coordinator | Persistent inbound/event/delivery state, deduplication, safe-boundary queueing, retry and restart recovery | Intent classification or project decisions |
 
 Ordinary questions and external extension operations remain in the gateway.
-Tower queries and simple mutations run through MCP in the gateway. Only project
-work enters the resident Workbench. Project discussion uses a separate
-project-bound discussion session, so it cannot block on a busy Workbench PTY.
+NON_OWNER project queries are single-call, scoped MCP reads with no durable
+inbound state. OWNER project discussion and project work both enter the
+resident Workbench through distinct durable event types; discussion answers
+directly, while work may create and supervise a child task.
 
 ## Persistence
 
@@ -22,8 +23,8 @@ The gateway layer adds no replacement for `Task`, `WorkItem`, or `TaskGroup`.
 `Task` remains the only unit of work.
 
 - `GatewaySession` binds `gateway + platform + chat + thread/root message` to a
-  project. `WORKBENCH` sessions also point to the resident Tower task;
-  `DISCUSSION` sessions point to an independent project-bound Assistant session.
+  project. Current OWNER discussion and work routes use `WORKBENCH` sessions;
+  `DISCUSSION` is retained only for compatibility with older rows.
 - `GatewayInbound` is the deduplicated inbound envelope and queue state. Its
   stable key includes gateway, platform, chat, and platform message id.
 - `GatewayDelivery` is an idempotent, retryable reply to the original channel.
@@ -32,8 +33,8 @@ The gateway layer adds no replacement for `Task`, `WorkItem`, or `TaskGroup`.
   fallback and native-card payload are persisted for stable retries.
 - `HarnessDelivery` remains the compatibility mapping for
   `[[tower:task=...]]`, parked asks, and work-channel task replies.
-- `WorkbenchEvent` remains the only durable inbox that can inject project work
-  into a Workbench PTY.
+- `WorkbenchEvent` remains the only durable inbox that can inject OWNER project
+  discussion or work into a Workbench PTY.
 
 ## Channel Policy
 
@@ -58,7 +59,7 @@ projects without choosing a default project.
 
 ## Project Resolution
 
-`route_gateway_message` resolves project context in this exact order:
+`route_gateway_message` resolves OWNER discussion/work project context in this exact order:
 
 1. replied-to delivery, explicit task id, or `[[tower:task=...]]` binding;
 2. existing thread/root-message session binding;
@@ -75,32 +76,30 @@ is reserved for an explicit create-new-task/start-new-work request and overrides
 an old task reply binding. `sessionAction=NEW` skips the old discussion binding
 for an explicit fresh discussion or project switch.
 
+NON_OWNER calls `route_gateway_query` instead. That one MCP call revalidates the
+channel scope, resolves only an allowed project, and loads bounded knowledge and
+task status. It does not create a `GatewayInbound`, `GatewaySession`,
+`AssistantSession`, `WorkbenchEvent`, or task.
+
 Every step is constrained by the channel workspace and project allowlist. More
 than one remaining match returns candidates and requires selection. No route is
 allowed to choose the highest-scored candidate when alternatives remain.
 
-Threadless messages use a stable chat + sender + session-kind anchor. This
-preserves one discussion Assistant session for consecutive messages from the
+Threadless OWNER messages use a stable chat + sender + session-kind anchor. This
+preserves the resident Workbench binding for consecutive messages from the
 same person while preventing participants in a group chat from sharing context.
 Sender-based session/recent-project lookup expires after seven days; an old
 project is never selected silently forever. Explicit thread/root bindings do
 not use this recency fallback.
 
-## Discussion History And Lifecycle
+## Discussion Lifecycle
 
-Each `PROJECT_DISCUSSION` inbound creates a Tower-owned `AssistantTurn` with
-paired user and assistant `AssistantMessage` rows. Each route restores the
-latest configurable `assistant.historyTurns` completed turns, bounded to 12,000
-characters, and reports when older context was truncated. Stored history is
-bounded to 100 completed turns per discussion.
-
-Completing a reply settles the turn and releases per-turn execution resources,
-while its `GatewaySession` binding remains durable. Tower/OpenClaw restarts do
-not erase it, and replying to an old delivered discussion card can reactivate a
-closed binding. Creating a task does not close a discussion. Use
-`sessionAction=CLOSE` for an explicit Tower-side close and `sessionAction=NEW`
-for a fresh discussion/project switch. OpenClaw `/new` is not a Tower close
-signal and is never relied on for this lifecycle.
+Each OWNER `PROJECT_DISCUSSION` inbound creates or reuses the project's resident
+Workbench session and enqueues one `GATEWAY_DISCUSSION_REQUEST`. The Workbench
+may inspect repository state and then calls `complete_gateway_discussion`; it
+must not create a child task merely because the discussion reaches a plan. A
+later explicit create/start request reuses the same Workbench but enqueues
+`GATEWAY_WORK_REQUEST` instead.
 
 Duplicate Tower inbound callbacks never replay an actionable route. `QUEUED` or live
 `PROCESSING` rows return `in_progress` with `noOp: true`; `PROCESSED` rows return
@@ -112,9 +111,10 @@ a no-op and is recovered through the coordinator path.
 
 ## Workbench Queueing
 
-`PROJECT_WORK` creates or reuses the project's resident Tower task, persists the
-inbound envelope, and enqueues one `GATEWAY_WORK_REQUEST` event. The Workbench is
-then started or resumed idempotently.
+`PROJECT_DISCUSSION` and `PROJECT_WORK` create or reuse the project's resident
+Tower task, persist the inbound envelope, and enqueue `GATEWAY_DISCUSSION_REQUEST`
+or `GATEWAY_WORK_REQUEST` respectively. The Workbench is then started or resumed
+idempotently.
 
 - A live busy Workbench receives no direct PTY write. The event remains pending
   until `openWorkbenchDrainBoundary` observes a completed turn.

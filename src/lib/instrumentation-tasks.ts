@@ -151,6 +151,7 @@ export async function ensureTowerLabel() {
  */
 export async function ensureTowerTask(projectId: string, projectName: string): Promise<string> {
   const { TOWER_LABEL_NAME } = await import("@/lib/constants");
+  await ensureTowerLabel();
 
   // Find by Tower label (rename-safe)
   const existing = await db.task.findFirst({
@@ -163,7 +164,7 @@ export async function ensureTowerTask(projectId: string, projectName: string): P
   if (existing) return existing.id;
 
   // Create with label
-  const towerLabel = await db.label.findFirst({
+  const towerLabel = await db.label.findFirstOrThrow({
     where: { name: TOWER_LABEL_NAME, isBuiltin: true },
   });
 
@@ -175,7 +176,7 @@ export async function ensureTowerTask(projectId: string, projectName: string): P
       status: "TODO",
       priority: "LOW",
       order: 0,
-      ...(towerLabel ? { labels: { create: { labelId: towerLabel.id } } } : {}),
+      labels: { create: { labelId: towerLabel.id } },
     },
     select: { id: true },
   });

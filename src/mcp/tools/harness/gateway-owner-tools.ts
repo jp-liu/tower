@@ -57,7 +57,8 @@ export const gatewayOwnerTools = {
       "command), PROJECT_DISCUSSION, or PROJECT_WORK. Tower applies reply/task binding, thread/session binding, " +
       "explicit project, identify_project, recent-user project, and channel default in that strict order. It " +
       "returns candidates instead of guessing. Task replies return context without terminal side effects; project " +
-      "work is durably queued for the project Workbench; discussions get an independent project-bound session. " +
+      "work and project discussions are durably queued for the resident Workbench with distinct event types. " +
+      "A discussion never creates a child task; only a later explicit create/start request becomes project work. " +
       "Set startNewWork only for an explicit create-new-task/start-new-work request, so it " +
       "can override an old task-card reply; ordinary task follow-ups keep their reply binding. Use sessionAction=CLOSE " +
       "for an explicit Tower discussion close, and NEW when explicitly switching projects or starting a fresh discussion. " +

@@ -68,7 +68,7 @@ start/input/stop、Workbench batch 等写接口。若 `TOWER_RUNTIME_HOST=0.0.0.
 2. binding 缺失、workspace 缺失、allowed scope 为空时全部 fail-closed；
 3. OpenClaw trusted channel 与 Tower channel binding 保存为同一事务/同一设置流程；
 4. 把授权范围快照写进 GatewayInbound/GatewaySession；
-5. `read_gateway_project_context` 再次校验授权快照；
+5. 只读上下文必须在同一次 `route_gateway_query` 内按当前授权范围加载，不依赖入站快照；
 6. ProductGroup 扩展出的兄弟项目也必须逐项重新校验范围；
 7. 增加“无 binding”“空 allowedProjectIds”“跨工作区”“组内越权”测试。
 

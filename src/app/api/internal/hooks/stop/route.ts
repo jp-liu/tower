@@ -187,7 +187,9 @@ export async function POST(request: NextRequest) {
         state: "CONSUMED",
         claimToken: null,
         claimedAt: null,
+        batchId: null,
         consumedAt: new Date(),
+        lastError: null,
       },
     });
   }

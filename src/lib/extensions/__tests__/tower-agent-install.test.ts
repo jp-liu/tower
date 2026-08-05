@@ -191,7 +191,7 @@ describe("tower agent extension installer", () => {
 
     const installed = await checkTowerAgentExtension("openclaw", { paths });
     expect(installed.installed).toBe(true);
-    expect(installed.version).toBe("7");
+    expect(installed.version).toBe("9");
 
     const removed = await uninstallTowerAgentExtension("openclaw", { paths });
     expect(removed.success).toBe(true);
@@ -295,12 +295,12 @@ describe("tower agent extension installer", () => {
       toolsBySender: {
         "channel:feishu:ou_owner": {
           allow: expect.arrayContaining([
+            "tower_sender_role",
             "tower__route_gateway_message",
             "tower__resolve_gateway_task_context",
             "tower__continue_bound_task",
             "tower__reply_to_ask",
             "tower__list_tasks",
-            "tower__complete_gateway_discussion",
             "tower__recover_gateway_request",
             "tower__provision_remote_project",
             "agents_list",
@@ -311,16 +311,22 @@ describe("tower agent extension installer", () => {
         },
         "*": {
           allow: [
+            "tower_sender_role",
             "tower__route_gateway_query",
-            "tower__read_gateway_project_context",
-            "tower__complete_gateway_discussion",
           ],
         },
       },
     });
+    expect(agent?.skills).toEqual(["tower"]);
     expect(agent?.tools).not.toMatchObject({
       alsoAllow: expect.arrayContaining(["tower__create_task"]),
     });
+    const openClawMcpServers = Object.values(
+      (cfg as { mcp?: { servers?: Record<string, { env?: Record<string, string> }> } }).mcp?.servers ?? {},
+    );
+    expect(openClawMcpServers).toContainEqual(expect.objectContaining({
+      env: expect.objectContaining({ TOWER_MCP_PROFILE: "gateway" }),
+    }));
     expect((cfg as { tools?: Record<string, unknown> }).tools).toMatchObject({
       alsoAllow: ["message"],
       agentToAgent: {
@@ -350,12 +356,12 @@ describe("tower agent extension installer", () => {
         "*": {
           enabled: true,
           requireMention: true,
-          systemPrompt: expect.stringContaining("verified sender"),
+          systemPrompt: expect.stringContaining("sender_is_owner"),
         },
         oc_trusted: {
           enabled: true,
           requireMention: true,
-          systemPrompt: expect.stringContaining("verified sender"),
+          systemPrompt: expect.stringContaining("sender_is_owner"),
         },
       },
     });

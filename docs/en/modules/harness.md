@@ -99,7 +99,9 @@ complete receipt becomes `SENT_UNVERIFIED` and is not blindly resent.
 
 `list_notify_targets` is the pre-send entry point: it reads the active channel for the current scope and returns **ready-to-follow send instructions** telling the agent which gateway to use and whether to park. The explicit-recipient message path in `tower-bridge` calls it first; unattended OWNER messages use the bounded CapabilityRequest path in the same skill.
 
-`route_gateway_message` is the OWNER entry point for Tower-related messages. Ordinary Q&A and external capabilities remain in OpenClaw and never call Tower. Old clients that send `DIRECT` receive `direct_not_supported` without a `GatewayInbound` row. Stateful routing persists and deduplicates first, then resolves reply/task binding → thread/session binding → explicit project → one identify_project match → sender's recent project → channel default. Project discussion replies use `complete_gateway_discussion`. Project work is only queued for the Workbench; the Workbench calls `confirm_gateway_task_created` after a real `create_task` result and `complete_gateway_work` after review.
+`route_gateway_message` is the OWNER entry point for stateful Tower messages. Ordinary Q&A and external capabilities remain in OpenClaw and never call Tower. Old clients that send `DIRECT` receive `direct_not_supported` without a `GatewayInbound` row. `route_gateway_query` is the NON_OWNER single-call read boundary: it validates current channel scope, resolves an allowed project, and returns bounded context without creating a `GatewayInbound`, session, Workbench event, or task.
+
+OWNER discussion and work routes persist and deduplicate first, then resolve reply/task binding → thread/session binding → explicit project → one identify_project match → sender's recent project → channel default. Discussions enqueue `GATEWAY_DISCUSSION_REQUEST` for the project Workbench, which replies through `complete_gateway_discussion`. Only a later explicit create/start request enqueues `GATEWAY_WORK_REQUEST`; the Workbench calls `confirm_gateway_task_created` after a real `create_task` result and `complete_gateway_work` after review.
 
 A duplicate platform message never replays an action: processing/queued rows return `in_progress + noOp`, while completed rows return `already_processed + noOp`. Threadless discussions reuse a chat + sender scoped session, with recent project context expiring after seven days. Failed deliveries are retried at `nextAttemptAt` by one process-local `unref` timer in addition to startup recovery.
 
@@ -180,7 +182,8 @@ The decision looks at just two axes — **has a parent or not** × **is a human 
 
 - `list_notify_targets` / `push_to_human` / `ask_human` / `notify_human` / `reply_to_ask` / `relay_channel_reply`
 - `resolve_gateway_task_context` / `continue_bound_task`
-- `route_gateway_message` / `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
+- `route_gateway_message` / `route_gateway_query`
+- `complete_gateway_discussion` / `confirm_gateway_task_created` / `complete_gateway_work`
 
 ### Core Library (`src/lib/harness/`)
 
