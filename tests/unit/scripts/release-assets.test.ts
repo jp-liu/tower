@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const { assemble, TARGETS } = require("../../../scripts/assemble-release-assets.js");
-const { assertReleaseIdentity, sha256, verifyExistingAsset } = require("../../../scripts/publish-github-release.js");
+const { assertReleaseIdentity, publish, resolveTagCommit, sha256, verifyExistingAsset } = require("../../../scripts/publish-github-release.js");
 const roots: string[] = [];
 
 afterEach(() => {
@@ -34,6 +34,58 @@ describe("release asset assembly", () => {
     expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(8);
     expect(readFileSync(path.join(output, "RELEASE_NOTES.md"), "utf8"))
       .toContain("Node.js >=22.0.0");
+    expect(readFileSync(path.join(output, "RELEASE_NOTES.md"), "utf8"))
+      .toContain("--rollback");
+  });
+
+  it("peels an annotated remote tag to its commit", () => {
+    const commit = "a".repeat(40);
+    const tagObject = "b".repeat(40);
+    expect(resolveTagCommit("tower-org/tower", "v0.3.1", (args: string[]) => {
+      const endpoint = args[1];
+      if (endpoint.endsWith("/git/ref/tags/v0.3.1")) return { object: { type: "tag", sha: tagObject } };
+      if (endpoint.endsWith(`/git/tags/${tagObject}`)) return { object: { type: "commit", sha: commit } };
+      throw new Error(`unexpected endpoint ${endpoint}`);
+    })).toBe(commit);
+  });
+
+  it("creates a missing release and uploads every immutable asset", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "tower-assets-publish-"));
+    roots.push(root);
+    const notesPath = path.join(root, "RELEASE_NOTES.md");
+    writeFileSync(notesPath, "release notes\n");
+    writeFileSync(path.join(root, "SHA256SUMS"), "checksums\n");
+    const uploaded: string[] = [];
+    const release = { tag_name: "v0.3.1", body: "release notes\n", assets: [] };
+    publish({ repository: "tower-org/tower", tag: "v0.3.1", commit: "a".repeat(40), assetsDir: root, notesPath }, {
+      resolveTagCommit: () => "a".repeat(40),
+      getRelease: () => null,
+      createRelease: () => release,
+      uploadAsset: (_repository: string, _tag: string, file: string) => uploaded.push(path.basename(file)),
+    });
+    expect(uploaded).toEqual(["SHA256SUMS"]);
+  });
+
+  it("repairs a partial release but refuses a moved tag before any upload", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "tower-assets-repair-"));
+    roots.push(root);
+    const notesPath = path.join(root, "RELEASE_NOTES.md");
+    const assetPath = path.join(root, "SHA256SUMS");
+    writeFileSync(notesPath, "release notes\n");
+    writeFileSync(assetPath, "checksums\n");
+    const uploaded: string[] = [];
+    publish({ repository: "tower-org/tower", tag: "v0.3.1", commit: "a".repeat(40), assetsDir: root, notesPath }, {
+      resolveTagCommit: () => "a".repeat(40),
+      getRelease: () => ({ tag_name: "v0.3.1", body: "release notes", assets: [{ name: "SHA256SUMS" }] }),
+      verifyExistingAsset: () => sha256(assetPath),
+      uploadAsset: (_repository: string, _tag: string, file: string) => uploaded.push(file),
+    });
+    expect(uploaded).toEqual([]);
+
+    expect(() => publish({ repository: "tower-org/tower", tag: "v0.3.1", commit: "a".repeat(40), assetsDir: root, notesPath }, {
+      resolveTagCommit: () => "b".repeat(40),
+      getRelease: () => { throw new Error("must not inspect a release for a moved tag"); },
+    })).toThrow(/remote tag.*not release commit/);
   });
 
   it("does not assemble a release with a missing target", () => {

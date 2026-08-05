@@ -39,6 +39,22 @@ function createRelease(repository, tag, commit, notes) {
   }
 }
 
+function resolveTagCommit(repository, tag, api = ghJson) {
+  const encodedTag = encodeURIComponent(tag);
+  const ref = api(["api", `repos/${repository}/git/ref/tags/${encodedTag}`]);
+  let object = ref.object;
+  const seen = new Set();
+  while (object?.type === "tag") {
+    if (seen.has(object.sha) || seen.size >= 10) throw new Error(`could not safely peel remote tag ${tag}`);
+    seen.add(object.sha);
+    object = api(["api", `repos/${repository}/git/tags/${object.sha}`]).object;
+  }
+  if (object?.type !== "commit" || !/^[0-9a-f]{40}$/.test(object.sha || "")) {
+    throw new Error(`remote tag ${tag} does not resolve to a full commit SHA`);
+  }
+  return object.sha;
+}
+
 function existingAssetHash(asset) {
   if (asset.digest?.startsWith("sha256:")) return asset.digest.slice("sha256:".length);
   const temporary = path.join(os.tmpdir(), `tower-release-asset-${asset.id}-${process.pid}`);
@@ -71,10 +87,19 @@ function assertReleaseIdentity(release, tag, notes) {
   }
 }
 
-function publish({ repository, tag, commit, assetsDir, notesPath }) {
+function uploadAsset(repository, tag, file) {
+  execFileSync("gh", ["release", "upload", tag, file, "--repo", repository], { stdio: "inherit" });
+}
+
+function publish({ repository, tag, commit, assetsDir, notesPath }, operations = {}) {
+  const client = { createRelease, getRelease, resolveTagCommit, uploadAsset, verifyExistingAsset, ...operations };
   const notes = fs.readFileSync(notesPath, "utf8");
-  let release = getRelease(repository, tag);
-  if (!release) release = createRelease(repository, tag, commit, notes);
+  const remoteCommit = client.resolveTagCommit(repository, tag);
+  if (remoteCommit !== commit) {
+    throw new Error(`remote tag ${tag} resolves to ${remoteCommit}, not release commit ${commit}`);
+  }
+  let release = client.getRelease(repository, tag);
+  if (!release) release = client.createRelease(repository, tag, commit, notes);
   assertReleaseIdentity(release, tag, notes);
   const existing = new Map((release.assets || []).map((asset) => [asset.name, asset]));
   const files = fs.readdirSync(assetsDir)
@@ -85,11 +110,11 @@ function publish({ repository, tag, commit, assetsDir, notesPath }) {
     if (!fs.statSync(file).isFile()) continue;
     const asset = existing.get(name);
     if (asset) {
-      const localHash = verifyExistingAsset(asset, file);
+      const localHash = client.verifyExistingAsset(asset, file);
       console.log(`[release:github] reuse ${name} (${localHash})`);
       continue;
     }
-    execFileSync("gh", ["release", "upload", tag, file, "--repo", repository], { stdio: "inherit" });
+    client.uploadAsset(repository, tag, file);
   }
   console.log(`[release:github] ${tag} assets are complete`);
 }
@@ -104,5 +129,5 @@ function main() {
   publish({ repository, tag, commit, assetsDir: path.resolve(assetsDir), notesPath: path.resolve(notesPath) });
 }
 
-module.exports = { assertReleaseIdentity, existingAssetHash, publish, sha256, verifyExistingAsset };
+module.exports = { assertReleaseIdentity, existingAssetHash, publish, resolveTagCommit, sha256, verifyExistingAsset };
 if (require.main === module) main();

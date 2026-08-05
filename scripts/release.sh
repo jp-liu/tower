@@ -46,6 +46,7 @@ step "Validate explicit publication approval"
 EXPECTED_APPROVAL="${PACKAGE_NAME}@${PACKAGE_VERSION}"
 [ "$APPROVAL" = "$EXPECTED_APPROVAL" ] || die "set TOWER_RELEASE_APPROVED=$EXPECTED_APPROVAL after final approval"
 [ -n "${TOWER_RELEASE_TAG:-}" ] || die "TOWER_RELEASE_TAG is required for publication"
+[ -n "${TOWER_RELEASE_COMMIT:-}" ] || die "TOWER_RELEASE_COMMIT is required for publication"
 node scripts/release-context.js --tag "$TOWER_RELEASE_TAG" --confirmation "$APPROVAL"
 [ -z "$(git status --porcelain)" ] || die "the worktree must be clean before publication"
 
@@ -55,12 +56,18 @@ case "$REMOTE_URL" in
   *) die "origin must point to tower-org/tower before publication (got ${REMOTE_URL:-none})" ;;
 esac
 
-if npm view "$EXPECTED_APPROVAL" version --registry "$REGISTRY" >/dev/null 2>&1; then
-  PUBLISHED_COMMIT="$(npm view "$EXPECTED_APPROVAL" gitHead --registry "$REGISTRY" 2>/dev/null || true)"
-  [ -n "${TOWER_RELEASE_COMMIT:-}" ] || die "TOWER_RELEASE_COMMIT is required to verify an existing npm publication"
+NPM_VIEW_ERROR="$PACK_DIR/npm-view-error.log"
+if npm view "$EXPECTED_APPROVAL" version --registry "$REGISTRY" >/dev/null 2>"$NPM_VIEW_ERROR"; then
+  if ! PUBLISHED_COMMIT="$(npm view "$EXPECTED_APPROVAL" gitHead --registry "$REGISTRY" 2>"$NPM_VIEW_ERROR")"; then
+    die "could not verify the existing npm publication; refusing to continue"
+  fi
   [ "$PUBLISHED_COMMIT" = "$TOWER_RELEASE_COMMIT" ] || die "$EXPECTED_APPROVAL exists with gitHead ${PUBLISHED_COMMIT:-missing}, expected $TOWER_RELEASE_COMMIT"
   printf '\nVerified existing npm publication %s at %s; continuing safe release repair.\n' "$EXPECTED_APPROVAL" "$PUBLISHED_COMMIT"
   exit 0
+elif grep -Eq '(^|[[:space:]])E404([[:space:]]|$)|404 Not Found' "$NPM_VIEW_ERROR"; then
+  printf 'Confirmed %s is absent from npm.\n' "$EXPECTED_APPROVAL"
+else
+  die "could not prove $EXPECTED_APPROVAL is absent from npm; refusing to publish"
 fi
 
 step "Publish scoped public package with provenance"

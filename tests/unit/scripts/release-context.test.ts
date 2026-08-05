@@ -16,6 +16,9 @@ describe("release context gate", () => {
       head: commit,
       tagCommit: commit,
       workflowSha: commit,
+      workflowDefinitionSha: commit,
+      ref: "refs/tags/v0.3.1",
+      releaseCommit: commit,
     })).toEqual({ tag: "v0.3.1", commit, packageSpec: "@tower-org/cli@0.3.1" });
   });
 
@@ -24,6 +27,9 @@ describe("release context gate", () => {
     ["confirmation", { confirmation: "@tower-org/cli@0.3.0" }],
     ["tag commit", { tagCommit: "b".repeat(40) }],
     ["workflow commit", { workflowSha: "c".repeat(40) }],
+    ["workflow definition", { workflowDefinitionSha: "d".repeat(40) }],
+    ["workflow ref", { ref: "refs/heads/main" }],
+    ["release commit", { releaseCommit: "e".repeat(40) }],
   ])("rejects a mismatched %s", (_label, override) => {
     expect(() => assertReleaseContext({
       packageName: "@tower-org/cli",
@@ -33,6 +39,9 @@ describe("release context gate", () => {
       head: commit,
       tagCommit: commit,
       workflowSha: commit,
+      workflowDefinitionSha: commit,
+      ref: "refs/tags/v0.3.1",
+      releaseCommit: commit,
       ...override,
     })).toThrow(/Release context gate failed/);
   });

@@ -42,7 +42,7 @@ jobs:
         env:
           TOWER_RELEASE_TAG: ${{ inputs.tag }}
           TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
-        run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA"
+        run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA" --workflow-definition-sha "$GITHUB_WORKFLOW_SHA" --ref "$GITHUB_REF"
       - name: Run existing release gates
         run: pnpm release:prepare
       - name: Create the exact npm pack input
@@ -198,7 +198,7 @@ jobs:
         env:
           TOWER_RELEASE_TAG: ${{ inputs.tag }}
           TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
-        run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA"
+        run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA" --workflow-definition-sha "$GITHUB_WORKFLOW_SHA" --ref "$GITHUB_REF"
       - name: Publish or verify npm package with provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
