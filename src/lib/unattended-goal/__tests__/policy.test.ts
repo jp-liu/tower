@@ -13,6 +13,7 @@ import { up as addCapabilities } from "../../../../scripts/migrations/0030-capab
 import { up as addCapabilityResultWakeup } from "../../../../scripts/migrations/0031-capability-result-wakeup";
 import { up as addGoalPolicy } from "../../../../scripts/migrations/0032-unattended-goal-policy";
 import { up as addCapabilityCompletionCallback } from "../../../../scripts/migrations/0033-capability-completion-callback";
+import { up as addFinalNotification } from "../../../../scripts/migrations/0036-unattended-final-notification";
 
 const mocks = vi.hoisted(() => ({
   setSignal: vi.fn(),
@@ -45,6 +46,7 @@ async function database(): Promise<PrismaClient> {
     CREATE TABLE "Task" (
       "id" TEXT NOT NULL PRIMARY KEY,
       "title" TEXT NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'IN_PROGRESS',
       "projectId" TEXT NOT NULL,
       "unattended" INTEGER NOT NULL DEFAULT 0,
       "parentTaskId" TEXT,
@@ -57,6 +59,7 @@ async function database(): Promise<PrismaClient> {
       "id" TEXT NOT NULL PRIMARY KEY,
       "taskId" TEXT NOT NULL,
       "status" TEXT NOT NULL,
+      "summary" TEXT,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -77,6 +80,7 @@ async function database(): Promise<PrismaClient> {
   await addCapabilityResultWakeup(client);
   await addGoalPolicy(client);
   await addCapabilityCompletionCallback(client);
+  await addFinalNotification(client);
   await client.$executeRawUnsafe(
     `INSERT INTO "Task" ("id", "title", "projectId") VALUES ('goal-1', 'Ship release', 'project-1')`,
   );

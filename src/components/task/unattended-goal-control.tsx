@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { Loader2, ShieldCheck, ShieldOff } from "lucide-react";
+import { AlertTriangle, Loader2, RotateCcw, ShieldCheck, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -18,6 +18,7 @@ import {
   disableUnattendedGoalFromUi,
   enableUnattendedGoalFromUi,
   getUnattendedGoalControl,
+  recoverUnattendedGoalNotificationFromUi,
 } from "@/actions/unattended-goal-actions";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
@@ -60,7 +61,26 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
     return () => { cancelled = true; };
   }, [taskId]);
 
-  const active = Boolean(state?.active && state.ownerMessageGrant);
+  const modeActive = Boolean(state?.active);
+  const authorized = Boolean(state?.ownerMessageGrant);
+  const notification = state?.runtime?.ownerNotificationRequestId ? state.runtime : null;
+  const notificationUncertain = notification?.ownerNotificationState === "SIDE_EFFECT_UNKNOWN";
+  const notificationNeedsRecovery = Boolean(
+    notification
+    && notification.ownerNotificationState !== "SUCCEEDED"
+    && !notificationUncertain,
+  );
+  const needsAuthorizationRenewal = modeActive && !authorized;
+  const actionMode = notificationNeedsRecovery
+    ? "recover"
+    : needsAuthorizationRenewal
+      ? "renew"
+      : modeActive
+        ? "disable"
+        : notificationUncertain
+          ? "inspect"
+          : "enable";
+  const active = modeActive && authorized;
   const apply = () => {
     // useTransition updates `pending` on the next render. Guard synchronously too,
     // so two clicks in the same event turn cannot submit the mutation twice.
@@ -69,8 +89,10 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
     setUpdateError(null);
     startTransition(async () => {
       try {
-        if (active) {
+        if (actionMode === "disable") {
           await disableUnattendedGoalFromUi(taskId);
+        } else if (actionMode === "recover") {
+          await recoverUnattendedGoalNotificationFromUi({ taskId });
         } else {
           await enableUnattendedGoalFromUi({
             taskId,
@@ -82,7 +104,13 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
         setState(await getUnattendedGoalControl(taskId));
         setLoadFailed(false);
         setDialogOpen(false);
-        toast.success(active ? t("unattended.disabled") : t("unattended.enabled"));
+        toast.success(actionMode === "disable"
+          ? t("unattended.disabled")
+          : actionMode === "recover"
+            ? t("unattended.notificationRecovered")
+            : actionMode === "renew"
+              ? t("unattended.authorizationRenewed")
+              : t("unattended.enabled"));
       } catch (error) {
         const message = error instanceof Error ? error.message : t("unattended.updateFailed");
         setUpdateError(message);
@@ -94,6 +122,10 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
   };
 
   const remaining = state?.ownerMessageGrant?.remainingUses ?? 0;
+  const expiresAt = state?.ownerMessageGrant?.expiresAt
+    ? new Date(state.ownerMessageGrant.expiresAt).toLocaleString()
+    : null;
+  const ownerCapability = state?.capabilities.find((item) => item.capability === "human.message.send");
   const optionalCapabilities = state?.capabilities.filter((item) =>
     item.lane === "JOB" && (item.risk === "R2" || item.risk === "R3")
   ) ?? [];
@@ -113,23 +145,38 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
             />
           }
         >
-          {pending || loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : active
-            ? <ShieldCheck className="h-3.5 w-3.5" />
-            : <ShieldOff className="h-3.5 w-3.5" />}
+          {pending || loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : notificationNeedsRecovery || notificationUncertain || needsAuthorizationRenewal
+              ? <AlertTriangle className="h-3.5 w-3.5" />
+              : active
+                ? <ShieldCheck className="h-3.5 w-3.5" />
+                : <ShieldOff className="h-3.5 w-3.5" />}
           {t(loading
             ? "unattended.loading"
             : loadFailed
               ? "unattended.retry"
-              : active
-                ? "unattended.active"
-                : "unattended.inactive")}
+              : notificationNeedsRecovery
+                ? "unattended.notificationFailed"
+                : notificationUncertain
+                  ? "unattended.notificationUncertain"
+                  : needsAuthorizationRenewal
+                    ? "unattended.authorizationNeeded"
+                    : active
+                      ? "unattended.active"
+                      : "unattended.inactive")}
         </TooltipTrigger>
         <TooltipContent side="bottom">
           {loadFailed
             ? t("unattended.updateFailed")
             : active
               ? t("unattended.remaining", { count: String(remaining) })
-              : t("unattended.enableHint")}
+              : notificationNeedsRecovery
+                ? t("unattended.notificationRecoveryHint")
+                : notificationUncertain
+                  ? t("unattended.notificationUncertainHint")
+                  : needsAuthorizationRenewal
+                    ? t("unattended.authorizationRenewHint")
+                    : t("unattended.enableHint")}
         </TooltipContent>
       </Tooltip>
 
@@ -143,12 +190,44 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t(active ? "unattended.disableTitle" : "unattended.enableTitle")}</DialogTitle>
+            <DialogTitle>{t(`unattended.${actionMode}Title` as Parameters<typeof t>[0])}</DialogTitle>
             <DialogDescription>
-              {t(active ? "unattended.disableDescription" : "unattended.enableDescription")}
+              {t(`unattended.${actionMode}Description` as Parameters<typeof t>[0])}
             </DialogDescription>
           </DialogHeader>
-          {!active && (
+          <div className="grid gap-2 border-y py-3 text-xs">
+            <div className="flex items-start justify-between gap-4">
+              <span className="text-muted-foreground">{t("unattended.ownerChannel")}</span>
+              <span className="text-right font-medium">
+                {ownerCapability?.available
+                  ? t("unattended.channelAvailable", { gateway: ownerCapability.gateway ?? "Gateway" })
+                  : t("unattended.channelUnavailable")}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <span className="text-muted-foreground">{t("unattended.authorization")}</span>
+              <span className="text-right font-medium">
+                {authorized
+                  ? t("unattended.authorizationSummary", { count: String(remaining), expiresAt: expiresAt ?? "-" })
+                  : t("unattended.authorizationUnavailable")}
+              </span>
+            </div>
+            <p className="text-muted-foreground">{t("unattended.silentPolicy")}</p>
+            {notification && (
+              <div className="grid gap-1 border-t pt-2">
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-muted-foreground">{t("unattended.finalNotification")}</span>
+                  <span className="text-right font-medium">
+                    {notification.ownerNotificationKind} · {notification.ownerNotificationState}
+                  </span>
+                </div>
+                {notification.ownerNotificationError && (
+                  <p role="status" className="text-destructive">{notification.ownerNotificationError}</p>
+                )}
+              </div>
+            )}
+          </div>
+          {(actionMode === "enable" || actionMode === "renew") && (
             <div className="grid gap-4">
               <div className="grid grid-cols-2 gap-3">
                 <label className="grid gap-1.5 text-xs text-muted-foreground">
@@ -214,15 +293,21 @@ export function UnattendedGoalControl({ taskId }: { taskId: string }) {
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={pending}>
               {t("common.cancel")}
             </Button>
-            <Button
-              variant={active ? "destructive" : "default"}
-              onClick={apply}
-              disabled={pending}
-              aria-busy={pending}
-            >
-              {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {t(active ? "unattended.disableAction" : "unattended.enableAction")}
-            </Button>
+            {actionMode !== "inspect" && (
+              <Button
+                variant={actionMode === "disable" ? "destructive" : "default"}
+                onClick={apply}
+                disabled={pending}
+                aria-busy={pending}
+              >
+                {pending
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : actionMode === "recover"
+                    ? <RotateCcw className="h-3.5 w-3.5" />
+                    : null}
+                {t(`unattended.${actionMode}Action` as Parameters<typeof t>[0])}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

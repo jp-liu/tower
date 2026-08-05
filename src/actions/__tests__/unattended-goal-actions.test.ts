@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     applyLifecycle: vi.fn(),
     setSignal: vi.fn(),
     readMode: vi.fn(),
+    recoverNotification: vi.fn(),
   };
 });
 
@@ -28,10 +29,14 @@ vi.mock("@/lib/unattended-goal/runtime", () => ({
   readUnattendedGoalMode: mocks.readMode,
 }));
 vi.mock("@/lib/harness/unattended-signal", () => ({ setUnattendedSignal: mocks.setSignal }));
+vi.mock("@/lib/unattended-goal/final-notification", () => ({
+  recoverUnattendedGoalFinalNotification: mocks.recoverNotification,
+}));
 
 import {
   disableUnattendedGoalFromUi,
   enableUnattendedGoalFromUi,
+  recoverUnattendedGoalNotificationFromUi,
 } from "../unattended-goal-actions";
 
 beforeEach(() => {
@@ -54,6 +59,8 @@ beforeEach(() => {
   }]);
   mocks.revokeGrants.mockResolvedValue(1);
   mocks.applyLifecycle.mockResolvedValue({ state: "ACTIVE", active: true });
+  mocks.readMode.mockResolvedValue({ active: false, runtime: null });
+  mocks.recoverNotification.mockResolvedValue({ state: "SUCCEEDED" });
 });
 
 describe("unattended Goal UI actions", () => {
@@ -101,6 +108,40 @@ describe("unattended Goal UI actions", () => {
       event: "DEACTIVATED",
     });
     expect(mocks.setSignal).toHaveBeenCalledWith("task-1", false);
+  });
+
+  it("renews an active Goal authorization without restarting its budget", async () => {
+    mocks.readMode.mockResolvedValueOnce({ active: true, runtime: { state: "ACTIVE" } });
+
+    await enableUnattendedGoalFromUi({ taskId: "task-1", durationMinutes: 120, maxUses: 5 });
+
+    expect(mocks.applyLifecycle).toHaveBeenCalledWith(mocks.transaction, expect.objectContaining({
+      taskId: "task-1",
+      event: "ACTIVATED",
+      refreshActive: false,
+    }));
+  });
+
+  it("issues a bounded OWNER grant and recovers a persisted final notification", async () => {
+    mocks.readMode.mockResolvedValueOnce({
+      active: false,
+      runtime: {
+        state: "BLOCKED",
+        ownerNotificationRequestId: "request-1",
+        ownerNotificationKind: "COMPLETED",
+        ownerNotificationState: "BLOCKED",
+      },
+    });
+
+    await expect(recoverUnattendedGoalNotificationFromUi({ taskId: "task-1" }))
+      .resolves.toMatchObject({ notification: { state: "SUCCEEDED" } });
+
+    expect(mocks.replaceGrants).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: "task-1",
+      maxUses: 1,
+    }), mocks.transaction);
+    expect(mocks.applyLifecycle).not.toHaveBeenCalled();
+    expect(mocks.recoverNotification).toHaveBeenCalledWith("task-1", expect.anything(), true);
   });
 
   it("fails closed before opening a transaction when no OWNER route exists", async () => {

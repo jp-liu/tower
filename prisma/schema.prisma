@@ -177,35 +177,43 @@ model Task {
 // Core identifier rather than a Prisma relation: the module owns this lifecycle
 // and can move to another package/store without changing the Task model.
 model UnattendedGoalRuntime {
-  taskId                 String                     @id
-  state                  UnattendedGoalRuntimeState @default(ACTIVE)
-  lastEventKind          String
-  activatedAt            DateTime                   @default(now())
-  endedAt                DateTime?
-  blockedAt              DateTime?
-  blockedReason          String?
-  providerTurns          Int                        @default(0)
-  consecutiveFailures    Int                        @default(0)
-  noProgressTurns        Int                        @default(0)
-  lastProgressAt         DateTime?
-  maxDurationMs          Int                        @default(28800000)
-  maxProviderTurns       Int                        @default(100)
-  maxChildTasks          Int                        @default(50)
-  maxConcurrentChildren  Int                        @default(4)
-  maxConsecutiveFailures Int                        @default(3)
-  maxNoProgressTurns     Int                        @default(5)
-  maxCapabilityJobs      Int                        @default(20)
-  maxTokens              Int?
-  maxCostUsdCents        Int?
-  consumedTokens         Int?
-  consumedCostUsdCents   Int?
-  nextWakeAt             DateTime?
-  wakeReason             String?
-  wakeGeneration         Int                        @default(0)
-  wakePublishedAt        DateTime?
-  blockGeneration        Int                        @default(0)
-  blockEventPublishedAt  DateTime?
-  updatedAt              DateTime                   @updatedAt
+  taskId                       String                     @id
+  state                        UnattendedGoalRuntimeState @default(ACTIVE)
+  lastEventKind                String
+  activatedAt                  DateTime                   @default(now())
+  endedAt                      DateTime?
+  blockedAt                    DateTime?
+  blockedReason                String?
+  providerTurns                Int                        @default(0)
+  consecutiveFailures          Int                        @default(0)
+  noProgressTurns              Int                        @default(0)
+  lastProgressAt               DateTime?
+  maxDurationMs                Int                        @default(28800000)
+  maxProviderTurns             Int                        @default(100)
+  maxChildTasks                Int                        @default(50)
+  maxConcurrentChildren        Int                        @default(4)
+  maxConsecutiveFailures       Int                        @default(3)
+  maxNoProgressTurns           Int                        @default(5)
+  maxCapabilityJobs            Int                        @default(20)
+  maxTokens                    Int?
+  maxCostUsdCents              Int?
+  consumedTokens               Int?
+  consumedCostUsdCents         Int?
+  nextWakeAt                   DateTime?
+  wakeReason                   String?
+  wakeGeneration               Int                        @default(0)
+  wakePublishedAt              DateTime?
+  blockGeneration              Int                        @default(0)
+  blockEventPublishedAt        DateTime?
+  ownerNotificationRequestId   String?
+  ownerNotificationKind        String?
+  ownerNotificationState       String?
+  ownerNotificationSummary     String?
+  ownerNotificationBinding     String?
+  ownerNotificationError       String?
+  ownerNotificationCreatedAt   DateTime?
+  ownerNotificationCompletedAt DateTime?
+  updatedAt                    DateTime                   @updatedAt
 
   @@index([state, updatedAt])
   @@index([state, nextWakeAt])
@@ -256,33 +264,35 @@ model CapabilityGrant {
 // external Job state machine, credentials, routes, and full transcript remain
 // owned by the Gateway/OpenClaw runtime.
 model CapabilityRequest {
-  requestId        String                 @id
-  taskId           String
-  schemaVersion    Int                    @default(1)
-  capability       String
-  lane             CapabilityLane
-  risk             CapabilityRisk
-  authorizationRef String?
-  inputDigest      String
-  inputsJson       String
-  state            CapabilityRequestState @default(PENDING)
-  gateway          String?
-  jobRef           String?
-  outboundId       String?
-  revision         String?
-  resultSummary    String?
-  evidenceJson     String?
-  lastError        String?
-  completedAt      DateTime?
+  requestId              String                 @id
+  taskId                 String
+  schemaVersion          Int                    @default(1)
+  capability             String
+  lane                   CapabilityLane
+  risk                   CapabilityRisk
+  authorizationRef       String?
+  inputDigest            String
+  inputsJson             String
+  state                  CapabilityRequestState @default(PENDING)
+  gateway                String?
+  jobRef                 String?
+  outboundId             String?
+  revision               String?
+  resultSummary          String?
+  evidenceJson           String?
+  lastError              String?
+  completedAt            DateTime?
   resultEventPublishedAt DateTime?
-  callbackTokenHash String?
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
+  callbackTokenHash      String?
+  goalTerminalKind       String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
 
   @@index([taskId, state, updatedAt])
   @@index([state, updatedAt])
   @@index([jobRef])
   @@index([outboundId])
+  @@index([taskId, capability, goalTerminalKind, state])
 }
 
 enum CapabilityLane {

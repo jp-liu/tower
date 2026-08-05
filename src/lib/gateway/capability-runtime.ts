@@ -301,6 +301,10 @@ async function createCapabilityRequest(
     );
   }
   const requiresGrant = envelope.risk === "R2" || envelope.risk === "R3";
+  const goalTerminalKind = envelope.lane === "DIRECT"
+    && typeof envelope.inputs.goalTerminal === "string"
+    ? envelope.inputs.goalTerminal
+    : null;
   return database.$transaction(async (tx) => {
     const existing = await tx.capabilityRequest.findUnique({ where: { requestId: envelope.requestId } });
     if (existing) {
@@ -333,6 +337,29 @@ async function createCapabilityRequest(
         || grant.expiresAt <= new Date()
         || grant.usedCount >= grant.maxUses
       ) throw new Error(`${envelope.risk} capability requires a valid bounded OWNER authorization grant`);
+      if (goalTerminalKind) {
+        const runtime = await tx.unattendedGoalRuntime.findUnique({
+          where: { taskId: envelope.towerContext.taskId },
+        });
+        if (runtime?.ownerNotificationRequestId && runtime.ownerNotificationRequestId !== envelope.requestId) {
+          throw new Error("The unattended Goal terminal notification already has a stable requestId");
+        }
+        if (runtime && !runtime.ownerNotificationRequestId) {
+          await tx.unattendedGoalRuntime.update({
+            where: { taskId: runtime.taskId },
+            data: {
+              ownerNotificationRequestId: envelope.requestId,
+              ownerNotificationKind: goalTerminalKind,
+              ownerNotificationState: "PENDING",
+              ownerNotificationSummary: String(envelope.inputs.message),
+              ownerNotificationBinding: `[[tower:task=${runtime.taskId}]]`,
+              ownerNotificationError: null,
+              ownerNotificationCreatedAt: new Date(),
+              ownerNotificationCompletedAt: null,
+            },
+          });
+        }
+      }
       const consumed = await tx.capabilityGrant.updateMany({
         where: {
           id: grant.id,
@@ -355,6 +382,7 @@ async function createCapabilityRequest(
         authorizationRef: envelope.authorizationRef,
         inputDigest: digest,
         inputsJson: JSON.stringify(envelope.inputs),
+        goalTerminalKind,
       },
     });
   });

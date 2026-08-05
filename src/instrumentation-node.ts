@@ -205,6 +205,10 @@ async function initializeNodeRuntime() {
       try {
         const { reconcileUnattendedGoals } = await import("@/lib/unattended-goal/policy");
         await reconcileUnattendedGoals();
+        const { reconcileUnattendedGoalFinalNotifications } = await import(
+          "@/lib/unattended-goal/final-notification"
+        );
+        await reconcileUnattendedGoalFinalNotifications();
       } catch (error) {
         console.error("[unattended-goal] Durable reconciliation failed:", error);
       } finally {

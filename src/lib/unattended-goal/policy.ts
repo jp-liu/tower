@@ -203,10 +203,6 @@ async function blockGoal(
       data: { unattended: false },
       select: { id: true },
     });
-    await tx.capabilityGrant.updateMany({
-      where: { taskId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
     return tx.unattendedGoalRuntime.update({
       where: { taskId },
       data: {
@@ -223,7 +219,15 @@ async function blockGoal(
   });
   if (!blocked) throw new Error("Unattended Goal no longer exists");
   setUnattendedSignal(taskId, false);
-  return publishBlockedGoalIfNeeded(blocked, database);
+  const published = await publishBlockedGoalIfNeeded(blocked, database);
+  const { ensureUnattendedGoalFinalNotification } = await import("./final-notification");
+  await ensureUnattendedGoalFinalNotification({
+    taskId,
+    kind: "BLOCKED",
+    lifecycleEvent: blocked.lastEventKind,
+    reason: blocked.blockedReason,
+  }, database as never);
+  return database.unattendedGoalRuntime.findUniqueOrThrow({ where: { taskId: published.taskId } });
 }
 
 export async function enforceUnattendedGoalBudget(

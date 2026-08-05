@@ -35,4 +35,15 @@ describe("CapabilityRequest v1 contract", () => {
     expect(() => capabilityRequestSchema.parse({ ...envelope(), risk: "R0" })).toThrow();
     expect(() => capabilityRequestSchema.parse({ ...envelope(), lane: "JOB" })).toThrow();
   });
+
+  it("accepts only structured unattended terminal purposes", () => {
+    expect(capabilityRequestSchema.parse({
+      ...envelope(),
+      inputs: { ...envelope().inputs, goalTerminal: "COMPLETED" },
+    }).inputs).toMatchObject({ goalTerminal: "COMPLETED" });
+    expect(() => capabilityRequestSchema.parse({
+      ...envelope(),
+      inputs: { ...envelope().inputs, goalTerminal: "MILESTONE" },
+    })).toThrow();
+  });
 });

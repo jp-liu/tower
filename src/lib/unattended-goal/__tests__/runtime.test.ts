@@ -22,6 +22,14 @@ const runtimeDefaults = {
   lastProgressAt: null,
   nextWakeAt: null,
   wakeReason: null,
+  ownerNotificationRequestId: null,
+  ownerNotificationKind: null,
+  ownerNotificationState: null,
+  ownerNotificationSummary: null,
+  ownerNotificationBinding: null,
+  ownerNotificationError: null,
+  ownerNotificationCreatedAt: null,
+  ownerNotificationCompletedAt: null,
   maxDurationMs: 28_800_000,
   maxProviderTurns: 100,
   maxChildTasks: 50,
@@ -171,7 +179,7 @@ describe("unattended goal runtime", () => {
       },
     });
 
-    const result = await endUnattendedGoalIfActive(db as never, "task-1", "TERMINAL_STOPPED");
+    const result = await endUnattendedGoal(db as never, "task-1", "TERMINAL_STOPPED");
 
     expect(result).toMatchObject({ state: "ENDED" });
     expect(capabilityGrant.updateMany).toHaveBeenCalledWith({

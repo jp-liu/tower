@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { up } from "../../../../scripts/migrations/0029-unattended-goal-runtime";
+import { up as addCapabilities } from "../../../../scripts/migrations/0030-capability-runtime";
 import { up as addGoalPolicy } from "../../../../scripts/migrations/0032-unattended-goal-policy";
+import { up as addFinalNotification } from "../../../../scripts/migrations/0036-unattended-final-notification";
 
 const clients: PrismaClient[] = [];
 const directories: string[] = [];
@@ -43,6 +45,9 @@ describe("unattended goal migrations", () => {
     await up(prisma);
     await addGoalPolicy(prisma);
     await addGoalPolicy(prisma);
+    await addCapabilities(prisma);
+    await addFinalNotification(prisma);
+    await addFinalNotification(prisma);
 
     const rows = await prisma.$queryRawUnsafe<Array<{
       taskId: string;
@@ -67,6 +72,8 @@ describe("unattended goal migrations", () => {
       "nextWakeAt",
       "wakeGeneration",
       "blockEventPublishedAt",
+      "ownerNotificationRequestId",
+      "ownerNotificationState",
     ]));
     await prisma.$executeRawUnsafe(`
       INSERT INTO "UnattendedGoalProgressFact" (

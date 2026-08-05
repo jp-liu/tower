@@ -13,6 +13,7 @@ import { up } from "../../../../scripts/migrations/0030-capability-runtime";
 import { up as addResultWakeup } from "../../../../scripts/migrations/0031-capability-result-wakeup";
 import { up as addGoalPolicy } from "../../../../scripts/migrations/0032-unattended-goal-policy";
 import { up as addCompletionCallback } from "../../../../scripts/migrations/0033-capability-completion-callback";
+import { up as addFinalNotification } from "../../../../scripts/migrations/0036-unattended-final-notification";
 
 const mocks = vi.hoisted(() => ({
   outbound: vi.fn(),
@@ -92,6 +93,7 @@ async function database(): Promise<PrismaClient> {
   await addResultWakeup(client);
   await addGoalPolicy(client);
   await addCompletionCallback(client);
+  await addFinalNotification(client);
   await client.$executeRawUnsafe(
     `INSERT INTO "Task" ("id", "title", "projectId") VALUES ('task-1', 'Unattended task', 'project-1')`,
   );

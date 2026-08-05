@@ -77,7 +77,7 @@ const log = logger.create("agent-actions");
 
 async function reportUnattendedGoalLifecycle(
   taskId: string,
-  event: "TERMINAL_STOPPED" | "TERMINAL_COMPLETED",
+  event: "TERMINAL_STOPPED" | "TERMINAL_COMPLETED" | "TERMINAL_FAILED",
 ): Promise<void> {
   const { endUnattendedGoalIfActive } = await import("@/lib/unattended-goal/runtime");
   await endUnattendedGoalIfActive(db, taskId, event);
@@ -85,7 +85,7 @@ async function reportUnattendedGoalLifecycle(
 
 async function reportUnattendedGoalLifecycleBestEffort(
   taskId: string,
-  event: "TERMINAL_COMPLETED",
+  event: "TERMINAL_COMPLETED" | "TERMINAL_FAILED",
 ): Promise<void> {
   try {
     await reportUnattendedGoalLifecycle(taskId, event);
@@ -265,19 +265,19 @@ export async function stopPtyExecution(taskId: string): Promise<void> {
       data: { status: "COMPLETED", endedAt: new Date() },
     });
 
+    // Persist the result before the terminal lifecycle builds its OWNER summary.
+    const summaryPath = execution.worktreePath || task?.project?.localPath || null;
+    const { captureExecutionSummary } = await import("@/lib/execution-summary");
+    await captureExecutionSummary(
+      execution.id, taskId, 0, terminalBuffer, summaryPath, execution.forkCommit
+    );
+
     // Transition task to IN_REVIEW; stopping also ends the optional goal runtime.
     await db.task.update({
       where: { id: taskId },
       data: { status: "IN_REVIEW" },
     });
     await reportUnattendedGoalLifecycle(taskId, "TERMINAL_STOPPED");
-
-    // Capture summary — use worktreePath or project localPath for direct mode
-    const summaryPath = execution.worktreePath || task?.project?.localPath || null;
-    const { captureExecutionSummary } = await import("@/lib/execution-summary");
-    await captureExecutionSummary(
-      execution.id, taskId, 0, terminalBuffer, summaryPath, execution.forkCommit
-    );
   }
   await db.workbenchRuntime.updateMany({
     where: { taskId },
@@ -456,6 +456,8 @@ export async function resumePtyExecution(
         // way a goal task ends — must clear here too, not only on fresh-start exit.
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
         await reportUnattendedGoalLifecycleBestEffort(taskId, "TERMINAL_COMPLETED");
+      } else {
+        await reportUnattendedGoalLifecycleBestEffort(taskId, "TERMINAL_FAILED");
       }
       },
       launch.envOverrides,
@@ -682,6 +684,8 @@ export async function continueLatestPtyExecution(
         // way a goal task ends — must clear here too, not only on fresh-start exit.
         await db.task.update({ where: { id: taskId }, data: { status: "IN_REVIEW" } }).catch(() => {});
         await reportUnattendedGoalLifecycleBestEffort(taskId, "TERMINAL_COMPLETED");
+      } else {
+        await reportUnattendedGoalLifecycleBestEffort(taskId, "TERMINAL_FAILED");
       }
       },
       launch.envOverrides,
@@ -1111,6 +1115,8 @@ export async function startPtyExecution(
                   log.error("Failed to update task status", err);
                 });
                 await reportUnattendedGoalLifecycleBestEffort(taskId, "TERMINAL_COMPLETED");
+              } else {
+                await reportUnattendedGoalLifecycleBestEffort(taskId, "TERMINAL_FAILED");
               }
 
               if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});

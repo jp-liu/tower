@@ -83,12 +83,14 @@ export const ownerMessageInputSchema = {
   properties: {
     message: { type: "string", minLength: 1, maxLength: 4_000 },
     expectReply: { type: "boolean", default: false },
+    goalTerminal: { type: "string", enum: ["COMPLETED", "BLOCKED"] },
   },
 } as const;
 
 const ownerMessageInputs = z.object({
   message: z.string().trim().min(1).max(4_000),
   expectReply: z.boolean().optional(),
+  goalTerminal: z.enum(["COMPLETED", "BLOCKED"]).optional(),
 }).strict();
 
 export const capabilityResultSchema = {

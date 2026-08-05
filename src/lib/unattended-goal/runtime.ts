@@ -6,7 +6,8 @@ export type UnattendedGoalLifecycleEvent =
   | "DEACTIVATED"
   | "TASK_LEFT_ACTIVE_LOOP"
   | "TERMINAL_STOPPED"
-  | "TERMINAL_COMPLETED";
+  | "TERMINAL_COMPLETED"
+  | "TERMINAL_FAILED";
 
 type RuntimeDb = Pick<PrismaClient, "task" | "unattendedGoalRuntime" | "capabilityGrant" | "$transaction">;
 type RuntimeStore = Pick<Prisma.TransactionClient, "task" | "unattendedGoalRuntime" | "capabilityGrant">;
@@ -75,6 +76,14 @@ export interface UnattendedGoalSnapshot {
   lastProgressAt: Date | null;
   nextWakeAt: Date | null;
   wakeReason: string | null;
+  ownerNotificationRequestId: string | null;
+  ownerNotificationKind: string | null;
+  ownerNotificationState: string | null;
+  ownerNotificationSummary: string | null;
+  ownerNotificationBinding: string | null;
+  ownerNotificationError: string | null;
+  ownerNotificationCreatedAt: Date | null;
+  ownerNotificationCompletedAt: Date | null;
   policy: UnattendedGoalPolicy;
 }
 
@@ -103,6 +112,14 @@ function snapshot(runtime: {
   lastProgressAt: Date | null;
   nextWakeAt: Date | null;
   wakeReason: string | null;
+  ownerNotificationRequestId: string | null;
+  ownerNotificationKind: string | null;
+  ownerNotificationState: string | null;
+  ownerNotificationSummary: string | null;
+  ownerNotificationBinding: string | null;
+  ownerNotificationError: string | null;
+  ownerNotificationCreatedAt: Date | null;
+  ownerNotificationCompletedAt: Date | null;
   maxDurationMs: number;
   maxProviderTurns: number;
   maxChildTasks: number;
@@ -128,6 +145,14 @@ function snapshot(runtime: {
     lastProgressAt: runtime.lastProgressAt,
     nextWakeAt: runtime.nextWakeAt,
     wakeReason: runtime.wakeReason,
+    ownerNotificationRequestId: runtime.ownerNotificationRequestId,
+    ownerNotificationKind: runtime.ownerNotificationKind,
+    ownerNotificationState: runtime.ownerNotificationState,
+    ownerNotificationSummary: runtime.ownerNotificationSummary,
+    ownerNotificationBinding: runtime.ownerNotificationBinding,
+    ownerNotificationError: runtime.ownerNotificationError,
+    ownerNotificationCreatedAt: runtime.ownerNotificationCreatedAt,
+    ownerNotificationCompletedAt: runtime.ownerNotificationCompletedAt,
     policy: {
       maxDurationMs: runtime.maxDurationMs,
       maxProviderTurns: runtime.maxProviderTurns,
@@ -245,12 +270,28 @@ export async function applyUnattendedGoalLifecycleEventInTransaction(
             wakeReason: null,
             wakePublishedAt: null,
             blockEventPublishedAt: null,
+            ownerNotificationRequestId: null,
+            ownerNotificationKind: null,
+            ownerNotificationState: null,
+            ownerNotificationSummary: null,
+            ownerNotificationBinding: null,
+            ownerNotificationError: null,
+            ownerNotificationCreatedAt: null,
+            ownerNotificationCompletedAt: null,
             ...policy,
           }
         : {
             endedAt: now,
             nextWakeAt: null,
             wakeReason: null,
+            ownerNotificationRequestId: null,
+            ownerNotificationKind: null,
+            ownerNotificationState: null,
+            ownerNotificationSummary: null,
+            ownerNotificationBinding: null,
+            ownerNotificationError: null,
+            ownerNotificationCreatedAt: null,
+            ownerNotificationCompletedAt: null,
           }),
     },
   });
@@ -295,7 +336,7 @@ export async function endUnattendedGoalIfActive(
   db: RuntimeDb,
   taskId: string,
   event: Exclude<UnattendedGoalLifecycleEvent, "ACTIVATED">,
-): Promise<UnattendedGoalSnapshot | null> {
+): Promise<UnattendedGoalSnapshot | import("./final-notification").GoalFinalNotificationResult | null> {
   const [runtime, task] = await Promise.all([
     db.unattendedGoalRuntime.findUnique({ where: { taskId }, select: { state: true } }),
     db.task.findUnique({ where: { id: taskId }, select: { unattended: true } }),
@@ -304,5 +345,11 @@ export async function endUnattendedGoalIfActive(
     setUnattendedSignal(taskId, false);
     return null;
   }
-  return endUnattendedGoal(db, taskId, event);
+  const { ensureUnattendedGoalFinalNotification } = await import("./final-notification");
+  return ensureUnattendedGoalFinalNotification({
+    taskId,
+    kind: event === "TERMINAL_FAILED" ? "BLOCKED" : "COMPLETED",
+    lifecycleEvent: event,
+    reason: event === "TERMINAL_FAILED" ? "The task terminal exited with a failure" : null,
+  }, db as PrismaClient);
 }

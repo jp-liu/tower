@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getControl: vi.fn(),
   enable: vi.fn(),
   disable: vi.fn(),
+  recover: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
 }));
@@ -15,6 +16,7 @@ vi.mock("@/actions/unattended-goal-actions", () => ({
   getUnattendedGoalControl: mocks.getControl,
   enableUnattendedGoalFromUi: mocks.enable,
   disableUnattendedGoalFromUi: mocks.disable,
+  recoverUnattendedGoalNotificationFromUi: mocks.recover,
 }));
 
 vi.mock("sonner", () => ({
@@ -82,6 +84,7 @@ describe("UnattendedGoalControl", () => {
     mocks.getControl.mockResolvedValue(inactive);
     mocks.enable.mockResolvedValue({ active: true });
     mocks.disable.mockResolvedValue({ active: false });
+    mocks.recover.mockResolvedValue({ active: false });
   });
 
   afterEach(cleanup);
@@ -169,5 +172,32 @@ describe("UnattendedGoalControl", () => {
     expect(retry).toBeEnabled();
     await user.click(retry);
     await waitFor(() => expect(screen.getByRole("button", { name: "启用无人值守" })).toBeEnabled());
+  });
+
+  it("shows the silent parent-Hub policy and recovers a failed final notification", async () => {
+    const failedNotification = {
+      ...inactive,
+      runtime: {
+        state: "BLOCKED",
+        ownerNotificationRequestId: "request-1",
+        ownerNotificationKind: "COMPLETED",
+        ownerNotificationState: "BLOCKED",
+        ownerNotificationError: "OWNER authorization expired",
+      },
+    };
+    mocks.getControl
+      .mockResolvedValueOnce(failedNotification)
+      .mockResolvedValueOnce(inactive);
+    const user = userEvent.setup();
+
+    renderControl();
+    await user.click(await screen.findByRole("button", { name: "最终通知待恢复" }));
+
+    expect(screen.getByText(/子任务和里程碑保持静默/)).toBeInTheDocument();
+    expect(screen.getByText("OWNER authorization expired")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "授权并恢复" }));
+
+    await waitFor(() => expect(mocks.recover).toHaveBeenCalledTimes(1));
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("最终通知恢复已提交");
   });
 });

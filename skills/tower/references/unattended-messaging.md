@@ -54,6 +54,11 @@ There are two outbound intents. Choose exactly one path per logical message.
    - Unattended OWNER -> the CapabilityRequest adapter resolves the fixed configured route.
    - Work recipient -> call `push_to_human` with `to`.
 
+   For an unattended terminal message, set `inputs.goalTerminal` to
+   `COMPLETED` or `BLOCKED`. Tower stores this marker on CapabilityRequest so a
+   repeated lifecycle callback or the platform terminal-notification safety net
+   can adopt the existing request instead of sending another logical message.
+
    — `downstream` decides "over what". Tower resolves exact ids, aliases in `harness.destinations`, and gateway directory entries where available. Some platforms (for example WhatsApp) may need a configured alias/JID rather than a natural group name.
 
 4. **Record only through the selected path**:
@@ -64,6 +69,7 @@ There are two outbound intents. Choose exactly one path per logical message.
 ### Failure & idempotency
 - **If a work-message send fails, do NOT call `ask_human`**; otherwise the task parks but nobody received the question.
 - A capability request uses UUID `requestId` as its durable idempotency key. `SIDE_EFFECT_UNKNOWN` is terminal and must not be retried or rerouted.
+- Active parent Goals persist a final-notification intent before leaving the loop. Delivery failure or expired authorization leaves the Goal visibly BLOCKED and recoverable; child tasks do not inherit grants and never create this OWNER notification.
 - One pending ask per task is supported; `reply_to_ask` is idempotent against an already-answered ask and will not double-inject.
 
 > The recorded `content` should match what you sent (the token may be omitted in the record) so the `/harness` log shows "what was asked" accurately.

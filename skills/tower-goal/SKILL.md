@@ -53,12 +53,22 @@ Work toward the goal; decide anything you can decide yourself. **Don't report pr
 
 On these two cases, submit one `human.message.send` DIRECT request with a stable
 UUID `requestId`, the discovered `authorizationRef`, and `expectReply: true`.
+Set `inputs.goalTerminal` to `COMPLETED` for the final result or `BLOCKED` for a
+real blocker. This structured marker lets Tower adopt the request as the Goal's
+terminal notification and suppress the lifecycle safety-net duplicate.
 The deterministic adapter sends to the fixed OWNER home route and atomically
 records/parks the task. Stop after the result is `SUCCEEDED`; on
 `SIDE_EFFECT_UNKNOWN`, stop and wait for manual reconciliation without retrying:
 
 - **Truly stuck**: a decision that needs the human, missing key info, an ambiguous requirement, or **sign-off before a risky/irreversible action** (drop a DB, force-push, publish externally — required even if the terminal has permissions wide open).
 - **Goal reached**: submit the result + wrap-up with `expectReply: true`, then park and stop.
+
+Tower also persists a terminal-notification intent when an active Goal leaves
+the loop. If the agent omitted the request, Tower uses the remaining bounded
+OWNER grant to submit the same logical notification once. An expired grant or
+delivery failure leaves the Goal visibly `BLOCKED` for UI recovery; it never
+silently marks the Goal ended. `SIDE_EFFECT_UNKNOWN` remains terminal and is
+never retried automatically.
 
 ### 5. Reply → continue; no reply → leave it
 

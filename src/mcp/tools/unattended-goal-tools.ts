@@ -38,7 +38,9 @@ export const unattendedGoalTools = {
       "Enable or disable the optional unattended-goal runtime for this task. Enabling is allowed only when " +
       "an active OpenClaw or Hermes unattended channel exists. This records runtime state; it never grants " +
       "third-party write permission or upgrades the risk authorization of the current run. Optionally persist " +
-      "one future wakeup; calling on=true again is idempotent and does not reset consumed budget.",
+      "one future wakeup; calling on=true again is idempotent and does not reset consumed budget. Child tasks " +
+      "report only to the parent Hub; only overall completion, a real blocker, or risky-action approval contacts " +
+      "the OWNER. The returned runtime includes durable final-notification failure diagnostics.",
     schema: z.object({
       taskId: z.string().describe("The task entering/leaving unattended goal mode (TOWER_TASK_ID)"),
       on: z.boolean().describe("true = activate, false = end"),

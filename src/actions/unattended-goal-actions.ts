@@ -12,6 +12,7 @@ import {
 import { discoverGatewayCapabilities } from "@/lib/gateway/capability-runtime";
 import { OWNER_MESSAGE_CAPABILITY } from "@/lib/gateway/capability-contract";
 import { setUnattendedSignal } from "@/lib/harness/unattended-signal";
+import { recoverUnattendedGoalFinalNotification } from "@/lib/unattended-goal/final-notification";
 
 export async function getUnattendedGoalControl(taskId: string) {
   const [runtime, discovery] = await Promise.all([
@@ -33,7 +34,10 @@ export async function enableUnattendedGoalFromUi(input: {
   maxUses?: number;
   capabilities?: string[];
 }) {
-  const discovery = await discoverGatewayCapabilities(input.taskId);
+  const [discovery, current] = await Promise.all([
+    discoverGatewayCapabilities(input.taskId),
+    readUnattendedGoalMode(db, input.taskId),
+  ]);
   const owner = discovery.capabilities.find((item) => item.capability === OWNER_MESSAGE_CAPABILITY);
   if (!owner?.available || !owner.routeRevision) {
     throw new Error("A fixed unattended OWNER home route is required before enabling unattended mode");
@@ -68,7 +72,7 @@ export async function enableUnattendedGoalFromUi(input: {
     const runtime = await applyUnattendedGoalLifecycleEventInTransaction(tx, {
       taskId: input.taskId,
       event: "ACTIVATED",
-      refreshActive: true,
+      refreshActive: !current.active,
       policy: {
         maxDurationMs: durationMinutes * 60_000,
         maxCapabilityJobs,
@@ -83,6 +87,40 @@ export async function enableUnattendedGoalFromUi(input: {
   });
   setUnattendedSignal(input.taskId, true);
   return result;
+}
+
+export async function recoverUnattendedGoalNotificationFromUi(input: {
+  taskId: string;
+  durationMinutes?: number;
+  maxUses?: number;
+}) {
+  const [discovery, mode] = await Promise.all([
+    discoverGatewayCapabilities(input.taskId),
+    readUnattendedGoalMode(db, input.taskId),
+  ]);
+  const owner = discovery.capabilities.find((item) => item.capability === OWNER_MESSAGE_CAPABILITY);
+  if (!owner?.available || !owner.routeRevision) {
+    throw new Error("A fixed unattended OWNER home route is required before recovering the final notification");
+  }
+  if (!mode.runtime?.ownerNotificationRequestId || !mode.runtime.ownerNotificationKind) {
+    throw new Error("No recoverable unattended final notification exists");
+  }
+  if (mode.runtime.ownerNotificationState === "SIDE_EFFECT_UNKNOWN") {
+    throw new Error("This notification may already have been sent and requires manual reconciliation");
+  }
+  const [grant] = await db.$transaction((tx) => replaceCapabilityGrantsInTransaction({
+    taskId: input.taskId,
+    durationMinutes: Math.trunc(input.durationMinutes ?? 120),
+    maxUses: Math.trunc(input.maxUses ?? 1),
+    targets: [{
+      capability: OWNER_MESSAGE_CAPABILITY,
+      risk: owner.risk,
+      targetKind: owner.targetKind,
+      targetFingerprint: owner.routeRevision!,
+    }],
+  }, tx));
+  const notification = await recoverUnattendedGoalFinalNotification(input.taskId, db, true);
+  return { active: false, ownerMessageGrant: grant, notification };
 }
 
 export async function disableUnattendedGoalFromUi(taskId: string) {
