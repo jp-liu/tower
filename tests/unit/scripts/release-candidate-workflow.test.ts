@@ -94,6 +94,7 @@ describe("Release Candidate workflow", () => {
     const prepareCommands = candidate.jobs.prepare.steps.flatMap((step) => step.run ? [step.run] : []);
     const steps = candidate.jobs.portable.steps;
     const build = steps.find((step) => step.name === "Build native portable payload");
+    const releaseBuild = release.jobs.portable.steps.find((step) => step.name === "Build native portable payload");
     const smokes = steps.filter((step) => step.run?.includes("scripts/release-portable-smoke.js"));
     const nodeVersions = stepsUsing(candidate.jobs.portable, "actions/setup-node@v4")
       .map((step) => step.with?.["node-version"]);
@@ -101,6 +102,7 @@ describe("Release Candidate workflow", () => {
     expect(prepareCommands).toContain("pnpm release:prepare");
     expect(prepareCommands.some((command) => command.includes("npm pack --pack-destination"))).toBe(true);
     expect(build?.run).toContain("scripts/build-portable-release.js");
+    expect(releaseBuild?.run).toBe(build?.run);
     expect(smokes.map((step) => step.name)).toEqual([
       "Offline smoke on Node.js 22",
       "Offline smoke on Node.js 24",

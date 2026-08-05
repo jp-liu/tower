@@ -7,8 +7,22 @@ import { isWindows } from "@/lib/platform";
 
 const require = createRequire(import.meta.url);
 const { assertPortableRoot } = require("../../../scripts/release-portable-canary.js");
-const { normalizePrismaGeneratedPaths } = require("../../../scripts/build-portable-release.js");
+const {
+  createNpmInstallInvocation,
+  normalizePrismaGeneratedPaths,
+  runNpmInstall,
+} = require("../../../scripts/build-portable-release.js");
 const roots: string[] = [];
+
+const npmInstallArgs = [
+  "ci",
+  "--omit=dev",
+  "--include=optional",
+  "--no-audit",
+  "--no-fund",
+  "--foreground-scripts",
+  "--registry=https://registry.npmjs.org/",
+];
 
 function file(root: string, relative: string, content = "fixture") {
   const target = path.join(root, ...relative.split("/"));
@@ -53,6 +67,55 @@ function fixture() {
 
 afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
+});
+
+describe("portable release npm installation", () => {
+  it("runs npm.cmd through ComSpec on Windows without changing npm arguments", () => {
+    const invocation = createNpmInstallInvocation("win32", {
+      ComSpec: "C:\\Windows\\System32\\cmd.exe",
+    });
+
+    expect(invocation).toEqual({
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: ["/d", "/s", "/c", "npm.cmd", ...npmInstallArgs],
+    });
+    expect(invocation.command).not.toMatch(/\.cmd$/i);
+  });
+
+  it("runs npm directly on Unix and preserves the same npm arguments", () => {
+    const unix = createNpmInstallInvocation("linux", {});
+    const windows = createNpmInstallInvocation("win32", {});
+
+    expect(unix).toEqual({ command: "npm", args: npmInstallArgs });
+    expect(windows.command).toBe("cmd.exe");
+    expect(windows.args.slice(4)).toEqual(unix.args);
+  });
+
+  it("passes cwd and environment to ComSpec and preserves command failures", () => {
+    const env = { ComSpec: "C:\\Windows\\System32\\cmd.exe", PATH: "C:\\npm" };
+    const failure = Object.assign(new Error("npm exited with status 37"), { status: 37 });
+    let invocation: unknown;
+
+    expect(() => runNpmInstall({
+      cwd: "C:\\payload",
+      cacheDir: "C:\\cache",
+      platform: "win32",
+      env,
+      execute: (command: string, args: string[], options: unknown) => {
+        invocation = { command, args, options };
+        throw failure;
+      },
+    })).toThrow(failure);
+    expect(invocation).toEqual({
+      command: env.ComSpec,
+      args: ["/d", "/s", "/c", "npm.cmd", ...npmInstallArgs],
+      options: {
+        cwd: "C:\\payload",
+        stdio: "inherit",
+        env: { ...env, npm_config_cache: "C:\\cache" },
+      },
+    });
+  });
 });
 
 describe("portable release canary", () => {
