@@ -100,22 +100,23 @@ export class ManagedCliProcessExecutor implements CliProcessExecutor {
     const timeoutMs = Math.min(options.timeoutMs ?? 5_000, 5_000);
     const result = await this.execute({
       command: this.commandPath ?? "codex",
-      args: ["mcp", "list", "--json"],
+      args: ["mcp", "get", options.name, "--json"],
       cwd: options.cwd,
     }, { timeoutMs, signal: options.signal, maxOutputBytes: 256 * 1024 });
     if (result.exitCode !== 0 || !this.executor.stream) return false;
 
-    let entries: unknown;
+    let configured: unknown;
     try {
-      entries = JSON.parse(result.stdout);
+      configured = JSON.parse(result.stdout);
     } catch {
       return false;
     }
-    if (!Array.isArray(entries)) return false;
-    const configured = entries.find((entry) => record(entry)?.name === options.name);
     const server = record(configured);
     const transport = record(server?.transport);
-    if (server?.enabled !== true || transport?.type !== "stdio" || typeof transport.command !== "string") {
+    if (server?.name !== options.name
+      || server.enabled !== true
+      || transport?.type !== "stdio"
+      || typeof transport.command !== "string") {
       return false;
     }
     const args = Array.isArray(transport.args)

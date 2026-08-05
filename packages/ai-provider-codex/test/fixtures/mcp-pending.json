@@ -1,11 +1,9 @@
-[
-  {
-    "name": "tower-dev",
-    "enabled": false,
-    "transport": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["server.js"]
-    }
+{
+  "name": "tower-dev",
+  "enabled": false,
+  "transport": {
+    "type": "stdio",
+    "command": "node",
+    "args": ["server.js"]
   }
-]
+}

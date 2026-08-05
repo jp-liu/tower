@@ -58,6 +58,14 @@ interface InstallResult {
 interface CodexMcpServerState {
   name: string;
   enabled: boolean;
+  transport?: {
+    type: "stdio";
+    command: string;
+    args: string[];
+    cwd?: string;
+    env: Record<string, string>;
+    envVars: string[];
+  };
 }
 
 type McpInstallOptions = CliMcpServerOptions;
@@ -220,7 +228,7 @@ export class CodexCliAdapter implements CliAdapter {
 
   async *stream(options: CliQueryOptions): AsyncIterable<CliQueryEvent> {
     const args = [
-      "exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral",
+      "exec", "--ignore-user-config", "--json", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral",
       "--disable", "shell_tool",
       "--disable", "unified_exec",
       "--disable", "web_search",
@@ -242,22 +250,33 @@ export class CodexCliAdapter implements CliAdapter {
       tools.push(parsed.tool);
       byServer.set(parsed.server, tools);
     }
-    const configuredServers = await this.listMcpServers(
-      options.cwd,
-      options.signal,
-      Math.min(options.timeoutMs ?? 5_000, 5_000),
-    );
-    for (const server of byServer.keys()) {
-      if (!configuredServers.some((entry) => entry.name === server && entry.enabled)) {
+    const mcpEnvPatch: Record<string, string> = {};
+    for (const [serverName, tools] of byServer) {
+      const server = await this.getMcpServer(
+        serverName,
+        options.cwd,
+        options.signal,
+        Math.min(options.timeoutMs ?? 5_000, 5_000),
+      );
+      if (!server.enabled || !server.transport) {
         throw new CliPluginError("TOOLING_UNAVAILABLE", "The requested Codex MCP server is unavailable");
       }
-    }
-    for (const server of configuredServers) {
-      if (!byServer.has(server.name)) args.push("-c", `mcp_servers.${server.name}.enabled=false`);
-    }
-    for (const [server, tools] of byServer) {
-      args.push("-c", `mcp_servers.${server}.enabled=true`);
-      args.push("-c", `mcp_servers.${server}.enabled_tools=${JSON.stringify(tools)}`);
+      const prefix = `mcp_servers.${serverName}`;
+      args.push("-c", `${prefix}.command=${JSON.stringify(server.transport.command)}`);
+      args.push("-c", `${prefix}.args=${JSON.stringify(server.transport.args)}`);
+      if (server.transport.cwd) args.push("-c", `${prefix}.cwd=${JSON.stringify(server.transport.cwd)}`);
+      const envVars = new Set(server.transport.envVars);
+      for (const [key, value] of Object.entries(server.transport.env)) {
+        const existing = mcpEnvPatch[key];
+        if (existing !== undefined && existing !== value) {
+          throw new CliPluginError("TOOLING_UNAVAILABLE", "Codex MCP environment variables conflict");
+        }
+        mcpEnvPatch[key] = value;
+        envVars.add(key);
+      }
+      if (envVars.size > 0) args.push("-c", `${prefix}.env_vars=${JSON.stringify([...envVars])}`);
+      args.push("-c", `${prefix}.enabled=true`);
+      args.push("-c", `${prefix}.enabled_tools=${JSON.stringify(tools)}`);
     }
     args.push(options.prompt);
     let sawError = false;
@@ -265,7 +284,7 @@ export class CodexCliAdapter implements CliAdapter {
     const startedTools = new Set<string>();
     for await (const line of streamProcessJsonLines(
       this.host.process,
-      { command: this.command(), args, cwd: options.cwd },
+      { command: this.command(), args, cwd: options.cwd, envPatch: mcpEnvPatch },
       {
         signal: options.signal ?? this.host.signal,
         timeoutMs: options.timeoutMs,
@@ -732,9 +751,7 @@ export class CodexCliAdapter implements CliAdapter {
     try {
       const signal = options.signal ?? this.host.signal;
       const timeoutMs = Math.min(options.timeoutMs ?? 5_000, 5_000);
-      const servers = await this.listMcpServers(options.cwd, signal, timeoutMs);
-      const server = servers.find((entry) => entry.name === options.name);
-      if (!server) return { installed: false, status: "disconnected" as const };
+      const server = await this.getMcpServer(options.name, options.cwd, signal, timeoutMs);
       if (!server.enabled) return { installed: true, status: "pending" as const };
       const connected = await this.host.process.probeMcpServer?.({
         name: server.name,
@@ -750,13 +767,14 @@ export class CodexCliAdapter implements CliAdapter {
     }
   }
 
-  private async listMcpServers(
+  private async getMcpServer(
+    name: string,
     cwd?: string,
     signal?: AbortSignal,
     timeoutMs = 5_000,
-  ): Promise<CodexMcpServerState[]> {
+  ): Promise<CodexMcpServerState> {
     const result = await this.host.process.execute(
-      { command: this.command(), args: ["mcp", "list", "--json"], cwd },
+      { command: this.command(), args: ["mcp", "get", name, "--json"], cwd },
       { timeoutMs, signal: signal ?? this.host.signal, maxOutputBytes: 256 * 1024 },
     );
     if (result.exitCode !== 0) {
@@ -764,14 +782,43 @@ export class CodexCliAdapter implements CliAdapter {
     }
     try {
       const parsed = JSON.parse(result.stdout) as unknown;
-      if (!Array.isArray(parsed)) throw new Error("invalid MCP list");
-      return parsed.flatMap((entry) => {
-        if (!entry || typeof entry !== "object") return [];
-        const value = entry as Record<string, unknown>;
-        return typeof value.name === "string" && /^[A-Za-z0-9_-]+$/.test(value.name)
-          ? [{ name: value.name, enabled: value.enabled === true }]
-          : [];
-      });
+      const server = record(parsed);
+      if (server?.name !== name) throw new Error("invalid MCP server");
+      const transport = record(server.transport);
+      if (transport?.type !== "stdio") return { name, enabled: server.enabled === true };
+      if (typeof transport.command !== "string" || transport.command.length === 0) {
+        throw new Error("invalid MCP transport");
+      }
+      if (transport.args !== undefined
+        && (!Array.isArray(transport.args) || transport.args.some((value) => typeof value !== "string"))) {
+        throw new Error("invalid MCP arguments");
+      }
+      const configuredEnv = record(transport.env);
+      if (transport.env !== undefined && !configuredEnv) throw new Error("invalid MCP environment");
+      const env = Object.fromEntries(Object.entries(configuredEnv ?? {}).map(([key, value]) => {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof value !== "string") {
+          throw new Error("invalid MCP environment");
+        }
+        return [key, value];
+      }));
+      if (transport.env_vars !== undefined
+        && (!Array.isArray(transport.env_vars)
+          || transport.env_vars.some((value) => typeof value !== "string"
+            || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)))) {
+        throw new Error("invalid MCP environment allowlist");
+      }
+      return {
+        name,
+        enabled: server.enabled === true,
+        transport: {
+          type: "stdio",
+          command: transport.command,
+          args: transport.args as string[] | undefined ?? [],
+          ...(typeof transport.cwd === "string" ? { cwd: transport.cwd } : {}),
+          env,
+          envVars: transport.env_vars as string[] | undefined ?? [],
+        },
+      };
     } catch {
       throw new CliPluginError("TOOLING_UNAVAILABLE", "Codex MCP configuration is unavailable");
     }

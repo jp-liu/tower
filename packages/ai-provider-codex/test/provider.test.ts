@@ -126,10 +126,17 @@ describe("Codex provider", () => {
     vi.mocked(ctx.process.execute).mockResolvedValueOnce({
       exitCode: 0,
       signal: null,
-      stdout: JSON.stringify([
-        { name: "tower-dev", enabled: true },
-        { name: "unrelated", enabled: true, transport: { env: { SECRET: "CANARY_SECRET" } } },
-      ]),
+      stdout: JSON.stringify({
+        name: "tower-dev",
+        enabled: true,
+        transport: {
+          type: "stdio",
+          command: "node",
+          args: ["server.js"],
+          env: { TOWER_TOKEN: "CANARY_SECRET" },
+          env_vars: ["TOWER_TASK_ID"],
+        },
+      }),
       stderr: "",
       durationMs: 1,
     });
@@ -156,13 +163,19 @@ describe("Codex provider", () => {
     }));
     expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining([
-        "--json", "--sandbox", "read-only", "--disable", "shell_tool",
+        "--ignore-user-config", "--json", "--sandbox", "read-only", "--disable", "shell_tool",
         "-c", 'model_reasoning_effort="medium"', "--image", "/safe/image.png",
-        "-c", "mcp_servers.unrelated.enabled=false",
+        "-c", 'mcp_servers.tower-dev.command="node"',
+        "-c", 'mcp_servers.tower-dev.args=["server.js"]',
+        "-c", 'mcp_servers.tower-dev.env_vars=["TOWER_TASK_ID","TOWER_TOKEN"]',
         "-c", "mcp_servers.tower-dev.enabled=true",
         "-c", 'mcp_servers.tower-dev.enabled_tools=["list_tasks"]',
       ]),
+      envPatch: { TOWER_TOKEN: "CANARY_SECRET" },
     }), expect.objectContaining({ timeoutMs: 12_345 }));
+    expect(ctx.process.execute).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["mcp", "get", "tower-dev", "--json"],
+    }), expect.objectContaining({ timeoutMs: 5_000 }));
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("blocked");
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("CANARY_SECRET");
   });
@@ -181,10 +194,17 @@ describe("Codex provider", () => {
     });
     vi.mocked(ctx.process.probeMcpServer!).mockResolvedValueOnce(fixture === "mcp-probe-connected.jsonl");
     await expect(new CodexCliAdapter(ctx).mcp.inspect({ name: "tower-dev" })).resolves.toEqual(expected);
+    expect(ctx.process.execute).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["mcp", "get", "tower-dev", "--json"],
+    }), expect.objectContaining({ timeoutMs: 5_000 }));
     expect(ctx.process.probeMcpServer).toHaveBeenCalledWith(expect.objectContaining({
       name: "tower-dev",
       timeoutMs: 5_000,
     }));
+    expect(ctx.process.execute).not.toHaveBeenCalledWith(
+      expect.objectContaining({ args: ["mcp", "list", "--json"] }),
+      expect.anything(),
+    );
   });
 
   it("reports a disabled Codex MCP entry as pending without starting it", async () => {
@@ -206,7 +226,7 @@ describe("Codex provider", () => {
   it("fails before query output when the requested MCP server is unavailable", async () => {
     const ctx = host();
     vi.mocked(ctx.process.execute).mockResolvedValueOnce({
-      exitCode: 0, signal: null, stdout: "[]", stderr: "", durationMs: 1,
+      exitCode: 1, signal: null, stdout: "", stderr: "MCP server not found", durationMs: 1,
     });
     await expect(new CodexCliAdapter(ctx).generate({
       prompt: "PROMPT_CANARY",

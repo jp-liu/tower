@@ -170,7 +170,7 @@ describe("built-in provider host boundary", () => {
     await expect(executor.probeMcpServer({ name: "tower-dev", cwd: "/work" })).resolves.toBe(expected);
     expect(execute).toHaveBeenCalledWith(expect.objectContaining({
       command: "/bin/codex",
-      args: ["mcp", "list", "--json"],
+      args: ["mcp", "get", "tower-dev", "--json"],
     }), expect.objectContaining({ timeoutMs: 5_000 }));
     expect(stream).toHaveBeenCalledWith(expect.objectContaining({
       command: "node",
