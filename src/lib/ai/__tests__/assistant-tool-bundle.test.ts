@@ -98,6 +98,8 @@ describe("Assistant tool bundle", () => {
 
     expect(first).toContain("FIRST_CANARY");
     expect(first).not.toContain("SECOND_CANARY");
+    expect(first).toContain(path.join(attachmentRoot, "2026-07/files/first.txt"));
+    expect(first).toContain("include these exact paths in references");
     expect(second).toContain("SECOND_CANARY");
     expect(second).not.toContain("FIRST_CANARY");
     expect(json).toContain("JSON_CANARY");
@@ -139,5 +141,7 @@ describe("Assistant tool bundle", () => {
     })]);
     const realAttachmentRoot = await fs.realpath(attachmentRoot);
     expect(image.attachments[0]!.path.startsWith(realAttachmentRoot)).toBe(true);
+    expect(image.prompt).toContain(image.attachments[0]!.path);
+    expect(image.prompt).toContain("include these exact paths in references");
   });
 });

@@ -123,6 +123,11 @@ async function* executeTarget(
     } catch {
       throw { code: "ATTACHMENT_UNAVAILABLE" };
     }
+    // Claude needs its built-in Read tool to inspect path-backed attachments.
+    // Keep the permission request-scoped: no attachment means no filesystem tool.
+    const requestTools = target.provider === "claude" && (request.attachments?.length ?? 0) > 0
+      ? [...tools, "Read"]
+      : tools;
     const options: CliQueryOptions = {
       prompt: prepared.prompt,
       cwd: request.cwd,
@@ -135,8 +140,8 @@ async function* executeTarget(
       temperature: request.temperature,
       effort: request.effort,
       attachments: prepared.attachments,
-      tools,
-      allowedTools: tools,
+      tools: requestTools,
+      allowedTools: requestTools,
       mcpServers: request.towerMcpServer ? [request.towerMcpServer] : undefined,
       signal: request.signal,
     };

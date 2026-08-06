@@ -40,7 +40,8 @@ const LEGACY_FULL_TOOL_NAMES = [
 ];
 const ASSISTANT_TOOL_NAMES = LEGACY_FULL_TOOL_NAMES
   .slice(0, 36)
-  .filter((name) => name !== "set_goal_mode");
+  .filter((name) => name !== "set_goal_mode")
+  .concat("set_goal_mode");
 
 describe("Tower tool catalog", () => {
   it("preserves the legacy full and Assistant surfaces", () => {
@@ -49,6 +50,7 @@ describe("Tower tool catalog", () => {
     expect(Object.keys(assistantTowerToolCatalog)).toEqual(ASSISTANT_TOOL_NAMES);
     expect(towerToolCatalog.create_task).toBe(taskTools.create_task);
     expect(assistantTowerToolCatalog.create_task).toBe(taskTools.create_task);
+    expect(assistantTowerToolCatalog.set_goal_mode).toBe(unattendedGoalTools.set_goal_mode);
     expect(towerToolCatalog.list_notify_targets).toBe(harnessTools.list_notify_targets);
     expect(towerToolCatalog.set_goal_mode).toBe(unattendedGoalTools.set_goal_mode);
     expect(towerToolCatalog.get_capability_job_status).toBe(
@@ -57,7 +59,6 @@ describe("Tower tool catalog", () => {
     expect(towerToolCatalog.submit_capability_request).toBe(
       gatewayCapabilityTools.submit_capability_request,
     );
-    expect(assistantTowerToolCatalog).not.toHaveProperty("set_goal_mode");
   });
 
   it("assigns every runtime tool to exactly one atomic capability group", () => {
@@ -77,7 +78,7 @@ describe("Tower tool catalog", () => {
       "get_capability_job_status",
     ]);
     expect(toolProfileNames.full).toHaveLength(61);
-    expect(toolProfileNames.assistant).toHaveLength(35);
+    expect(toolProfileNames.assistant).toHaveLength(36);
     expect(toolProfileNames.task).toHaveLength(50);
     expect(toolProfileNames.gateway).toHaveLength(24);
     expect(toolProfileNames["gateway-query"]).toEqual(gatewayQueryToolNames);

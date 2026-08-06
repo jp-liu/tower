@@ -29,6 +29,7 @@ export const assistantTowerToolCatalog = {
   ...terminalTools,
   ...reportTools,
   ...knowledgeBaseTools,
+  ...unattendedGoalTools,
 };
 
 /** Complete MCP catalog. Harness messaging stays MCP-only and is not exposed to API models. */

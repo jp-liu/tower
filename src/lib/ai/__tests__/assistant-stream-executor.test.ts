@@ -23,7 +23,7 @@ vi.mock("../assistant-tool-bundle", () => ({
   prepareAssistantCliRequest: mocks.prepareRequest,
 }));
 vi.mock("@/mcp/tool-catalog", () => ({
-  assistantTowerToolCatalog: { list_tasks: {}, create_task: {} },
+  assistantTowerToolCatalog: { list_tasks: {}, create_task: {}, set_goal_mode: {} },
 }));
 
 import { streamAssistantTurn } from "../assistant-stream-executor";
@@ -112,7 +112,9 @@ describe("Assistant stream executor", () => {
     expect(options.tools).toEqual([
       "mcp__tower-dev__list_tasks",
       "mcp__tower-dev__create_task",
+      "mcp__tower-dev__set_goal_mode",
     ]);
+    expect(options.tools).not.toContain("Read");
     expect(options.mcpServers).toEqual([towerMcpServer]);
     expect(options.timeoutMs).toBe(300_000);
     expect(JSON.stringify(attempts.mock.calls)).not.toMatch(/PROMPT_CANARY|SECRET_STDERR/);
@@ -214,6 +216,7 @@ describe("Assistant stream executor", () => {
       yield { type: "finish" as const, reason: "stop" };
     });
     const target = cliTarget("cli", 0, stream);
+    target.provider = "claude";
     mocks.resolvePlan.mockResolvedValue({ slot: "assistant", targets: [target], migrationStatus: "complete" });
     const preparedAttachment = {
       filename: "2026-07/images/design.png",
@@ -249,7 +252,53 @@ describe("Assistant stream executor", () => {
       maxOutputBytes: 456,
       effort: "high",
       attachments: [preparedAttachment],
+      tools: [
+        "mcp__tower-dev__list_tasks",
+        "mcp__tower-dev__create_task",
+        "mcp__tower-dev__set_goal_mode",
+        "Read",
+      ],
+      allowedTools: [
+        "mcp__tower-dev__list_tasks",
+        "mcp__tower-dev__create_task",
+        "mcp__tower-dev__set_goal_mode",
+        "Read",
+      ],
     }));
+  });
+
+  it.each(["codex", "gemini"])("does not add Claude Read permission for %s attachments", async (provider) => {
+    const stream = vi.fn(async function* (_options: CliQueryOptions) {
+      void _options;
+      yield { type: "finish" as const, reason: "stop" };
+    });
+    const target = cliTarget(provider, 0, stream);
+    target.provider = provider;
+    mocks.resolvePlan.mockResolvedValue({ slot: "assistant", targets: [target], migrationStatus: "complete" });
+    mocks.prepareRequest.mockResolvedValueOnce({
+      prompt: "prepared prompt with /safe/design.png",
+      attachments: [{
+        filename: "2026-07/images/design.png",
+        path: "/safe/design.png",
+        mediaType: "image/png",
+        dataBase64: "IMAGE_DATA",
+      }],
+    });
+
+    for await (const _event of streamAssistantTurn({
+      prompt: "raw prompt",
+      cwd: "/work",
+      attachments: ["2026-07/images/design.png"],
+      towerMcpServer,
+    })) void _event;
+
+    const options = stream.mock.calls[0]?.[0] as CliQueryOptions;
+    expect(options.tools).toEqual([
+      "mcp__tower-dev__list_tasks",
+      "mcp__tower-dev__create_task",
+      "mcp__tower-dev__set_goal_mode",
+    ]);
+    expect(options.allowedTools).not.toContain("Read");
   });
 
   it("loads an API runtime only when its explicit target executes", async () => {

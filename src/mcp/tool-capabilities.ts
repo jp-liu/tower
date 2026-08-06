@@ -118,7 +118,7 @@ const profileGroups = {
     "gatewayOwner",
     "operations",
   ],
-  assistant: ["coreRead", "coreWrite", "terminalRead", "terminalWrite"],
+  assistant: ["coreRead", "coreWrite", "terminalRead", "terminalWrite", "unattendedGoal"],
   task: [
     "coreRead",
     "coreWrite",
