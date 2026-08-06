@@ -65,12 +65,26 @@ curl --proto '=https' --tlsv1.2 -fsSL \
 Windows PowerShell:
 
 ```powershell
+Invoke-WebRequest https://github.com/tower-org/tower/releases/latest/download/install.cmd -OutFile install.cmd
 Invoke-WebRequest https://github.com/tower-org/tower/releases/latest/download/install.ps1 -OutFile install.ps1
+Get-Content .\install.cmd
 Get-Content .\install.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ConfirmNonInteractive -NoStart
+.\install.cmd -ConfirmNonInteractive -NoStart
 & "$env:LOCALAPPDATA\Tower\bin\tower.ps1" --version
 & "$env:LOCALAPPDATA\Tower\bin\tower.ps1"
 ```
+
+Keep `install.cmd` beside `install.ps1`. The CMD file only forwards arguments
+through the built-in Windows PowerShell with a process-scoped
+`ExecutionPolicy Bypass`. Direct PowerShell execution remains available:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ConfirmNonInteractive -NoStart
+```
+
+The CMD wrapper cannot bypass PowerShell restrictions enforced by Group Policy,
+AppLocker, or WDAC. Use the npm channel or ask an administrator to allow the
+reviewed script in that environment.
 
 Deterministic non-interactive options:
 
@@ -134,6 +148,8 @@ if ($Actual -ne $Expected) { throw "SHA-256 mismatch" }
 tar -xzf $Asset
 Set-Location "tower-v$Version-windows-x64"
 & .\bin\tower.ps1 --version
+.\install.cmd -ConfirmNonInteractive -NoStart
+# Or invoke PowerShell directly:
 & .\install.ps1 -ConfirmNonInteractive -NoStart
 & "$env:LOCALAPPDATA\Tower\bin\tower.ps1"
 ```
@@ -143,16 +159,16 @@ Portable use requires no install: run `./bin/tower` in the extracted directory
 
 ## 5. Offline and corporate mirrors
 
-Download an asset, `SHA256SUMS`, and the matching reviewed `install.sh` or
-`install.ps1` on a connected machine, then copy all three to the offline
-machine:
+Download an asset, `SHA256SUMS`, and the matching reviewed `install.sh` on a
+connected machine. On Windows, download both adjacent files, `install.cmd` and
+`install.ps1`. Copy the files to the offline machine:
 
 ```sh
 sh install.sh --asset-dir /mnt/tower-release --version 0.3.1 --yes --no-start
 ```
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -AssetDir D:\tower-release -Version 0.3.1 -ConfirmNonInteractive -NoStart
+.\install.cmd -AssetDir D:\tower-release -Version 0.3.1 -ConfirmNonInteractive -NoStart
 ```
 
 This path never invokes npm/pnpm. A mirror must retain the assets and

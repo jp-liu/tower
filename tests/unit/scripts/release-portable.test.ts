@@ -53,6 +53,10 @@ function fixture() {
   };
   file(root, "portable-manifest.json", JSON.stringify(manifest));
   file(root, "LICENSE");
+  if (platform === "windows") {
+    file(root, "install.cmd");
+    file(root, "install.ps1");
+  }
   file(root, "bin/tower");
   file(root, `${packageRoot}/package.json`, JSON.stringify({ name: "@tower-org/cli", version: "0.3.1" }));
   file(root, `${packageRoot}/dist/mcp-server.cjs`);
@@ -271,6 +275,16 @@ describe("portable release canary", () => {
     manifest.node = { minimum: "22.0.0", tested: ["22"], knownIncompatible: [] };
     writeFileSync(path.join(root, "portable-manifest.json"), JSON.stringify(manifest));
     expect(() => assertPortableRoot(root)).toThrow(/Node contract/);
+  });
+
+  it("rejects a Windows payload without both installer entrypoints", () => {
+    const { root, manifest } = fixture();
+    manifest.platform = "windows";
+    manifest.arch = "x64";
+    writeFileSync(path.join(root, "portable-manifest.json"), JSON.stringify(manifest));
+    file(root, "install.ps1");
+
+    expect(() => assertPortableRoot(root, { platform: "win32", arch: "x64" })).toThrow(/missing install\.cmd/);
   });
 
   it("accepts dependency links that resolve inside the archive", () => {

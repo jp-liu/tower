@@ -63,6 +63,7 @@ function assertPortableRoot(root, runtime = { platform: process.platform, arch: 
     `${manifest.packageRoot}/node_modules/node-pty/LICENSE`,
     `${manifest.packageRoot}/node_modules/@vscode/ripgrep/LICENSE`,
   ];
+  if (manifest.platform === "windows") required.push("install.cmd", "install.ps1");
   for (const relative of required) {
     if (!fs.existsSync(path.join(root, ...relative.split("/")))) errors.push(`missing ${relative}`);
   }

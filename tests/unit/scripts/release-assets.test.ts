@@ -30,8 +30,9 @@ describe("release asset assembly", () => {
     writeFileSync(path.join(input, "npm", "tower-org-cli-0.3.1.tgz"), "npm-pack");
 
     const result = assemble(input, output, commit);
-    expect(result.copied).toHaveLength(8);
-    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(8);
+    expect(result.copied).toHaveLength(9);
+    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(9);
+    expect(readFileSync(path.join(output, "install.cmd"), "utf8")).toContain("%~dp0install.ps1");
     expect(readFileSync(path.join(output, "RELEASE_NOTES.md"), "utf8"))
       .toContain("Node.js >=22.0.0");
     expect(readFileSync(path.join(output, "RELEASE_NOTES.md"), "utf8"))
@@ -73,8 +74,8 @@ describe("release asset assembly", () => {
       workflow: { runId: "123456789", runAttempt: "2" },
       generatedAt: "2026-08-05T04:03:02Z",
     });
-    expect(result.copied).toHaveLength(14);
-    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(14);
+    expect(result.copied).toHaveLength(15);
+    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(15);
     for (const [platform, arch, extension] of TARGETS) {
       expect(readFileSync(path.join(output, `tower-portable-${platform}-${arch}.${extension}.manifest.json`), "utf8"))
         .toContain(commit);

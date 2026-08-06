@@ -61,12 +61,24 @@ curl --proto '=https' --tlsv1.2 -fsSL \
 Windows PowerShell：
 
 ```powershell
+Invoke-WebRequest https://github.com/tower-org/tower/releases/latest/download/install.cmd -OutFile install.cmd
 Invoke-WebRequest https://github.com/tower-org/tower/releases/latest/download/install.ps1 -OutFile install.ps1
+Get-Content .\install.cmd
 Get-Content .\install.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ConfirmNonInteractive -NoStart
+.\install.cmd -ConfirmNonInteractive -NoStart
 & "$env:LOCALAPPDATA\Tower\bin\tower.ps1" --version
 & "$env:LOCALAPPDATA\Tower\bin\tower.ps1"
 ```
+
+`install.cmd` 必须与 `install.ps1` 放在同一目录，它只是使用 Windows 自带的
+PowerShell 和进程级 `ExecutionPolicy Bypass` 转发参数。也可以继续直接执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ConfirmNonInteractive -NoStart
+```
+
+如果公司通过组策略、AppLocker 或 WDAC 禁止 PowerShell，CMD 包装器也无法绕过该
+安全策略；此时使用 npm 安装或联系管理员放行经过审核的脚本。
 
 所有参数均可非交互使用：
 
@@ -130,6 +142,8 @@ if ($Actual -ne $Expected) { throw "SHA-256 mismatch" }
 tar -xzf $Asset
 Set-Location "tower-v$Version-windows-x64"
 & .\bin\tower.ps1 --version
+.\install.cmd -ConfirmNonInteractive -NoStart
+# 或直接使用 PowerShell：
 & .\install.ps1 -ConfirmNonInteractive -NoStart
 & "$env:LOCALAPPDATA\Tower\bin\tower.ps1"
 ```
@@ -139,15 +153,15 @@ Set-Location "tower-v$Version-windows-x64"
 
 ## 5. 离线复制与企业镜像
 
-在联网机器下载平台资产、`SHA256SUMS`，以及已审阅的对应 `install.sh` 或
-`install.ps1`，把三者都复制到离线机器后执行：
+在联网机器下载平台资产、`SHA256SUMS`，以及已审阅的对应 `install.sh`；Windows
+需同时下载相邻的 `install.cmd` 和 `install.ps1`。将这些文件复制到离线机器后执行：
 
 ```sh
 sh install.sh --asset-dir /mnt/tower-release --version 0.3.1 --yes --no-start
 ```
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -AssetDir D:\tower-release -Version 0.3.1 -ConfirmNonInteractive -NoStart
+.\install.cmd -AssetDir D:\tower-release -Version 0.3.1 -ConfirmNonInteractive -NoStart
 ```
 
 该路径不调用 npm/pnpm。企业镜像必须原样保存资产与 `SHA256SUMS`；内容冲突应

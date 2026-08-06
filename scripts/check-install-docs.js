@@ -31,16 +31,20 @@ function main() {
 
   const ps = fs.readFileSync(path.join(projectRoot, "scripts", "install.ps1"), "utf8");
   const internalPs = fs.readFileSync(path.join(projectRoot, "scripts", "portable", "install.ps1"), "utf8");
+  const cmd = fs.readFileSync(path.join(projectRoot, "scripts", "install.cmd"), "utf8");
   for (const value of powershellOptions) assertContains(ps, `$${value}`, "scripts/install.ps1 parameters");
   for (const value of ["Prefix", "BinDir", "Verify", "Rollback", "Uninstall", "ConfirmNonInteractive", "NoStart", "Help"]) {
     assertContains(internalPs, `$${value}`, "portable install.ps1 parameters");
+  }
+  for (const value of ["powershell.exe", "-ExecutionPolicy Bypass", '"%~dp0install.ps1"', "%*", "exit /b %ERRORLEVEL%"]) {
+    assertContains(cmd, value, "scripts/install.cmd wrapper");
   }
 
   const requiredDocText = [
     "SHA256SUMS", "tower-portable-darwin-arm64.tar.gz", "tower-portable-darwin-x64.tar.gz",
     "tower-portable-linux-arm64.tar.gz", "tower-portable-linux-x64.tar.gz",
     "tower-portable-windows-x64.tar.gz", "binaries.prisma.sh", "node-pty",
-    "service install", "--asset-dir", "--download-base", "--rollback",
+    "service install", "install.cmd", "--asset-dir", "--download-base", "--rollback",
     "--uninstall", "--verify", "--no-start", "~/.tower", `VERSION=${pkg.version}`,
   ];
   for (const relative of docs) {

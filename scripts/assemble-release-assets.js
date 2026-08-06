@@ -73,7 +73,7 @@ function candidateNotes(metadata, npmName, targetRows) {
     `## Portable targets\n\n| OS | CPU | Asset |\n| --- | --- | --- |\n${targetRows}\n\n` +
     `Every listed target passed the native offline smoke on Node.js 22 and 24 with npm and Prisma download hosts blocked. Each adjacent \`.manifest.json\` file records its package, source commit, runtime policy, platform, and architecture.\n\n` +
     `## Verify and install this Candidate\n\n` +
-    `Keep the selected portable archive and \`SHA256SUMS\` in this directory. Verify the matching checksum before installation. On macOS/Linux run \`sh install.sh --asset-dir . --verify\` first, then omit \`--verify\` to install. On Windows run \`.\\install.ps1 -AssetDir . -Verify\` first, then omit \`-Verify\` to install. Node.js 22 or 24 is required.\n\n` +
+    `Keep the selected portable archive and \`SHA256SUMS\` in this directory. Verify the matching checksum before installation. On macOS/Linux run \`sh install.sh --asset-dir . --verify\` first, then omit \`--verify\` to install. On Windows keep \`install.cmd\` beside \`install.ps1\` and run \`.\\install.cmd -AssetDir . -Verify\` first, then omit \`-Verify\` to install; direct PowerShell execution remains supported. Node.js 22 or 24 is required.\n\n` +
     `The \`${npmName}\` file is the unmodified \`npm pack\` input retained for audit. It is not evidence of an npm publication and still requires dependency resolution when installed directly.\n`;
 }
 
@@ -104,7 +104,7 @@ function assemble(inputDir, outputDir, commit, options = {}) {
   const npmName = `tower-org-cli-${pkg.version}.tgz`;
   fs.copyFileSync(tarballs[0], path.join(outputDir, npmName));
   copied.push(npmName);
-  for (const installer of ["install.sh", "install.ps1"]) {
+  for (const installer of ["install.sh", "install.cmd", "install.ps1"]) {
     fs.copyFileSync(path.join(__dirname, installer), path.join(outputDir, installer));
     copied.push(installer);
   }
@@ -125,8 +125,8 @@ function assemble(inputDir, outputDir, commit, options = {}) {
     `## Portable targets\n\n| OS | CPU | Asset |\n| --- | --- | --- |\n${targetRows}\n\n` +
     `Every listed target passed a native runner smoke covering first database creation, migrations, Prisma Client/Query/Schema Engines, MCP startup, node-pty, ripgrep, and Tower HTTP startup with npm/Prisma download endpoints blocked. Targets that do not pass are not assembled or published.\n\n` +
     `## Node.js\n\nNode.js >=22.0.0 is required and is not bundled or installed by Tower. Node 22 and 24 are tested on every release target. Other versions meeting the minimum continue in best-effort mode unless listed as specifically incompatible.\n\n` +
-    `## Verify\n\nDownload the asset and \`SHA256SUMS\`, then filter the selected filename and run \`sha256sum -c -\` (Linux) or \`shasum -a 256 -c -\` (macOS); on Windows compare \`Get-FileHash <asset> -Algorithm SHA256\` with the matching line in \`SHA256SUMS\`. Review \`install.sh\` / \`install.ps1\` before execution.\n\n` +
-    `## Install and recovery\n\nThe versioned download base is \`https://github.com/tower-org/tower/releases/download/v${pkg.version}\`. Pass \`--version ${pkg.version}\` / \`-Version ${pkg.version}\` to pin this release. The installers support \`--rollback\` / \`-Rollback\` and \`--uninstall\` / \`-Uninstall\`; uninstall preserves \`~/.tower\` user data. The maintained installation guide is https://tower-org.github.io/tower/guide/getting-started.html (English: https://tower-org.github.io/tower/en/guide/getting-started.html).\n`;
+    `## Verify\n\nDownload the asset and \`SHA256SUMS\`, then filter the selected filename and run \`sha256sum -c -\` (Linux) or \`shasum -a 256 -c -\` (macOS); on Windows compare \`Get-FileHash <asset> -Algorithm SHA256\` with the matching line in \`SHA256SUMS\`. Review \`install.sh\`, \`install.cmd\`, and \`install.ps1\` before execution.\n\n` +
+    `## Install and recovery\n\nThe versioned download base is \`https://github.com/tower-org/tower/releases/download/v${pkg.version}\`. On Windows keep \`install.cmd\` and \`install.ps1\` together; the CMD wrapper forwards to the PowerShell installer with a process-scoped execution-policy bypass. Pass \`--version ${pkg.version}\` / \`-Version ${pkg.version}\` to pin this release. The installers support \`--rollback\` / \`-Rollback\` and \`--uninstall\` / \`-Uninstall\`; uninstall preserves \`~/.tower\` user data. The maintained installation guide is https://tower-org.github.io/tower/guide/getting-started.html (English: https://tower-org.github.io/tower/en/guide/getting-started.html).\n`;
   const notesName = candidateMetadata ? "CANDIDATE_RELEASE_NOTES.md" : "RELEASE_NOTES.md";
   fs.writeFileSync(path.join(outputDir, notesName), notes);
   return { copied, notes };

@@ -178,7 +178,7 @@ the generated asset names:
 - `tower-portable-linux-arm64.tar.gz`
 - `tower-portable-linux-x64.tar.gz`
 - `tower-portable-windows-x64.tar.gz`
-- `install.sh`, `install.ps1`, `SHA256SUMS`, and the exact npm pack tarball
+- `install.sh`, `install.cmd`, `install.ps1`, `SHA256SUMS`, and the exact npm pack tarball
 
 The online base is
 `https://github.com/tower-org/tower/releases/download/v<VERSION>` (or the

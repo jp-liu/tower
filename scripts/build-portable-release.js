@@ -212,6 +212,7 @@ function copyPortableFiles(payloadRoot, platform) {
   fs.mkdirSync(path.join(payloadRoot, "bin"), { recursive: true });
   fs.copyFileSync(path.join(projectRoot, "LICENSE"), path.join(payloadRoot, "LICENSE"));
   if (platform === "windows") {
+    fs.copyFileSync(path.join(projectRoot, "scripts", "install.cmd"), path.join(payloadRoot, "install.cmd"));
     fs.copyFileSync(path.join(portableDir, "install.ps1"), path.join(payloadRoot, "install.ps1"));
     fs.copyFileSync(path.join(portableDir, "tower.cmd"), path.join(payloadRoot, "bin", "tower.cmd"));
     fs.copyFileSync(path.join(portableDir, "tower.ps1"), path.join(payloadRoot, "bin", "tower.ps1"));

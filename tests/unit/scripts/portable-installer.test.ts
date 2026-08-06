@@ -81,3 +81,13 @@ describe.runIf(!isWindows())("portable user installer", () => {
     expect(output).toContain("Portable Tower payload verified.");
   });
 });
+
+describe.runIf(isWindows())("Windows installer wrapper", () => {
+  it("invokes the adjacent PowerShell installer and preserves a successful exit", () => {
+    const output = execFileSync("cmd.exe", [
+      "/d", "/c", path.join(projectRoot, "scripts", "install.cmd"), "-Help",
+    ], { encoding: "utf8" });
+
+    expect(output).toContain("Usage: .\\install.ps1");
+  });
+});
