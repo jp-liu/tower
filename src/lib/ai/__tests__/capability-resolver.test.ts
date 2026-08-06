@@ -147,14 +147,15 @@ describe("explicit capability resolver", () => {
       .toBe("model_unavailable");
   });
 
-  it("does not resolve a CLI whose reconciliation cache is partial", async () => {
+  it("resolves a CLI whose Hello test passed even when integrations are partial", async () => {
     const partial = { ...connection, testStatus: "partial", testOk: true };
     mockDb.aiCapabilityConfig.findUnique.mockResolvedValue(configWith(partial));
 
     const target = (await resolveCapabilityPlan("terminal")).targets[0];
 
-    expect(target?.preflightError?.code).toBe("connection_unavailable");
-    expect(providerRegistry.createResolvedCliConnectionAdapter).not.toHaveBeenCalled();
+    expect(target).toMatchObject({ kind: "cli", cli: { commandPath: "/fake/claude" } });
+    expect(target?.preflightError).toBeUndefined();
+    expect(providerRegistry.createResolvedCliConnectionAdapter).toHaveBeenCalledOnce();
   });
 
   it("accepts CLI and API targets for non-terminal slots", async () => {

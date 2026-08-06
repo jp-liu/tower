@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
   update: vi.fn(),
   upsert: vi.fn(),
-  capabilityFindUnique: vi.fn(),
   registryGet: vi.fn(),
   listProviders: vi.fn(),
   resolveConnection: vi.fn(),
@@ -25,7 +24,6 @@ vi.mock("@/lib/db", () => ({
       update: mocks.update,
       upsert: mocks.upsert,
     },
-    aiCapabilityConfig: { findUnique: mocks.capabilityFindUnique },
   },
 }));
 vi.mock("../providers", () => ({
@@ -56,10 +54,7 @@ vi.mock("@tower-org/ai-runtime", async (importOriginal) => {
   };
 });
 
-import {
-  reconcileProviderIntegrations,
-  reconcileTerminalCapabilityTargets,
-} from "../provider-reconciliation";
+import { reconcileProviderIntegrations } from "../provider-reconciliation";
 
 function connection(overrides: Record<string, unknown> = {}) {
   return {
@@ -139,7 +134,7 @@ describe("provider integration reconciliation host", () => {
   it("repairs and verifies integrations before rerunning Hello after path and version changes", async () => {
     const result = await reconcileProviderIntegrations({
       connectionId: "connection-1",
-      trigger: "terminal-spawn",
+      trigger: "dependency-changed",
       cwd: "/fixture/worktree",
     });
 
@@ -281,7 +276,7 @@ describe("provider integration reconciliation host", () => {
     await vi.waitFor(() => expect(mocks.resolveConnection).toHaveBeenCalledTimes(1));
     const second = reconcileProviderIntegrations({
       connectionId: "connection-1",
-      trigger: "terminal-spawn",
+      trigger: "manual-repair",
       cwd: "/worktree/two",
     });
     await Promise.resolve();
@@ -314,7 +309,7 @@ describe("provider integration reconciliation host", () => {
     });
     const request = {
       connectionId: "connection-1",
-      trigger: "terminal-spawn" as const,
+      trigger: "manual-repair" as const,
       cwd: "/worktree/shared",
     };
 
@@ -372,84 +367,6 @@ describe("provider integration reconciliation host", () => {
     expect(finalResult).toMatchObject({ status: "connected", hello: "passed" });
     expect(mocks.connection).toMatchObject({ testStatus: "connected", testOk: true });
     expect(mocks.reconcile).toHaveBeenCalledTimes(2);
-  });
-
-  it("isolates one terminal candidate reconciliation exception and continues with the next", async () => {
-    const firstConnection = connection({ id: "connection-1", provider: "codex" });
-    const secondConnection = connection({ id: "connection-2", provider: "gemini" });
-    mocks.capabilityFindUnique.mockResolvedValue({
-      targets: [
-        { connection: { id: "connection-1", provider: "codex", kind: "cli", enabled: true } },
-        { connection: { id: "connection-2", provider: "gemini", kind: "cli", enabled: true } },
-      ],
-    });
-    mocks.registryGet.mockImplementation((provider: string) =>
-      provider === "codex" || provider === "gemini" ? { name: provider, cli: {} } : undefined);
-    mocks.findUnique.mockImplementation(async ({ where }: { where: { id?: string } }) =>
-      where.id === "connection-2" ? secondConnection : firstConnection);
-    mocks.reconcile
-      .mockRejectedValueOnce(new Error("temporary config failure"))
-      .mockResolvedValueOnce({
-        provider: "gemini",
-        available: true,
-        ok: true,
-        integrationFingerprint: "sha256:gemini",
-        reconciledAt: "2026-07-26T00:00:00.000Z",
-        desired: { mcp: true, hooks: false, skills: true },
-        mcp: { ok: true, method: "cli" },
-        skill: { ok: true, method: "symlink" },
-      });
-
-    const failures = await reconcileTerminalCapabilityTargets("/fixture/worktree");
-
-    expect(failures.get("connection-1")).toMatchObject({ code: "connection_unavailable" });
-    expect(failures.has("connection-2")).toBe(false);
-    expect(mocks.resolveConnection).toHaveBeenCalledTimes(2);
-  });
-
-  it("marks a candidate unavailable after repair verification exhausts its retry and keeps reconciling", async () => {
-    const firstConnection = connection({ id: "connection-1", provider: "codex" });
-    const secondConnection = connection({ id: "connection-2", provider: "gemini" });
-    mocks.capabilityFindUnique.mockResolvedValue({
-      targets: [
-        { connection: { id: "connection-1", provider: "codex", kind: "cli", enabled: true } },
-        { connection: { id: "connection-2", provider: "gemini", kind: "cli", enabled: true } },
-      ],
-    });
-    mocks.registryGet.mockImplementation((provider: string) =>
-      provider === "codex" || provider === "gemini" ? { name: provider, cli: {} } : undefined);
-    mocks.findUnique.mockImplementation(async ({ where }: { where: { id?: string } }) =>
-      where.id === "connection-2" ? secondConnection : firstConnection);
-    const failedReport = {
-      provider: "codex",
-      available: true,
-      ok: false,
-      integrationFingerprint: "sha256:failed",
-      reconciledAt: "2026-07-26T00:00:00.000Z",
-      desired: { mcp: true, hooks: true, skills: true },
-      mcp: { ok: false, method: "cli", error: "MCP verification failed after install" },
-      hooks: { ok: true, method: "file" },
-      skill: { ok: true, method: "symlink" },
-    };
-    mocks.reconcile
-      .mockResolvedValueOnce(failedReport)
-      .mockResolvedValueOnce(failedReport)
-      .mockResolvedValueOnce({
-        provider: "gemini",
-        available: true,
-        ok: true,
-        integrationFingerprint: "sha256:gemini",
-        reconciledAt: "2026-07-26T00:00:01.000Z",
-        desired: { mcp: true, hooks: false, skills: true },
-        mcp: { ok: true, method: "cli" },
-        skill: { ok: true, method: "symlink" },
-      });
-
-    const failures = await reconcileTerminalCapabilityTargets("/fixture/worktree");
-
-    expect(failures.get("connection-1")).toMatchObject({ code: "connection_unavailable" });
-    expect(failures.has("connection-2")).toBe(false);
-    expect(mocks.reconcile).toHaveBeenCalledTimes(3);
   });
 
   it("does not inspect, install, or run Hello when the CLI version is incompatible", async () => {

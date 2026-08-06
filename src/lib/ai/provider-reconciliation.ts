@@ -2,9 +2,7 @@ import "server-only";
 
 import {
   ControlledProcessExecutor,
-  capabilityError,
   stableJson,
-  type CapabilityErrorShape,
 } from "@tower-org/ai-runtime";
 import { db } from "@/lib/db";
 import { getPackageRoot } from "@/lib/tower-paths";
@@ -22,7 +20,6 @@ export type ProviderReconciliationTrigger =
   | "startup"
   | "extension-enabled"
   | "hello-success"
-  | "terminal-spawn"
   | "dependency-changed"
   | "manual-repair";
 
@@ -516,88 +513,4 @@ export async function reconcileAllProviderIntegrations(
       };
     }
   }));
-}
-
-function terminalReconciliationError(
-  status: ProviderReconciliationStatus,
-): CapabilityErrorShape | null {
-  if (status === "connected") return null;
-  const code = status === "dependency-missing" || status === "plugin-uninstalled"
-    ? "cli_not_found"
-    : status === "plugin-disabled" || status === "permission-required"
-      ? "connection_disabled"
-      : "connection_unavailable";
-  const error = capabilityError(code);
-  return { code: error.code, message: error.message };
-}
-
-export async function reconcileTerminalCapabilityTargets(
-  cwd: string,
-): Promise<Map<string, CapabilityErrorShape>> {
-  const failures = new Map<string, CapabilityErrorShape>();
-  const config = await db.aiCapabilityConfig.findUnique({
-    where: { slot: "terminal" },
-    select: {
-      targets: {
-        orderBy: { order: "asc" },
-        select: {
-          connection: { select: { id: true, provider: true, kind: true, enabled: true } },
-        },
-      },
-    },
-  });
-  for (const target of config?.targets ?? []) {
-    if (target.connection.kind !== "cli") continue;
-    if (!target.connection.enabled) {
-      failures.set(target.connection.id, terminalReconciliationError("plugin-disabled")!);
-      continue;
-    }
-    try {
-      const result = await reconcileProviderIntegrations({
-        provider: target.connection.provider,
-        connectionId: target.connection.id,
-        trigger: "terminal-spawn",
-        cwd,
-      });
-      const failure = terminalReconciliationError(result.status);
-      if (failure) failures.set(target.connection.id, failure);
-    } catch {
-      failures.set(target.connection.id, terminalReconciliationError("failed")!);
-    }
-  }
-  return failures;
-}
-
-export async function reconcileTerminalExecutionBinding(
-  binding: { connectionId: string | null; agent: string },
-  cwd: string,
-): Promise<void> {
-  let result: ProviderReconciliationResult | null = null;
-  if (binding.connectionId) {
-    try {
-      result = await reconcileProviderIntegrations({
-        connectionId: binding.connectionId,
-        trigger: "terminal-spawn",
-        cwd,
-      });
-    } catch {
-      throw capabilityError("connection_unavailable");
-    }
-  } else {
-    const provider = providerRegistry.getByAgentFieldValue(binding.agent);
-    if (provider?.cli) {
-      try {
-        result = await reconcileProviderIntegrations({
-          provider: provider.name,
-          trigger: "terminal-spawn",
-          cwd,
-        });
-      } catch {
-        throw capabilityError("connection_unavailable");
-      }
-    }
-  }
-  if (!result) return;
-  const failure = terminalReconciliationError(result.status);
-  if (failure) throw capabilityError(failure.code);
 }

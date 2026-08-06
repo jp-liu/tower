@@ -14,10 +14,6 @@ import {
 } from "@/lib/ai/capability-resolver";
 import { recordCapabilityAttemptService } from "@/lib/ai/capability-config-service";
 import {
-  reconcileTerminalCapabilityTargets,
-  reconcileTerminalExecutionBinding,
-} from "@/lib/ai/provider-reconciliation";
-import {
   buildTerminalLaunch,
   resolveExecutionTerminalTarget,
   terminalTargetSnapshot,
@@ -343,8 +339,7 @@ export async function resumePtyExecution(
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
   // Resume is pinned to the exact connection/model snapshot on the original execution.
-  // Legacy rows are mapped once through their unique cli:<provider> connection.
-  await reconcileTerminalExecutionBinding(prevExec, cwd);
+  // Integration inspection and repair belong to Tower startup and Settings, not PTY launch.
   const fixedTarget = await resolveExecutionTerminalTarget(prevExec, cwd);
   const fixedSnapshot = terminalTargetSnapshot(fixedTarget);
 
@@ -575,7 +570,6 @@ export async function continueLatestPtyExecution(
   const idleTimeoutSec = await readConfigValue<number>("terminal.idleTimeoutSec", 180);
 
   // Continue is fixed to the latest execution's exact connection and model.
-  await reconcileTerminalExecutionBinding(latestExec, cwd);
   const fixedTarget = await resolveExecutionTerminalTarget(latestExec, cwd);
   const fixedSnapshot = terminalTargetSnapshot(fixedTarget);
 
@@ -931,34 +925,15 @@ export async function startPtyExecution(
       refreshWorkspaces();
     }
 
-    // Reconcile real CLI config immediately before every PTY spawn. This also
-    // lets a restored CLI recover an unavailable cached connection.
-    let terminalReconciliationFailures: Map<
-      string,
-      { code: ReturnType<typeof capabilityError>["code"]; message: string }
-    > | null = null;
-    if (fixedTargetSnapshot) {
-      await reconcileTerminalExecutionBinding({
-        connectionId: fixedTargetSnapshot.connectionId,
-        agent: "",
-      }, cwd);
-    } else {
-      terminalReconciliationFailures = await reconcileTerminalCapabilityTargets(cwd);
-    }
-
-    // Resolve only after the final cwd is known. A fixed retry never reads the slot.
+    // PTY launch only resolves readiness. Tower startup and Settings own integration
+    // inspection and repair so starting a task never rewrites MCP, hooks, or skills.
     const terminalTargets = fixedTargetSnapshot
       ? [await resolveFixedCliConnection(
           fixedTargetSnapshot.connectionId,
           fixedTargetSnapshot.modelId,
           { cwd, targetId: fixedTargetSnapshot.targetId },
         )]
-      : (await resolveTerminalTargetPlan({ cwd })).targets.map((target) => {
-          const reconciliationFailure = terminalReconciliationFailures?.get(target.connectionId);
-          return reconciliationFailure
-            ? { ...target, preflightError: reconciliationFailure }
-            : target;
-        });
+      : (await resolveTerminalTargetPlan({ cwd })).targets;
 
     // 6b. Record forkCommit
     // Worktree mode: merge-base between baseBranch and HEAD

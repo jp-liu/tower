@@ -8,10 +8,8 @@ const fsMocks = vi.hoisted(() => ({
   rm: vi.fn(async () => {}),
 }));
 const reconciliationMocks = vi.hoisted(() => ({
-  reconcileTerminalCapabilityTargets: vi.fn(async () => new Map()),
-  reconcileTerminalExecutionBinding: vi.fn(async () => {}),
+  reconcileProviderIntegrations: vi.fn(),
 }));
-
 vi.mock("fs/promises", async (importOriginal) => ({
   ...await importOriginal<typeof import("fs/promises")>(),
   ...fsMocks,
@@ -80,10 +78,7 @@ vi.mock("@/lib/ai/providers", () => ({
     })),
   },
 }));
-vi.mock("@/lib/ai/provider-reconciliation", () => ({
-  ...reconciliationMocks,
-}));
-
+vi.mock("@/lib/ai/provider-reconciliation", () => reconciliationMocks);
 import { db } from "@/lib/db";
 import { createSession, destroySession } from "@/lib/pty/session-store";
 import { readConfigValue } from "@/lib/config-reader";
@@ -93,10 +88,7 @@ import {
   resolveTerminalTargetPlan,
 } from "@/lib/ai/capability-resolver";
 import { providerRegistry } from "@/lib/ai/providers";
-import {
-  reconcileTerminalCapabilityTargets,
-  reconcileTerminalExecutionBinding,
-} from "@/lib/ai/provider-reconciliation";
+import { reconcileProviderIntegrations } from "@/lib/ai/provider-reconciliation";
 import { createWorktree } from "@/lib/worktree";
 import {
   continueLatestPtyExecution,
@@ -237,9 +229,7 @@ describe("startPtyExecution directive selection", () => {
 
     await startPtyExecution("t1", "");
 
-    expect(reconcileTerminalCapabilityTargets).toHaveBeenCalledWith(process.cwd());
-    expect(vi.mocked(reconcileTerminalCapabilityTargets).mock.invocationCallOrder[0])
-      .toBeLessThan(vi.mocked(resolveTerminalTargetPlan).mock.invocationCallOrder[0]!);
+    expect(reconcileProviderIntegrations).not.toHaveBeenCalled();
     const directive = injectedDirective();
     expect(directive).toContain("## Tower Workbench");
     expect(directive).not.toContain("## About Tower");
@@ -467,46 +457,6 @@ describe("startPtyExecution directive selection", () => {
     });
   });
 
-  it("falls back without spawning the primary when its integration reconciliation is not connected", async () => {
-    reconciliationMocks.reconcileTerminalCapabilityTargets.mockResolvedValueOnce(new Map([[
-      "connection-claude",
-      { code: "connection_unavailable", message: "The configured connection is unavailable" },
-    ]]));
-    vi.mocked(resolveTerminalTargetPlan).mockResolvedValue({
-      slot: "terminal",
-      targets: [terminalTarget("claude"), terminalTarget("codex", { order: 1 })],
-      migrationStatus: "complete",
-    } as never);
-    mockDb.task.findUnique.mockResolvedValue(taskWithLabels([]));
-
-    const result = await startPtyExecution("t1", "");
-
-    expect(result.connectionId).toBe("connection-codex");
-    expect(createSession).toHaveBeenCalledOnce();
-    expect(vi.mocked(createSession).mock.calls[0][1]).toBe("codex");
-  });
-
-  it("does not fallback or spawn when a fixed binding reconciliation fails", async () => {
-    reconciliationMocks.reconcileTerminalExecutionBinding.mockRejectedValueOnce(Object.assign(
-      new Error("The configured connection is unavailable"),
-      { code: "connection_unavailable" },
-    ));
-    mockDb.task.findUnique.mockResolvedValue(taskWithLabels([]));
-
-    await expect(startPtyExecution(
-      "t1",
-      "",
-      undefined,
-      undefined,
-      false,
-      { connectionId: "connection-claude", modelId: "claude-model", targetId: "target-claude" },
-    )).rejects.toMatchObject({ code: "connection_unavailable" });
-
-    expect(resolveFixedCliConnection).not.toHaveBeenCalled();
-    expect(resolveTerminalTargetPlan).not.toHaveBeenCalled();
-    expect(createSession).not.toHaveBeenCalled();
-  });
-
   it("falls back when adapter process planning reports a spawn failure", async () => {
     const primary = terminalTarget("claude");
     primary.cli.adapter.buildSessionProcess = () => {
@@ -676,7 +626,7 @@ describe("startPtyExecution directive selection", () => {
 
     await resumePtyExecution("t1", "session-1");
 
-    expect(reconcileTerminalExecutionBinding).toHaveBeenCalledWith(previous, process.cwd());
+    expect(reconcileProviderIntegrations).not.toHaveBeenCalled();
     expect(resolveFixedCliConnection).toHaveBeenCalledWith(
       "connection-codex",
       "codex-model",
