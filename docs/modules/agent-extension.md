@@ -251,10 +251,16 @@ capabilityRoutes:
 
 ## 统一 tower-bridge
 
-所有 Tower 外部副作用都使用 `tower-bridge`。真人或群组消息是
+所有需要 Gateway 持有渠道、凭据、用户会话、能力路由或 Operator 的外部操作都使用
+`tower-bridge`。任务终端中的 Shell、文件、Git、依赖、构建、测试和本地数据库操作
+仍直接在终端执行；联网或需要人工确认本身并不会把一个终端命令变成 bridge 操作。
+真人或群组消息是
 `human.message.send`：用户明确指定收件人时走 `explicit` 模式和
 `push_to_human`；无人值守主动联系 OWNER 时走 `owner_home` 模式、固定
 OWNER 路由和 bounded grant。原 `tower-ask` 已合并，不再作为独立 skill 安装。
+
+当前 CapabilityRequest 合约仅允许 `human.message.send / DIRECT / R2`。
+飞书文档、表格、浏览器或电脑等其他已公布能力使用其 discovery 返回的 `JOB` 路径。
 
 当一个 Tower 任务需要“把整理结果交给小塔，让小塔按扩展能力分流”时，也使用 `tower-bridge`：
 

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * notify_human 桥：非阻塞进度汇报。不 park、不结束回合 —— agent 继续跑。
- * Tower 只**记一条日志行**（供 /harness 面板可见）；真正外推给人由 agent 用平台 MCP 完成。
+ * 本路由只记录日志；真正外推由 tower-bridge 的 push_to_human 持久发件箱完成。
  */
 export async function POST(request: NextRequest) {
   const blocked = requireLocalhost(request);

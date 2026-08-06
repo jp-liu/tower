@@ -232,6 +232,8 @@ describe("startPtyExecution directive selection", () => {
     expect(reconcileProviderIntegrations).not.toHaveBeenCalled();
     const directive = injectedDirective();
     expect(directive).toContain("## Tower Workbench");
+    expect(directive).toContain("Ordinary task-terminal shell, filesystem, Git");
+    expect(directive).not.toContain("Use `tower-bridge` for every external side effect");
     expect(directive).not.toContain("## About Tower");
     // The workbench lives in the main worktree and has no Complete button.
     expect(directive).not.toContain("Worktree discipline");
@@ -248,6 +250,8 @@ describe("startPtyExecution directive selection", () => {
     const directive = injectedDirective();
     expect(directive).toContain("## About Tower");
     expect(directive).toContain("Worktree discipline");
+    expect(directive).toContain("Ordinary task-terminal shell, filesystem, Git");
+    expect(directive).not.toContain("Use `tower-bridge` for every external side effect");
     expect(directive).not.toContain("## Tower Workbench");
   });
 

@@ -21,7 +21,7 @@ Feishu/WhatsApp/Slack/etc. are downstream platforms, not Tower gateways. Tower s
 | **bridge (inbound)** | A long-running MCP agent (bot / OpenClaw / …) | Own first-hop intent routing. Ordinary Q&A/external work stays outside Tower; Tower replies are resolved read-only before an explicit query, ask answer, delegation, or continuation action. |
 | **tower-bridge (external capability)** | The task agent (`tower-bridge` skill) | Submit a structured external capability request without choosing a concrete Operator. Unattended OWNER sends are the first DIRECT capability; sibling-task handoff stays in the `tower` skill. |
 
-> `tower-goal` / `tower-bridge` are **real callable skills** distributed with Tower into task-agent skill homes. `tower-bridge` owns every external side effect, including human messages. Lowercase `bridge` is still this doc's name for the inbound gateway role.
+> `tower-goal` / `tower-bridge` are **real callable skills** distributed with Tower into task-agent skill homes. `tower-bridge` owns Gateway-mediated external operations, including human messages and work that needs Gateway-owned channels, credentials, user sessions, capability routes, or Operators. Normal task-terminal shell, filesystem, Git, build, and test work remains direct. Lowercase `bridge` is still this doc's name for the inbound gateway role.
 
 ---
 

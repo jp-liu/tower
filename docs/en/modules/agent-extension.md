@@ -318,11 +318,19 @@ openclaw status --all
 
 ## Unified tower-bridge
 
-Use `tower-bridge` for every side effect outside Tower. Human and group messages
+Use `tower-bridge` for external operations that require Gateway-owned channels,
+credentials, user sessions, capability routes, or Operators. Shell, filesystem,
+Git, dependency, build, test, and local-database work stays in the task terminal;
+network access or a consent requirement alone does not make a terminal command a
+bridge operation. Human and group messages
 are `human.message.send`: an explicitly named recipient uses `recipientMode:
 explicit` and `push_to_human`; an unattended OWNER message uses
 `recipientMode: owner_home`, the fixed OWNER route, and a bounded grant. The old
 `tower-ask` skill has been merged and is no longer installed separately.
+
+The current CapabilityRequest contract reserves `DIRECT / R2` for
+`human.message.send`. Other advertised capabilities, including document,
+spreadsheet, browser, and computer work, use the `JOB` lane returned by discovery.
 
 When a Tower task needs to send prepared content to `o-tower` so the gateway can
 route it through local extensions, use `tower-bridge`:

@@ -223,6 +223,18 @@ describe("list_notify_targets — scope derivation", () => {
     expect(r.scope).toBe("unattended");
     expect(r.noChannelConfigured).toBe(true);
   });
+
+  it("unsupported gateway fails closed without a platform-MCP fallback", async () => {
+    findUnique.mockResolvedValue({ unattended: false, title: "T" });
+    readCfg.mockResolvedValue([{ active: true, gateway: "custom", scope: "work" }]);
+
+    const r = await call({ taskId: TASK_ID, scope: "work" });
+
+    expect(r.capabilityUnavailable).toBe(true);
+    expect(r.error).toBe("Notify channel gateway custom is not supported");
+    expect(String(r.instructions)).toContain("Do NOT send");
+    expect(String(r.instructions)).not.toContain("[[tower:task=");
+  });
 });
 
 describe("gateway task boundary tools", () => {

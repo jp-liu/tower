@@ -50,7 +50,7 @@ The must-follow rules. Everything else is operational detail below.
 
 ## When to Use
 
-Use Tower tools when the user wants to view/create/manage tasks and projects, check execution status, interact with a running task's terminal, search, organize with labels/status, or get a daily summary / todo. For unattended relay and work-recipient messaging, read [references/unattended-messaging.md](references/unattended-messaging.md). Tower sibling-task handoff stays in this skill; use `tower-bridge` only for capabilities outside Tower.
+Use Tower tools when the user wants to view/create/manage tasks and projects, check execution status, interact with a running task's terminal, search, organize with labels/status, or get a daily summary / todo. For unattended relay and work-recipient messaging, read [references/unattended-messaging.md](references/unattended-messaging.md). Tower sibling-task handoff stays in this skill. Use `tower-bridge` only for Gateway-mediated external operations; ordinary task-terminal shell, filesystem, Git, build, and test work stays in the terminal.
 
 ## Session default scope
 

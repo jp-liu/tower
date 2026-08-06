@@ -40,9 +40,9 @@ export function resolveTaskForCurrentTerminal(taskId?: string): { taskId: string
 
 /**
  * Compose ready-to-follow send instructions from the ACTIVE notify channel.
- * The tower-bridge / tower-goal skills call list_notify_targets and just DO what
- * `instructions` says — no need to re-derive the gateway→platform-MCP mapping
- * from static skill docs. Tower only records; the agent does the real send.
+ * The tower-bridge / tower-goal skills call list_notify_targets and follow its
+ * instructions. Supported channels go through push_to_human's durable outbox;
+ * callers must not derive or invoke a direct platform-MCP fallback.
  */
 type NotifyTargetConfig = {
   id?: string;
@@ -104,7 +104,6 @@ export function composeSendInstructions(
   active: NotifyTargetConfig,
   token: string,
   scope: "work" | "unattended",
-  taskTitle: string | null,
 ): string {
   const gw = active.gateway ?? "";
   const destination =
@@ -138,24 +137,11 @@ export function composeSendInstructions(
       `The body will include the token ${token} so replies can be attributed.`,
     ].join("\n");
   }
-  const via = `Send via the ${gw} gateway; in the body state "via ${active.downstream ?? "downstream"} to ${destination}"`;
-  // Unattended: start the body with 【task title】 so the human can tell parallel goals apart and reply without crossing wires.
-  const titlePrefix =
-    scope === "unattended" && taskTitle
-      ? `1. Start the body with 【${taskTitle}】 (lets the human tell which task this is when several run in parallel).\n`
-      : "";
-  const parkLine =
-    scope === "work"
-      ? `You're present (work channel): after the send succeeds, just record one notify_human; DO NOT park, DO NOT close the terminal — wait for the reply in the terminal to continue.`
-      : `You're away (unattended channel): after the send succeeds, if a reply is needed to continue use ask_human (parks, waits for a bridge-injected reply); if it's just a heads-up use notify_human.`;
   return [
-    `Channel class: ${scope === "work" ? "work (present · discuss in a group)" : "unattended (off-hours · reach the owner)"}`,
-    `Active channel: ${active.label ?? gw} (gateway ${gw}${active.downstream ? ` → downstream ${active.downstream}` : ""}, destination ${destination})`,
-    `Steps (order is fixed):`,
-    titlePrefix + `${titlePrefix ? "2" : "1"}. ${via}. The body MUST contain the token ${token} verbatim (missing it → replies can't be attributed → task stuck forever).`,
-    `   Only have a group/person name, no platform id → look the id up via the platform MCP first, then send.`,
-    `${titlePrefix ? "3" : "2"}. ${parkLine}`,
-    `If the send fails, don't call ask_human (else it parks but nobody got it) — retry, or leave the message in the /harness panel and stop.`,
+    `Channel class: ${scope === "work" ? "work" : "unattended"}`,
+    `Unsupported gateway: ${active.label ?? gw}`,
+    "Do NOT send or look up a destination through a platform MCP.",
+    "Configure an active Hermes or OpenClaw channel under Settings → Notifications.",
   ].join("\n");
 }
 

@@ -1242,7 +1242,7 @@ export const en: Translations = {
   "harness.detail.noReply": "No reply yet",
   "harness.tooltip.clickDetail": "Click to view details",
   "settings.harness.title": "Message send channels",
-  "settings.harness.desc": "Which \"gateway → downstream\" route the task agent sends messages through, in two categories: work (at keyboard — send to a group to discuss) and unattended (off-hours — reach you personally). Where to send (group/person) is stated at send time — not preset here. Tower only records, never sends.",
+  "settings.harness.desc": "Which \"gateway → downstream\" route Tower's durable outbox uses to send task messages, in two categories: work (at keyboard — send to a group to discuss) and unattended (off-hours — reach you personally). Where to send a work message is supplied at send time.",
   "settings.harness.empty": "No channels yet. Add one so unattended tasks know what to send with.",
   "settings.harness.addTarget": "Add channel",
   "settings.harness.scope.work": "Work channel (at keyboard)",

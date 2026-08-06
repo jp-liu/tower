@@ -7,8 +7,8 @@ export const messagingTools = {
       "Read the ACTIVE notify channel of a given SCOPE from Tower's DB (harness.targets) and return " +
       "READY-TO-FOLLOW send instructions for pushing a message to a human — used by the tower-bridge / tower-goal " +
       "skills. Two scopes: 'work' (you're at the keyboard — send to a group/colleague for discussion, don't " +
-      "park) and 'unattended' (off-hours — reach you personally, park while waiting). Tower only records; the " +
-      "agent does the actual send via its own platform MCP. Pass the current taskId so the [[tower:task=...]] " +
+      "park) and 'unattended' (off-hours — reach you personally, park while waiting). The selected path must use " +
+      "push_to_human so Tower's durable outbox performs the external send and records its receipt. Pass the current taskId so the [[tower:task=...]] " +
       "token is filled in. Returns { scope, active, instructions }, or { noChannelConfigured: true } with " +
       "guidance if that scope has no active channel.",
     schema: z.object({
@@ -46,13 +46,22 @@ export const messagingTools = {
           instructions: "Do NOT send. The given taskId does not resolve to a task.",
         };
       }
-      const { task, scope, active } = resolved;
+      const { scope, active } = resolved;
       if (!active) {
         const hint =
           scope === "work"
-            ? "No active channel in the 'work' category. To send to a group, configure one under Settings → Notifications (work column) and mark it active — or just use your mounted platform MCP to send to the group the user named."
+            ? "No active channel in the 'work' category. To send to a group, configure one under Settings → Notifications (work column) and mark it active. Do not bypass tower-bridge with a platform MCP."
             : "No active channel in the 'unattended' category, so nothing can be pushed out. Don't pretend you sent it — tell the user to configure one under Settings → Notifications (unattended column) and mark it active.";
         return { scope, noChannelConfigured: true, instructions: hint };
+      }
+      if (active.gateway !== "hermes" && active.gateway !== "openclaw") {
+        return {
+          scope,
+          capabilityUnavailable: true,
+          error: `Notify channel gateway ${active.gateway} is not supported`,
+          instructions:
+            "Do NOT send or fall back to a platform MCP. Configure an active Hermes or OpenClaw channel under Settings → Notifications.",
+        };
       }
       const token = `[[tower:task=${taskId}]]`;
       return {
@@ -64,7 +73,7 @@ export const messagingTools = {
           profile: active.profile ?? null,
           label: active.label ?? null,
         },
-        instructions: composeSendInstructions(active, token, scope, task.title ?? null),
+        instructions: composeSendInstructions(active, token, scope),
       };
     },
   },

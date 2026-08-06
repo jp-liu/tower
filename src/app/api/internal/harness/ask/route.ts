@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * ask_human bridge: record an ask(OPEN) + set the RUNNING execution to PAUSED (park).
- * Tower **records only, never sends** — actually pushing the question to a human is done by the
- * agent via the tower-bridge message path.
+ * This route records only. Outbound delivery uses tower-bridge's push_to_human
+ * durable outbox path before this record/park operation is activated.
  * MCP is a separate stdio process with no access to Next's in-memory DB/PTY, so it goes through this
  * in-process bridge (same as terminal-tools).
  */

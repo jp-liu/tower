@@ -1255,7 +1255,7 @@ export const zh = {
   "harness.detail.noReply": "暂无回复",
   "harness.tooltip.clickDetail": "点击查看详情",
   "settings.harness.title": "消息发送渠道",
-  "settings.harness.desc": "任务 agent 把消息发给人时用哪条「网关 → 下游」。网关只支持 Hermes / OpenClaw；飞书、WhatsApp、Slack 等是下游平台。按用途分两类：工作（在场发群讨论）、无人值守（下班找你本人）。",
+  "settings.harness.desc": "Tower 持久发件箱把任务消息发给人时使用哪条「网关 → 下游」路由。网关只支持 Hermes / OpenClaw；飞书、WhatsApp、Slack 等是下游平台。按用途分两类：工作（在场发群讨论）、无人值守（下班找你本人）。",
   "settings.harness.empty": "还没有渠道。添加一个，无人值守任务才知道用什么发。",
   "settings.harness.addTarget": "添加渠道",
   "settings.harness.scope.work": "工作渠道（在场）",

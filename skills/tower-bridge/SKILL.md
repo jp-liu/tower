@@ -1,13 +1,21 @@
 ---
 name: tower-bridge
-description: Route any action outside Tower through the configured Gateway, including messages to a named human or group, unattended OWNER messages, computer or browser operation, SaaS, documents, spreadsheets, and other operator work. Use when a Tower task must communicate with a real recipient or invoke an external capability; keep sibling Tower task handoff and Tower CRUD in the tower skill.
+description: Route Gateway-mediated external operations, including messages to a named human or group, unattended OWNER messages, user-session computer or browser control, SaaS, documents, spreadsheets, and other operator work. Use when a Tower task must communicate with a real recipient or invoke a capability that depends on Gateway-owned channels, credentials, sessions, or Operators. Do not use for ordinary task-terminal shell, filesystem, Git, build, or test work; keep sibling task handoff and Tower CRUD in the tower skill.
 ---
 
 # tower-bridge - external capability boundary
 
-Use one bridge skill for every external side effect. Tower owns the task, goal,
-ask/park lifecycle, and project-relevant result. OpenClaw/Hermes owns channels,
-credentials, recipient resolution, capability routing, and concrete Operators.
+Use this bridge for every Gateway-mediated external operation. The boundary is
+crossed when work needs a real recipient or a Gateway-owned channel, credential,
+user session, capability route, or Operator. Tower owns the task, goal, ask/park
+lifecycle, and project-relevant result. OpenClaw/Hermes owns the external route.
+
+Keep the task terminal's development execution plane direct: use its normal
+shell and tools for workspace files, Git, package managers, builds, tests, and
+local databases. Network access alone does not trigger this skill; repository
+operations remain governed by the task's Git and safety rules. Requiring human
+consent for a risky terminal command also does not by itself make it a bridge
+operation.
 
 Do not install external MCPs into Tower or maintain a Tower-side map from
 capability names to agents.
@@ -98,7 +106,7 @@ When a valid request-specific grant already exists, form one
 schemaVersion: 1
 requestId: "<stable UUID; reuse for the same logical action>"
 capability: "<domain.resource.verb>"
-lane: "DIRECT | JOB"
+lane: JOB
 risk: "R0 | R1 | R2 | R3"
 authorizationRef: "<trusted grant reference; omit when none exists>"
 inputs: {}
@@ -116,8 +124,9 @@ constraints: []
   workspace path, command, or installation detail.
 - R2/R3 requires a valid bounded grant. The model cannot invent
   `authorizationRef`; Goal mode alone is not authorization.
-- Use `DIRECT` only for deterministic short actions with an immediate receipt.
-  Use `JOB` for multi-step Operator or GUI work.
+- In the current contract, `DIRECT` is reserved for
+  `human.message.send / R2`. Submit every other advertised external capability
+  using its discovered `JOB` lane.
 - Pick one route before submission. Never execute a compatibility route and a
   deterministic adapter for comparison.
 
@@ -144,6 +153,10 @@ state into Tower.
 - Tower sibling task: use the `tower` skill with `resume_task_execution` and
   `send_task_terminal_input`.
 - Tower CRUD, status, notes, or review: use the `tower` skill.
+- Task-terminal shell, filesystem, Git, dependency, build, test, and local
+  database work: execute directly in the terminal under project rules.
+- Browser/computer control means an external user session or Operator-managed
+  GUI, not ordinary terminal commands.
 - Never claim an action was submitted or completed without an authoritative
   receipt or result.
 - Never expose tokens, destinations, local paths, commands, MCP namespaces, or
