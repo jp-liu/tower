@@ -1,11 +1,20 @@
 export const DEFAULT_HOST = "127.0.0.1";
 
-const WILDCARD_HOSTS = new Set(["0.0.0.0", "::"]);
+const LOOPBACK_HOSTS = new Set([DEFAULT_HOST, "localhost", "::1"]);
 
 function normalizeHost(value) {
-  const host = (value ?? DEFAULT_HOST).trim();
+  const rawHost = (value ?? DEFAULT_HOST).trim();
+  const host = rawHost.startsWith("[") && rawHost.endsWith("]")
+    ? rawHost.slice(1, -1)
+    : rawHost;
   if (!host) throw new Error("Host must not be empty");
-  return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  const normalizedHost = host.toLowerCase();
+  if (!LOOPBACK_HOSTS.has(normalizedHost)) {
+    throw new Error(
+      `Tower only accepts loopback hosts (${[...LOOPBACK_HOSTS].join(", ")}); received ${host}`,
+    );
+  }
+  return normalizedHost;
 }
 
 function urlHost(host) {
@@ -14,16 +23,10 @@ function urlHost(host) {
 
 export function resolveRuntimeNetwork(hostValue, port) {
   const bindHost = normalizeHost(hostValue);
-  const wildcard = WILDCARD_HOSTS.has(bindHost);
-  const connectHost = bindHost === "0.0.0.0" ? "127.0.0.1"
-    : bindHost === "::" ? "::1"
-      : bindHost;
-  const browserHost = wildcard ? "localhost" : connectHost;
 
   return {
     bindHost,
-    connectHost,
-    browserUrl: `http://${urlHost(browserHost)}:${port}`,
-    explicitRemote: bindHost !== DEFAULT_HOST && bindHost !== "localhost" && bindHost !== "::1",
+    connectHost: bindHost,
+    browserUrl: `http://${urlHost(bindHost)}:${port}`,
   };
 }

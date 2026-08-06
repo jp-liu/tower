@@ -14,7 +14,7 @@
  *
  * Options:
  *   -p, --port <port>    Server port (default: 3000)
- *   -H, --host <host>    Server host (default: 127.0.0.1)
+ *   -H, --host <host>    Loopback host (default: 127.0.0.1)
  */
 
 import { chmodSync, existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
@@ -128,7 +128,7 @@ if (flags.help) {
 
   Options:
     -p, --port <port>   Server port (default: 3000)
-    -H, --host <host>   Server host (default: 127.0.0.1)
+    -H, --host <host>   Loopback host (default: 127.0.0.1)
     --no-open           Don't auto-open the browser on start
     -h, --help          Show help
     -v, --version       Show version

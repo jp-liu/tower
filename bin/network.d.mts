@@ -3,5 +3,4 @@ export function resolveRuntimeNetwork(hostValue: string | undefined, port: numbe
   bindHost: string;
   connectHost: string;
   browserUrl: string;
-  explicitRemote: boolean;
 };
