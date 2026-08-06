@@ -1,84 +1,44 @@
 ---
 title: Introduction
-description: What Tower is, core concepts, and tech stack overview
+description: How Tower organizes AI development into executable, reviewable tasks
 ---
 
-## What is Tower
+# What Tower does
 
-Tower is an AI task orchestration platform for individual developers. It integrates Kanban board management, terminal interaction, code editing, and an MCP toolchain into a unified environment for task management and AI agent collaboration.
+Tower is an AI task orchestration platform for developers. It keeps tasks, CLI
+agents, code changes, and acceptance evidence in one workflow so you can run
+several projects without losing context across terminals and chat windows.
 
-## Why Tower
+## The basic workflow
 
-AI has changed how developers work. Before, you'd write code step by step, adjust requirements when issues came up, and keep everything in sync at your own pace.
+1. Create a task in a project.
+2. Start an execution with the selected CLI agent in the task workbench.
+3. Follow progress in the Workbench or Mission Control and provide input when needed.
+4. Review terminal results, code diffs, and test evidence.
+5. Move accepted work to the completed state.
 
-That's no longer the case. AI now handles most of the coding, and your role has shifted from *writing code* to *reviewing code*. You're also juggling more projects than ever — running several in parallel has become the norm.
+Tower records execution; it does not decide whether code is safe to merge or
+publish. A person still owns final acceptance and irreversible operations.
 
-This creates real problems:
+## Core hierarchy
 
-- **Constant interruptions** — A new task or change request can drop in at any moment, breaking your train of thought. You finish reviewing a PR, switch to debug something in another project, and by the time you're back, you've lost your place.
-- **Lost context** — Bouncing between tasks means decisions, changes, and lessons learned slip through the cracks. There's nowhere to capture them, and by the time you need them again, they're gone.
-- **No way to review** — Conversations, code changes, terminal logs — they're scattered everywhere. When you want to look back, summarize, or extract lessons from a completed task, there's nothing to work with.
-
-Tower exists to fix this: **give every task a complete record**.
-
-Conversations, terminal logs, code diffs, file assets, execution summaries — everything is automatically captured in one place. You can switch between tasks without losing context, and once a task is done, use AI-powered review (Dreaming) to distill problems and insights into structured knowledge.
-
-Down the road, this feeds into a personal knowledge base — making everything searchable and reusable.
-
-## Core Concepts
-
-Tower's data model follows a three-level hierarchy:
-
-```
-Workspace → Project → Task
+```text
+Workspace
+  -> Project
+    -> Task
+      -> Execution
 ```
 
-- **Workspace**: Top-level container that manages the namespace for projects and labels
-- **Project**: Belongs to a Workspace, holds tasks and code repositories. Supports both regular and Git-based projects
-- **Task**: The core work unit that flows across Kanban columns via status (TODO / IN_PROGRESS / IN_REVIEW / DONE / CANCELLED)
+- A **Workspace** separates a business or personal environment.
+- A **Project** connects repositories, local paths, knowledge, and tasks.
+- A **Task** defines one deliverable and moves through the Kanban states.
+- An **Execution** records one agent terminal run and its session identity.
 
-Each Task can be associated with labels, execution records, and messages, with support for automated AI agent execution.
+## Choose the next page
 
-## Tech Stack
-
-| Technology | Description |
-|------------|-------------|
-| **Next.js 16** | App Router, full-stack framework |
-| **TypeScript** | Type safety |
-| **SQLite + Prisma** | Lightweight database + ORM |
-| **TailwindCSS 4** | Utility-first CSS |
-| **shadcn (base-nova)** | UI component library |
-| **xterm.js + node-pty** | Terminal emulation |
-| **Monaco Editor** | Code editor |
-| **MCP Protocol** | AI tool protocol |
-
-## Feature Overview
-
-- **Kanban Board** -- Drag-and-drop sorting, label filtering, priority management
-- **AI Terminal** -- Independent Claude CLI terminal session per task
-- **Code Editing** -- Monaco Editor with multi-tab editing and Git diff view
-- **MCP Toolchain** -- 24+ tools for external AI agent integration
-- **Multi-task Monitoring** -- Missions panel for real-time monitoring of multiple executions
-- **Global Search** -- Full-text search across tasks, projects, and repositories
-- **Internationalization** -- Chinese and English bilingual support
-
-## Module Documentation
-
-Tower consists of the following 14 modules:
-
-| Module | Description |
-|--------|-------------|
-| [Workspace](../modules/workspace) | Workspace management |
-| [Project](../modules/project) | Project management |
-| [Task](../modules/task) | Task management |
-| [Board](../modules/board) | Kanban UI |
-| [Terminal](../modules/terminal) | PTY terminal system |
-| [Assistant](../modules/assistant) | AI assistant chat |
-| [Missions](../modules/missions) | Multi-task monitoring |
-| [Search](../modules/search) | Global search |
-| [Settings](../modules/settings) | System configuration |
-| [MCP](../modules/mcp) | MCP Server |
-| [Git](../modules/git) | Git integration |
-| [Assets & Notes](../modules/assets-notes) | Assets and notes |
-| [AI](../modules/ai) | AI capability layer |
-| [I18n](../modules/i18n) | Internationalization |
+- To run Tower, read [Install and run](./getting-started).
+- To configure models or CLIs, read [AI Tools](./ai-tools).
+- To understand OpenClaw, Gateway, Workbench, and MCP, read the
+  [automation responsibility map](./automation).
+- To inspect internal components, read [System architecture](./architecture) or
+  the [module reference](../modules/workspace).
