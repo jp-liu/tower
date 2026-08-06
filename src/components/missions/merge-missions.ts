@@ -14,6 +14,7 @@ export function mergeMissions<T extends { executionId: string }>({
   fresh,
   removingIds,
 }: MergeInput<T>): MergeResult<T> {
+  const freshById = new Map(fresh.map((execution) => [execution.executionId, execution]));
   const freshIds = new Set(fresh.map((e) => e.executionId));
   const goneIds: string[] = [];
   prev.forEach((c) => {
@@ -21,9 +22,9 @@ export function mergeMissions<T extends { executionId: string }>({
       goneIds.push(c.executionId);
     }
   });
-  const retained = prev.filter(
-    (c) => freshIds.has(c.executionId) || removingIds.has(c.executionId)
-  );
+  const retained = prev
+    .filter((c) => freshIds.has(c.executionId) || removingIds.has(c.executionId))
+    .map((c) => freshById.get(c.executionId) ?? c);
   const prevIds = new Set(prev.map((c) => c.executionId));
   const added = fresh.filter((e) => !prevIds.has(e.executionId));
   return { merged: [...retained, ...added], goneIds };
