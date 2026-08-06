@@ -144,4 +144,13 @@ describe("CapabilitySlotsSection", () => {
     renderSection();
     expect(await screen.findByLabelText(/保留对话轮次|Conversation history/)).toHaveValue(20);
   });
+
+  it("keeps the Assistant history description and input bounds aligned", async () => {
+    renderSection();
+    const input = await screen.findByLabelText(/保留对话轮次|Conversation history/);
+    expect(input).toHaveAttribute("min", "1");
+    expect(input).toHaveAttribute("max", "20");
+    expect(screen.getByText(/1–20/)).toBeInTheDocument();
+    expect(screen.queryByText(/1–100/)).not.toBeInTheDocument();
+  });
 });

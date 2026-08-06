@@ -528,7 +528,7 @@ export const zh = {
   "settings.assistantCapability.effortHigh": "深度",
   "settings.assistantCapability.effortHighDesc": "深度推理，适合复杂任务",
   "settings.assistantCapability.historyTurns": "保留对话轮次",
-  "settings.assistantCapability.historyTurnsDesc": "仅保留最近 1–100 个已结束的完整对话轮次",
+  "settings.assistantCapability.historyTurnsDesc": "仅保留最近 1–20 个已结束的完整对话轮次",
   "settings.assistantCapability.updated": "助手配置已更新",
   "settings.config": "参数配置",
   "settings.configDesc": "系统运行参数",

@@ -452,9 +452,10 @@ describe("AssistantSessionService", () => {
     }
   });
 
-  it("removes only imported legacy sessions containing the Tower CLI carrier envelope", async () => {
+  it("removes carrier envelopes only from legacy UI sessions", async () => {
     const { prisma, sessions } = await service();
     try {
+      const carrierText = "Conversation history (Tower is the source of truth):\nUSER: old\n\nCURRENT USER: new";
       const carrier = await sessions.importLegacy({
         legacyId: "77777777-7777-4777-8777-777777777777",
         title: "Carrier",
@@ -462,7 +463,7 @@ describe("AssistantSessionService", () => {
         updatedAt: new Date("2025-01-02"),
         messages: [{
           role: "USER",
-          parts: [{ type: "text", text: "Conversation history (Tower is the source of truth):\nUSER: old\n\nCURRENT USER: new" }],
+          parts: [{ type: "text", text: carrierText }],
           turnKey: "one",
         }],
       });
@@ -473,10 +474,31 @@ describe("AssistantSessionService", () => {
         updatedAt: new Date("2025-01-02"),
         messages: [{ role: "USER", parts: [{ type: "text", text: "Explain CURRENT USER fields" }], turnKey: "one" }],
       });
+      const nativeUi = await sessions.createSession({}, "Native UI carrier-like text");
+      await prisma.assistantMessage.create({
+        data: {
+          id: "native-ui-carrier-message",
+          sessionId: nativeUi.id,
+          sequence: 1,
+          role: "USER",
+          partsJson: JSON.stringify([{ type: "text", text: carrierText }]),
+          status: "COMPLETE",
+        },
+      });
+      const gateway = await sessions.importLegacy({
+        legacyId: "99999999-9999-4999-8999-999999999999",
+        title: "Gateway carrier-like text",
+        createdAt: new Date("2025-01-01"),
+        updatedAt: new Date("2025-01-02"),
+        messages: [{ role: "USER", parts: [{ type: "text", text: carrierText }], turnKey: "one" }],
+      });
+      await prisma.assistantSession.update({ where: { id: gateway.id }, data: { origin: "GATEWAY" } });
 
       await expect(sessions.removeImportedCarrierSessions()).resolves.toBe(1);
       expect(await prisma.assistantSession.findUnique({ where: { id: carrier.id } })).toBeNull();
       expect(await prisma.assistantSession.findUnique({ where: { id: real.id } })).not.toBeNull();
+      expect(await prisma.assistantSession.findUnique({ where: { id: nativeUi.id } })).not.toBeNull();
+      expect(await prisma.assistantSession.findUnique({ where: { id: gateway.id } })).not.toBeNull();
     } finally {
       await prisma.$disconnect();
     }

@@ -517,7 +517,7 @@ export const en: Translations = {
   "settings.assistantCapability.effortHigh": "Deep",
   "settings.assistantCapability.effortHighDesc": "Deep reasoning, best for complex tasks",
   "settings.assistantCapability.historyTurns": "Conversation history",
-  "settings.assistantCapability.historyTurnsDesc": "Keep the latest 1–100 completed conversation turns",
+  "settings.assistantCapability.historyTurnsDesc": "Keep the latest 1–20 completed conversation turns",
   "settings.assistantCapability.updated": "Assistant config updated",
   "settings.config": "Config",
   "settings.configDesc": "System configuration parameters",
