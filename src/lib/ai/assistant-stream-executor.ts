@@ -10,7 +10,7 @@ import {
   type CapabilityAttemptSummary,
 } from "@tower-org/ai-runtime";
 import type { ApiMessage, ApiStreamEvent } from "@tower-org/ai-runtime";
-import type { CliQueryEvent, CliQueryOptions } from "@tower-org/ai-sdk";
+import type { CliMcpServerOptions, CliQueryEvent, CliQueryOptions } from "@tower-org/ai-sdk";
 import { assistantTowerToolCatalog } from "@/mcp/tool-catalog";
 import { createAssistantToolBundle, prepareAssistantCliRequest } from "./assistant-tool-bundle";
 import {
@@ -32,7 +32,7 @@ export interface AssistantStreamRequest {
   temperature?: number;
   effort?: "low" | "medium" | "high";
   signal?: AbortSignal;
-  towerMcpServerName?: string;
+  towerMcpServer?: CliMcpServerOptions;
   attachments?: string[];
   onAttempt?: (attempt: CapabilityAttemptSummary) => void | Promise<void>;
 }
@@ -91,7 +91,7 @@ function towerCliTools(serverName: string): string[] {
 
 async function ensureCliTooling(target: ResolvedCapabilityTarget, request: AssistantStreamRequest): Promise<string[]> {
   if (!target.cli) throw capabilityError("connection_unavailable");
-  const serverName = request.towerMcpServerName?.trim();
+  const serverName = request.towerMcpServer?.name.trim();
   if (!serverName || !target.cli.adapter.mcp) {
     throw { code: "TOOLING_UNAVAILABLE" };
   }
@@ -137,6 +137,7 @@ async function* executeTarget(
       attachments: prepared.attachments,
       tools,
       allowedTools: tools,
+      mcpServers: request.towerMcpServer ? [request.towerMcpServer] : undefined,
       signal: request.signal,
     };
     source = target.cli.adapter.stream(options);

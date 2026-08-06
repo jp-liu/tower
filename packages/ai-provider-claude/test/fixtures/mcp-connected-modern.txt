@@ -1,0 +1,3 @@
+tower-dev:
+  Scope: User config (available in all your projects)
+  Status: ✔ Connected

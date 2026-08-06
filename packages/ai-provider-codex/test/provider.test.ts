@@ -106,6 +106,17 @@ describe("Codex provider", () => {
     });
   });
 
+  it("classifies authentication failures emitted as Codex JSON events", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(processStream(
+      '{"type":"error","message":"401 Unauthorized SECRET_TOKEN"}\n',
+    ));
+    await expect(new CodexCliAdapter(ctx).generate({ prompt: "secret prompt" })).rejects.toMatchObject({
+      code: "AUTHENTICATION_FAILED",
+      message: "Codex query failed",
+    });
+  });
+
   it("forwards the query timeout and exposes only the safe Host timeout", async () => {
     const ctx = host();
     vi.mocked(ctx.process.stream!).mockImplementationOnce(async function* (_spec, options) {
@@ -123,23 +134,20 @@ describe("Codex provider", () => {
   it("streams Codex JSONL items with paired MCP tools and safe headless arguments", async () => {
     const ctx = host();
     const fixture = fs.readFileSync(new URL("./fixtures/stream.jsonl", import.meta.url), "utf8");
-    vi.mocked(ctx.process.execute).mockResolvedValueOnce({
-      exitCode: 0,
-      signal: null,
-      stdout: JSON.stringify({
-        name: "tower-dev",
-        enabled: true,
-        transport: {
-          type: "stdio",
-          command: "node",
-          args: ["server.js"],
-          env: { TOWER_TOKEN: "CANARY_SECRET" },
-          env_vars: ["TOWER_TASK_ID"],
-        },
-      }),
-      stderr: "",
-      durationMs: 1,
-    });
+    ctx.fileSystem!.readText = () => `
+model = "proxy-model"
+model_provider = "my-proxy"
+service_tier = "default"
+
+[model_providers.my-proxy]
+name = "Proxy"
+base_url = "https://proxy.example/v1"
+wire_api = "responses"
+requires_openai_auth = true
+env_http_headers = { "X-Feature" = "FEATURE_ENV" }
+http_headers = { "Authorization" = "STATIC_SECRET" }
+experimental_bearer_token = "BEARER_SECRET"
+`;
     vi.mocked(ctx.process.stream!).mockImplementationOnce(processStream(fixture));
     const events = [];
     for await (const event of new CodexCliAdapter(ctx).stream({
@@ -149,6 +157,13 @@ describe("Codex provider", () => {
       attachments: [{ filename: "image.png", path: "/safe/image.png", mediaType: "image/png" }],
       tools: ["mcp__tower-dev__list_tasks", "mcp__other_server__blocked"],
       allowedTools: ["mcp__tower-dev__list_tasks"],
+      mcpServers: [{
+        name: "tower-dev",
+        command: "node",
+        args: ["server.js"],
+        env: { TOWER_TOKEN: "CANARY_SECRET" },
+        envVars: ["TOWER_TASK_ID"],
+      }],
     })) events.push(event);
 
     expect(events).toContainEqual({ type: "session", sessionId: "codex-thread" });
@@ -165,6 +180,11 @@ describe("Codex provider", () => {
       args: expect.arrayContaining([
         "--ignore-user-config", "--json", "--sandbox", "read-only", "--disable", "shell_tool",
         "-c", 'model_reasoning_effort="medium"', "--image", "/safe/image.png",
+        "-c", 'model="proxy-model"',
+        "-c", 'model_provider="my-proxy"',
+        "-c", 'model_providers.my-proxy.base_url="https://proxy.example/v1"',
+        "-c", 'model_providers.my-proxy.requires_openai_auth=true',
+        "-c", 'model_providers.my-proxy.env_http_headers.X-Feature="FEATURE_ENV"',
         "-c", 'mcp_servers.tower-dev.command="node"',
         "-c", 'mcp_servers.tower-dev.args=["server.js"]',
         "-c", 'mcp_servers.tower-dev.env_vars=["TOWER_TASK_ID","TOWER_TOKEN"]',
@@ -173,11 +193,10 @@ describe("Codex provider", () => {
       ]),
       envPatch: { TOWER_TOKEN: "CANARY_SECRET" },
     }), expect.objectContaining({ timeoutMs: 12_345 }));
-    expect(ctx.process.execute).toHaveBeenCalledWith(expect.objectContaining({
-      args: ["mcp", "get", "tower-dev", "--json"],
-    }), expect.objectContaining({ timeoutMs: 5_000 }));
+    expect(ctx.process.execute).not.toHaveBeenCalled();
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("blocked");
-    expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("CANARY_SECRET");
+    expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args))
+      .not.toMatch(/CANARY_SECRET|STATIC_SECRET|BEARER_SECRET/);
   });
 
   it.each([

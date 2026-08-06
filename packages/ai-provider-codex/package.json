@@ -23,7 +23,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },
-  "dependencies": { "@tower-org/ai-sdk": "workspace:*" },
+  "dependencies": {
+    "@tower-org/ai-sdk": "workspace:*",
+    "smol-toml": "1.7.1"
+  },
   "tower": {
     "manifestVersion": 1,
     "apiVersion": "1.0",

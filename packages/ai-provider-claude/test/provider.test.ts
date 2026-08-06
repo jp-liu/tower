@@ -132,6 +132,12 @@ describe("Claude provider", () => {
       timeoutMs: 12_345,
       tools: ["mcp__tower-dev__list_tasks", "mcp__other__blocked"],
       allowedTools: ["mcp__tower-dev__list_tasks"],
+      mcpServers: [{
+        name: "tower-dev",
+        command: "node",
+        args: ["/opt/tower/mcp-server.cjs"],
+        env: { TOWER_MCP_PROFILE: "assistant" },
+      }],
     })) events.push(event);
 
     expect(events).toContainEqual({ type: "session", sessionId: "claude-session" });
@@ -148,8 +154,20 @@ describe("Claude provider", () => {
         "--output-format", "stream-json", "--tools", "mcp__tower-dev__list_tasks",
         "--max-turns", "4", "--effort", "low", "--input-format", "stream-json",
         "--allowedTools", "mcp__tower-dev__list_tasks",
+        "--strict-mcp-config",
       ]),
     }), expect.objectContaining({ timeoutMs: 12_345 }));
+    const args = vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args ?? [];
+    const mcpConfig = args[args.indexOf("--mcp-config") + 1];
+    expect(JSON.parse(mcpConfig!)).toEqual({
+      mcpServers: {
+        "tower-dev": {
+          command: "node",
+          args: ["/opt/tower/mcp-server.cjs"],
+          env: { TOWER_MCP_PROFILE: "assistant" },
+        },
+      },
+    });
     expect(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].initialInput).toContain("IMAGE_CANARY");
     expect(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].initialInput).not.toContain("/safe/image.png");
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("blocked");
@@ -157,6 +175,7 @@ describe("Claude provider", () => {
 
   it.each([
     ["mcp-connected.txt", { installed: true, status: "connected" }],
+    ["mcp-connected-modern.txt", { installed: true, status: "connected" }],
     ["mcp-pending.txt", { installed: true, status: "pending" }],
     ["mcp-disconnected.txt", { installed: true, status: "disconnected" }],
   ])("derives MCP runtime health from Claude's first-party %s output", async (fixture, expected) => {

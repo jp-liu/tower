@@ -63,6 +63,8 @@ export interface CliQueryOptions {
   tools?: string[];
   /** Subset of provider-known tools that may execute without interactive approval. */
   allowedTools?: string[];
+  /** Request-scoped MCP servers supplied by the Host instead of inherited user configuration. */
+  mcpServers?: CliMcpServerOptions[];
   settings?: Readonly<Record<string, unknown>>;
   signal?: AbortSignal;
 }

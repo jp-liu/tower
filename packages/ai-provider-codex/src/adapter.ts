@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { parse as parseToml } from "smol-toml";
 import {
   CliPluginError,
   canonicalCliToolName,
@@ -26,6 +27,75 @@ function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+const CONNECTION_ROOT_KEYS = [
+  "model",
+  "model_provider",
+  "openai_base_url",
+  "experimental_realtime_ws_base_url",
+  "service_tier",
+  "disable_response_storage",
+  "model_context_window",
+  "model_auto_compact_token_limit",
+  "model_auto_compact_token_limit_scope",
+  "model_reasoning_effort",
+  "model_reasoning_summary",
+  "model_supports_reasoning_summaries",
+  "model_verbosity",
+] as const;
+
+// Never project literal credentials or command-backed auth into argv. Environment-backed
+// credentials remain available through the Host's filtered provider environment.
+const PROVIDER_CONNECTION_KEYS = [
+  "name",
+  "base_url",
+  "wire_api",
+  "env_key",
+  "env_key_instructions",
+  "env_http_headers",
+  "request_max_retries",
+  "requires_openai_auth",
+  "stream_idle_timeout_ms",
+  "stream_max_retries",
+  "supports_standalone_web_search",
+  "supports_websockets",
+] as const;
+
+function tomlKeySegment(value: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);
+}
+
+function tomlLiteral(value: unknown): string | null {
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value)) {
+    const values = value.map(tomlLiteral);
+    return values.every((entry): entry is string => entry !== null)
+      ? `[${values.join(",")}]`
+      : null;
+  }
+  return null;
+}
+
+function appendConfigOverride(args: string[], path: string[], value: unknown): void {
+  const literal = tomlLiteral(value);
+  if (literal !== null) {
+    args.push("-c", `${path.map(tomlKeySegment).join(".")}=${literal}`);
+    return;
+  }
+  const nested = record(value);
+  if (!nested) return;
+  for (const [key, entry] of Object.entries(nested)) appendConfigOverride(args, [...path, key], entry);
+}
+
+function queryFailureCode(event: Record<string, unknown>) {
+  const error = record(event.error);
+  const text = [event.message, error?.message, error?.code]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+  return classifyCliQueryFailure(text);
 }
 
 function codexTool(value: string): { server: string; tool: string } | null {
@@ -234,6 +304,7 @@ export class CodexCliAdapter implements CliAdapter {
       "--disable", "web_search",
       "--disable", "search_tool",
       "-c", 'approval_policy="never"',
+      ...this.connectionConfigArgs(),
     ];
     if (options.systemPrompt) args.push("-c", `developer_instructions=${JSON.stringify(options.systemPrompt)}`);
     if (options.model) args.push("--model", options.model);
@@ -252,12 +323,7 @@ export class CodexCliAdapter implements CliAdapter {
     }
     const mcpEnvPatch: Record<string, string> = {};
     for (const [serverName, tools] of byServer) {
-      const server = await this.getMcpServer(
-        serverName,
-        options.cwd,
-        options.signal,
-        Math.min(options.timeoutMs ?? 5_000, 5_000),
-      );
+      const server = await this.queryMcpServer(serverName, options);
       if (!server.enabled || !server.transport) {
         throw new CliPluginError("TOOLING_UNAVAILABLE", "The requested Codex MCP server is unavailable");
       }
@@ -315,7 +381,7 @@ export class CodexCliAdapter implements CliAdapter {
       }
       if (event.type === "turn.failed" || event.type === "error") {
         sawError = true;
-        yield { type: "error", error: { code: "PROVIDER_FAILURE", message: "Codex query failed" } };
+        yield { type: "error", error: { code: queryFailureCode(event), message: "Codex query failed" } };
         continue;
       }
       if (event.type !== "item.started" && event.type !== "item.updated" && event.type !== "item.completed") continue;
@@ -763,6 +829,55 @@ export class CodexCliAdapter implements CliAdapter {
         && (error.code === "PROCESS_TIMEOUT" || error.code === "PROCESS_CANCELLED")) throw error;
       return { installed: false, status: "disconnected" as const };
     }
+  }
+
+  private connectionConfigArgs(): string[] {
+    let config: Record<string, unknown>;
+    try {
+      config = record(parseToml(this.fs.readFileSync(this.getSettingsPath(), "utf-8"))) ?? {};
+    } catch {
+      throw new CliPluginError("INVALID_REQUEST", "Codex provider configuration could not be read");
+    }
+
+    const args: string[] = [];
+    for (const key of CONNECTION_ROOT_KEYS) appendConfigOverride(args, [key], config[key]);
+
+    const providerId = typeof config.model_provider === "string" ? config.model_provider : null;
+    const providers = record(config.model_providers);
+    const provider = providerId && providers ? record(providers[providerId]) : null;
+    if (providerId && provider) {
+      for (const key of PROVIDER_CONNECTION_KEYS) {
+        appendConfigOverride(args, ["model_providers", providerId, key], provider[key]);
+      }
+    }
+    return args;
+  }
+
+  private async queryMcpServer(name: string, options: CliQueryOptions): Promise<CodexMcpServerState> {
+    const supplied = options.mcpServers?.find((server) => server.name === name);
+    if (supplied) {
+      if (!supplied.command?.trim()) {
+        throw new CliPluginError("TOOLING_UNAVAILABLE", "Codex MCP request configuration is unavailable");
+      }
+      return {
+        name,
+        enabled: true,
+        transport: {
+          type: "stdio",
+          command: supplied.command,
+          args: supplied.args ?? [],
+          ...(supplied.cwd ? { cwd: supplied.cwd } : {}),
+          env: supplied.env ?? {},
+          envVars: supplied.envVars ?? [],
+        },
+      };
+    }
+    return this.getMcpServer(
+      name,
+      options.cwd,
+      options.signal,
+      Math.min(options.timeoutMs ?? 5_000, 5_000),
+    );
   }
 
   private async getMcpServer(

@@ -31,7 +31,14 @@ vi.mock("@/lib/config-reader", () => ({
     return fallback;
   },
 }));
-vi.mock("@/lib/ai/install-orchestrator", () => ({ buildTowerMcpConfig: () => ({ name: "tower-test" }) }));
+vi.mock("@/lib/ai/install-orchestrator", () => ({
+  buildTowerMcpConfig: () => ({
+    name: "tower-test",
+    command: "node",
+    args: ["/opt/tower/mcp-server.cjs"],
+    env: { TOWER_MCP_PROFILE: "assistant" },
+  }),
+}));
 vi.mock("@/lib/ai/capability-config-service", () => ({ recordCapabilityAttemptService: vi.fn() }));
 vi.mock("@/lib/ai/assistant-prompt", () => ({
   buildAssistantSystemPrompt: async (binding: Record<string, unknown>) => {
@@ -216,7 +223,12 @@ describe("Assistant chat SSE route", () => {
       maxOutputTokens: 128000,
       maxOutputBytes: 1024 * 1024 - 8 * 1024,
       effort: "low",
-      towerMcpServerName: "tower-test",
+      towerMcpServer: {
+        name: "tower-test",
+        command: "node",
+        args: ["/opt/tower/mcp-server.cjs"],
+        env: { TOWER_MCP_PROFILE: "assistant" },
+      },
     });
     expect(String(mocks.requests[0].prompt)).not.toContain("system");
     expect((mocks.requests[0].messages as Array<{ role: string }>).some((message) => message.role === "system")).toBe(false);

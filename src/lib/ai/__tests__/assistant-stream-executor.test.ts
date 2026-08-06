@@ -28,6 +28,13 @@ vi.mock("@/mcp/tool-catalog", () => ({
 
 import { streamAssistantTurn } from "../assistant-stream-executor";
 
+const towerMcpServer = {
+  name: "tower-dev",
+  command: "node",
+  args: ["/opt/tower/mcp-server.cjs"],
+  env: { TOWER_MCP_PROFILE: "assistant" },
+};
+
 function cliTarget(
   id: string,
   order: number,
@@ -64,7 +71,7 @@ async function collect(targets: ResolvedCapabilityTarget[]) {
   for await (const event of streamAssistantTurn({
     prompt: "PROMPT_CANARY",
     cwd: "/work",
-    towerMcpServerName: "tower-dev",
+    towerMcpServer,
   })) events.push(event);
   return events;
 }
@@ -91,7 +98,7 @@ describe("Assistant stream executor", () => {
     });
     const events = [];
     for await (const event of streamAssistantTurn({
-      prompt: "PROMPT_CANARY", cwd: "/work", towerMcpServerName: "tower-dev", onAttempt: attempts,
+      prompt: "PROMPT_CANARY", cwd: "/work", towerMcpServer, onAttempt: attempts,
     })) events.push(event);
 
     expect(events).toEqual([
@@ -106,6 +113,7 @@ describe("Assistant stream executor", () => {
       "mcp__tower-dev__list_tasks",
       "mcp__tower-dev__create_task",
     ]);
+    expect(options.mcpServers).toEqual([towerMcpServer]);
     expect(options.timeoutMs).toBe(300_000);
     expect(JSON.stringify(attempts.mock.calls)).not.toMatch(/PROMPT_CANARY|SECRET_STDERR/);
   });
@@ -163,7 +171,7 @@ describe("Assistant stream executor", () => {
       cwd: "/work",
       timeoutMs: 1,
       signal: controller.signal,
-      towerMcpServerName: "tower-dev",
+      towerMcpServer,
     })) events.push(event);
     expect(events).toEqual([expect.objectContaining({
       type: "error",
@@ -189,7 +197,7 @@ describe("Assistant stream executor", () => {
         prompt: "PROMPT_CANARY",
         cwd: "/work",
         attachments: ["2026-07/files/note.txt"],
-        towerMcpServerName: "tower-dev",
+        towerMcpServer,
       })) events.push(event);
       expect(events).toEqual([expect.objectContaining({
         type: "error",
@@ -225,7 +233,7 @@ describe("Assistant stream executor", () => {
       maxOutputBytes: 456,
       effort: "high",
       attachments: ["2026-07/images/design.png"],
-      towerMcpServerName: "tower-dev",
+      towerMcpServer,
     })) events.push(event);
 
     expect(events.map((event) => event.type)).toEqual(["text", "finish"]);
@@ -273,7 +281,7 @@ describe("Assistant stream executor", () => {
       maxOutputTokens: 321,
       effort: "medium",
       attachments: ["2026-07/files/note.txt"],
-      towerMcpServerName: "tower-dev",
+      towerMcpServer,
     })) events.push(event);
     expect(events.map((event) => event.type)).toEqual([
       "tool-call", "tool-result", "text", "usage", "finish",

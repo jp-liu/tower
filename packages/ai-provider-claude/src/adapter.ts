@@ -28,6 +28,21 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function requestMcpConfig(servers: NonNullable<CliQueryOptions["mcpServers"]>): string {
+  const mcpServers = Object.fromEntries(servers.map((server) => {
+    if (!/^[A-Za-z0-9_-]+$/.test(server.name) || !server.command?.trim()) {
+      throw new CliPluginError("TOOLING_UNAVAILABLE", "Claude MCP request configuration is unavailable");
+    }
+    return [server.name, {
+      command: server.command,
+      args: server.args ?? [],
+      ...(server.cwd ? { cwd: server.cwd } : {}),
+      ...(server.env && Object.keys(server.env).length > 0 ? { env: server.env } : {}),
+    }];
+  }));
+  return JSON.stringify({ mcpServers });
+}
+
 function claudeUsage(value: unknown) {
   const usage = record(value);
   if (!usage) return undefined;
@@ -219,6 +234,9 @@ export class ClaudeCliAdapter implements CliAdapter {
       "--permission-mode", "bypassPermissions",
       "--tools", allowed.join(","),
     ];
+    if (options.mcpServers?.length) {
+      args.push("--mcp-config", requestMcpConfig(options.mcpServers), "--strict-mcp-config");
+    }
     if (options.systemPrompt) args.push("--append-system-prompt", options.systemPrompt);
     if (options.model) args.push("--model", options.model);
     if (options.maxTurns !== undefined) args.push("--max-turns", String(options.maxTurns));
@@ -561,7 +579,7 @@ export class ClaudeCliAdapter implements CliAdapter {
       if (/pending approval|\bpending\b/i.test(output)) {
         return { installed: true, status: "pending" as const };
       }
-      if (/✓\s*connected|\bstatus:\s*connected\b/i.test(output)) {
+      if (/[✓✔]\s*connected|\bstatus:\s*(?:[✓✔]\s*)?connected\b/i.test(output)) {
         return { installed: true, status: "connected" as const };
       }
       return { installed: true, status: "disconnected" as const };

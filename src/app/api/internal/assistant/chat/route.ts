@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
   let maxOutputTokens: number;
   let maxOutputBytes: number;
   let effort: "low" | "medium" | "high";
-  let towerMcpServerName: string;
+  let towerMcpServer: ReturnType<typeof buildTowerMcpConfig>;
   try {
     session = await assistantSessionService.getSessionView(sessionId);
     const resolvedBinding: AssistantBinding = {
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
       MAX_ASSISTANT_STREAM_BYTES,
       Math.max(1, Number.isFinite(maxOutputBytes) ? Math.trunc(maxOutputBytes) : MAX_ASSISTANT_STREAM_BYTES),
     );
-    towerMcpServerName = buildTowerMcpConfig().name;
+    towerMcpServer = buildTowerMcpConfig({ profile: "assistant" });
   } catch {
     await cleanupUnstartedSession();
     return jsonError("assistant_configuration_unavailable", 500);
@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
           maxOutputBytes,
           effort,
           signal: turn.controller.signal,
-          towerMcpServerName,
+          towerMcpServer,
           attachments: body.attachmentFilenames,
           onAttempt: recordCapabilityAttemptService,
         })) {
