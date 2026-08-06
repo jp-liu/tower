@@ -122,8 +122,11 @@ idempotently.
   `writeRaw` only forwards terminal bytes: typing, paste fragments, and
   terminal-generated protocol replies do not change the turn state or
   `lastInputAt`. `writeSubmittedInput` is the semantic submit boundary; it
-  updates `lastInputAt`, closes the disposable drain boundary, and moves the PTY
-  and Runtime projection to `BUSY`.
+  sets the live `PtySession` turn state to `BUSY`, updates `lastInputAt`, and
+  publishes `inputStarted`. The Workbench lifecycle adapter observes that event
+  and closes the disposable drain boundary. Neither step directly writes the
+  persisted `WorkbenchRuntime`; batch lifecycle operations and the periodic
+  runtime heartbeat project that state separately.
 - A Provider Stop/turn-complete callback is the authoritative completion
   boundary. If its hook is lost, transcript recovery accepts Claude
   `stop_reason=end_turn`, or Codex `task_complete` only when its timestamp is not

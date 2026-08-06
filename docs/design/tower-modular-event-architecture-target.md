@@ -191,9 +191,9 @@ disposable token 的现有分工；只有故障注入测试证明存在无法恢
 `isAtTurnBoundary` 并消费 drain token。因此 `Runtime.IDLE` 和 boundary Set 并不是两个必须保持一致
 才能保证正确性的调度事实。
 
-提交 `3d2cc7d` 已修复复核时发现的投影偏差：resolve 现在写 `BUSY`、清除 active batch；
-即使 Agent 已释放 durable batch responsibility，它仍可在当前 provider 回合里执行收尾。
-Provider completion lifecycle 才写 `IDLE` 并开放 drain boundary。
+当前实现中，`resolveWorkbenchBatch` 结束 durable batch responsibility 后把 Runtime 投影为
+`BUSY` 并清除 active batch；Agent 此时仍可在当前 provider 回合里执行收尾。Provider
+completion lifecycle 才把 Runtime 投影为 `IDLE` 并开放 drain boundary。
 
 **已落地的处理：** Runtime 投影遵守以下规则：
 

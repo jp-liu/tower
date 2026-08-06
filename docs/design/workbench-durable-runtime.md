@@ -71,11 +71,14 @@ longer the only trigger.
 
 Terminal transport and Provider-turn ownership are different concerns.
 `writeRaw` forwards terminal bytes without changing the turn state or
-`lastInputAt`. `writeSubmittedInput` represents a semantic submit: it records
-`lastInputAt`, marks the live PTY and Runtime projection `BUSY`, and closes the
-disposable drain boundary. The browser WebSocket protocol labels a standalone
-CR as `submit`; all other input frames are raw transport, with the same split for
-legacy clients.
+`lastInputAt`. `writeSubmittedInput` represents a semantic submit: it sets the
+live `PtySession` turn state to `BUSY`, records `lastInputAt`, and publishes
+`inputStarted`. The Workbench lifecycle adapter observes that event and closes
+the disposable drain boundary. Neither step directly writes the persisted
+`WorkbenchRuntime`; batch lifecycle operations and the periodic runtime
+heartbeat project it separately. The browser WebSocket protocol labels a
+standalone CR as `submit`; all other input frames are raw transport, with the
+same split for legacy clients.
 
 `PtySession.isAtTurnBoundary` becomes true only at a Provider Stop/turn-complete
 boundary. If the Stop hook was lost, recovery may use Claude
