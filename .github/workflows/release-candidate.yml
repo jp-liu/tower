@@ -73,18 +73,23 @@ jobs:
           - platform: darwin
             arch: arm64
             runner: macos-14
+            artifact: tower-macos-arm64
           - platform: darwin
             arch: x64
             runner: macos-15-intel
+            artifact: tower-macos-x64
           - platform: linux
             arch: x64
             runner: ubuntu-24.04
+            artifact: tower-linux-x64
           - platform: linux
             arch: arm64
             runner: ubuntu-24.04-arm
+            artifact: tower-linux-arm64
           - platform: windows
             arch: x64
             runner: windows-2022
+            artifact: tower-windows-x64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -135,7 +140,7 @@ jobs:
         run: node scripts/release-portable-smoke.js --root "${{ runner.temp }}/extracted"
       - uses: actions/upload-artifact@v4
         with:
-          name: candidate-portable-${{ matrix.platform }}-${{ matrix.arch }}-${{ needs.prepare.outputs.short-sha }}
+          name: ${{ matrix.artifact }}
           path: |
             ${{ runner.temp }}/portable/tower-portable-${{ matrix.platform }}-${{ matrix.arch }}.*
           if-no-files-found: error
@@ -154,7 +159,7 @@ jobs:
           node-version: 22
       - uses: actions/download-artifact@v4
         with:
-          pattern: candidate-portable-*-${{ needs.prepare.outputs.short-sha }}
+          pattern: tower-*
           path: ${{ runner.temp }}/candidate-input
           merge-multiple: true
       - uses: actions/download-artifact@v4
@@ -178,7 +183,7 @@ jobs:
             --generated-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
       - uses: actions/upload-artifact@v4
         with:
-          name: tower-release-candidate-${{ needs.prepare.outputs.short-sha }}
+          name: tower-release-candidate
           path: ${{ runner.temp }}/candidate-assets/*
           if-no-files-found: error
           retention-days: 7

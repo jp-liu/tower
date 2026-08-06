@@ -77,11 +77,11 @@ describe("Release Candidate workflow", () => {
 
   it("uses the exact five-target production matrix and keeps matrix failures independent", () => {
     const expected = [
-      { platform: "darwin", arch: "arm64", runner: "macos-14" },
-      { platform: "darwin", arch: "x64", runner: "macos-15-intel" },
-      { platform: "linux", arch: "x64", runner: "ubuntu-24.04" },
-      { platform: "linux", arch: "arm64", runner: "ubuntu-24.04-arm" },
-      { platform: "windows", arch: "x64", runner: "windows-2022" },
+      { platform: "darwin", arch: "arm64", runner: "macos-14", artifact: "tower-macos-arm64" },
+      { platform: "darwin", arch: "x64", runner: "macos-15-intel", artifact: "tower-macos-x64" },
+      { platform: "linux", arch: "x64", runner: "ubuntu-24.04", artifact: "tower-linux-x64" },
+      { platform: "linux", arch: "arm64", runner: "ubuntu-24.04-arm", artifact: "tower-linux-arm64" },
+      { platform: "windows", arch: "x64", runner: "windows-2022", artifact: "tower-windows-x64" },
     ];
     const candidateMatrix = candidate.jobs.portable.strategy?.matrix?.include;
     const productionMatrix = release.jobs.portable.strategy?.matrix?.include;
@@ -119,6 +119,8 @@ describe("Release Candidate workflow", () => {
     const prepareUploads = stepsUsing(candidate.jobs.prepare, "actions/upload-artifact@v4");
     const portableUploads = stepsUsing(candidate.jobs.portable, "actions/upload-artifact@v4");
     const assembleUploads = stepsUsing(candidate.jobs.assemble, "actions/upload-artifact@v4");
+    const productionPortableUploads = stepsUsing(release.jobs.portable, "actions/upload-artifact@v4");
+    const productionAssembleUploads = stepsUsing(release.jobs.assemble, "actions/upload-artifact@v4");
     expect(prepareUploads).toHaveLength(1);
     expect(portableUploads).toHaveLength(1);
     expect(assembleUploads).toHaveLength(1);
@@ -126,11 +128,19 @@ describe("Release Candidate workflow", () => {
       expect(upload.with?.["retention-days"]).toBeGreaterThanOrEqual(7);
       expect(upload.with?.["if-no-files-found"]).toBe("error");
     }
-    expect(portableUploads[0].with?.name).toContain("matrix.platform");
-    expect(portableUploads[0].with?.name).toContain("matrix.arch");
+    expect(portableUploads[0].with?.name).toBe("${{ matrix.artifact }}");
+    expect(productionPortableUploads[0].with?.name).toBe("${{ matrix.artifact }}");
+    expect(candidate.jobs.portable.strategy?.matrix?.include?.map((entry) => entry.artifact)).toEqual([
+      "tower-macos-arm64",
+      "tower-macos-x64",
+      "tower-linux-x64",
+      "tower-linux-arm64",
+      "tower-windows-x64",
+    ]);
     expect(candidate.jobs.portable.steps.indexOf(portableUploads[0]))
       .toBeGreaterThan(candidate.jobs.portable.steps.findIndex((step) => step.name === "Offline smoke on Node.js 24"));
-    expect(assembleUploads[0].with?.name).toBe("tower-release-candidate-${{ needs.prepare.outputs.short-sha }}");
+    expect(assembleUploads[0].with?.name).toBe("tower-release-candidate");
+    expect(productionAssembleUploads[0].with?.name).toBe("tower-release-assets");
   });
 
   it("assembles only after every matrix target succeeds and includes Candidate metadata", () => {
