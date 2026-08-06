@@ -44,7 +44,9 @@ describe("PTY initial input", () => {
 
     expect(busy.isAtTurnBoundary).toBe(false);
     expect(ready.isAtTurnBoundary).toBe(true);
-    ready.write("gateway work");
+    ready.writeRaw("gateway work");
+    expect(ready.isAtTurnBoundary).toBe(true);
+    ready.writeSubmittedInput("\r");
     expect(ready.isAtTurnBoundary).toBe(false);
   });
 });

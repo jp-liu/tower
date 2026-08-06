@@ -1064,7 +1064,7 @@ export async function deliverWorkbenchBatchToParent(batch: WorkbenchDrainBatch):
     throw new Error("Parent terminal belongs to a different execution");
   }
   const { body, submitKey } = planTerminalWrite(batch.prompt, true);
-  if (body) session.write(body);
+  if (body) session.writeRaw(body);
   if (submitKey) {
     await new Promise((resolve) => setTimeout(resolve, WORKBENCH_SUBMIT_DELAY_MS));
     const current = getSession(batch.parentTaskId);
@@ -1074,7 +1074,7 @@ export async function deliverWorkbenchBatchToParent(batch: WorkbenchDrainBatch):
     if (batch.parentExecutionId && current.executionId !== batch.parentExecutionId) {
       throw new Error("Parent terminal execution changed before batch submit");
     }
-    current.write(submitKey);
+    current.writeSubmittedInput(submitKey);
   }
 }
 
@@ -1308,6 +1308,7 @@ async function defaultEnsureWorkbenchRunning(taskId: string) {
 export async function reconcilePendingWorkbenchEvents(
   ensureWorkbench: EnsureWorkbenchRunning = defaultEnsureWorkbenchRunning,
   now = new Date(),
+  providerTranscriptOptions: { claudeProjectsDir?: string; codexSessionsDir?: string } = {},
 ): Promise<WorkbenchReconcileResult> {
   const failedBefore = new Date(now.getTime() - WORKBENCH_RECONCILE_FAILURE_BACKOFF_MS);
   const parents = await db.workbenchEvent.findMany({
@@ -1335,7 +1336,7 @@ export async function reconcilePendingWorkbenchEvents(
       if (live && !live.killed) {
         if (
           !restoreWorkbenchDrainBoundary(parentTaskId)
-          && !await restoreWorkbenchBoundaryFromProviderTranscript(parentTaskId)
+          && !await restoreWorkbenchBoundaryFromProviderTranscript(parentTaskId, providerTranscriptOptions)
         ) {
           await recordWorkbenchRuntime(parentTaskId, "BUSY", {
             blockedReason: "Provider turn in progress",
@@ -1348,7 +1349,7 @@ export async function reconcilePendingWorkbenchEvents(
         if (resumed.mode === "already_running") {
           if (
             !restoreWorkbenchDrainBoundary(parentTaskId)
-            && !await restoreWorkbenchBoundaryFromProviderTranscript(parentTaskId)
+            && !await restoreWorkbenchBoundaryFromProviderTranscript(parentTaskId, providerTranscriptOptions)
           ) {
             await recordWorkbenchRuntime(parentTaskId, "BUSY", {
               blockedReason: "Provider turn in progress",

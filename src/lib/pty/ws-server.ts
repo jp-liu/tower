@@ -6,6 +6,7 @@ import { stripDeviceQueries } from "./strip-device-queries";
 import { readConfigValue } from "@/lib/config-reader";
 import { ASSISTANT_SESSION_KEY } from "@/lib/assistant-constants";
 import { getPreviewSession } from "@/lib/preview/session-store";
+import { decodeTerminalClientInput } from "./ws-input-protocol";
 
 function runtimeHost(): string {
   const host = (process.env.TOWER_RUNTIME_HOST || "127.0.0.1").trim();
@@ -135,6 +136,32 @@ const g = globalThis as typeof globalThis & {
   __wsPort?: number;
   __notificationClients?: Set<WebSocket>;
 };
+
+type TerminalInputTarget = Pick<
+  NonNullable<ReturnType<typeof getSession>>,
+  "resize" | "writeRaw" | "writeSubmittedInput"
+>;
+
+export function forwardTerminalClientMessage(session: TerminalInputTarget, data: string): void {
+  const message = decodeTerminalClientInput(data);
+  if (message?.type === "resize") {
+    session.resize(message.cols, message.rows);
+    return;
+  }
+  if (message?.type === "submit") {
+    session.writeSubmittedInput(message.data);
+    return;
+  }
+  if (message?.type === "input") {
+    session.writeRaw(message.data);
+    return;
+  }
+
+  // Compatibility for terminals connected before this server update.
+  // A standalone CR is a submit; every other raw frame is transport-only.
+  if (data === "\r") session.writeSubmittedInput(data);
+  else session.writeRaw(data);
+}
 
 /** Get the actual WebSocket port the server is listening on. */
 export function getActiveWsPort(): number | null {
@@ -322,16 +349,7 @@ export async function startWsServer(): Promise<void> {
     ws.on("message", (rawData) => {
       if (!session) return;
       const data = rawData.toString();
-      if (data.startsWith("{")) {
-        try {
-          const msg = JSON.parse(data) as { type?: string; cols?: number; rows?: number };
-          if (msg.type === "resize" && typeof msg.cols === "number" && typeof msg.rows === "number") {
-            session.resize(msg.cols, msg.rows);
-            return;
-          }
-        } catch { /* not JSON */ }
-      }
-      session.write(data);
+      forwardTerminalClientMessage(session, data);
     });
 
     ws.on("close", () => {
@@ -429,7 +447,7 @@ function wireSession(session: import("./pty-session").PtySession, ws: WebSocket,
   // buffer contains queries the TUI (Claude CLI) emitted earlier (cursor-position
   // reports, Device Attributes, etc.). Replayed verbatim into a fresh xterm, xterm
   // auto-answers each one and the answers loop back through terminal.onData → this
-  // server's `session.write()` as phantom PTY input the user never typed — which has
+  // server's raw PTY input as phantom bytes the user never typed — which has
   // been observed to trigger Claude's `/clear` and wipe the session context. Query
   // requests render nothing, so stripping them is visually lossless.
   // See strip-device-queries.ts for the full rationale.

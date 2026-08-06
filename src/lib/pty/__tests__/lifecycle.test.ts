@@ -23,8 +23,8 @@ describe("PTY lifecycle fan-out", () => {
     await notifyPtyProviderTurnCompleted("task-1", "exec-1:turn-1");
 
     expect(workbenchInput).toHaveBeenCalledWith("task-1");
-    expect(workbenchCompleted).toHaveBeenCalledWith("task-1", "exec-1:turn-1");
-    expect(goalCompleted).toHaveBeenCalledWith("task-1", "exec-1:turn-1");
+    expect(workbenchCompleted).toHaveBeenCalledWith("task-1", "exec-1:turn-1", undefined);
+    expect(goalCompleted).toHaveBeenCalledWith("task-1", "exec-1:turn-1", undefined);
 
     disposeGoal();
     await notifyPtyProviderTurnCompleted("task-1", "exec-1:turn-2");

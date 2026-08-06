@@ -112,7 +112,7 @@ export class PtySession {
 
   /**
    * Reset the idle timer. Fires _onIdle after _idleThresholdMs of no activity.
-   * Called on PTY output and on user write() to reset the countdown.
+   * Called on PTY output and on submitted semantic input to reset the countdown.
    */
   private _resetIdleTimer(): void {
     if (this._idleTimer) {
@@ -143,7 +143,13 @@ export class PtySession {
     this._exitListeners = [fn];
   }
 
-  write(data: string): void {
+  /** Forward terminal bytes without changing provider-turn ownership. */
+  writeRaw(data: string): void {
+    if (!this.killed) this._pty.write(data);
+  }
+
+  /** Forward a real submitted input and establish a new provider turn. */
+  writeSubmittedInput(data: string): void {
     if (!this.killed) {
       this._turnState = "BUSY";
       this._lastInputAt = Date.now();
@@ -182,9 +188,9 @@ export class PtySession {
     const plan = planTerminalWrite(text, true);
     const bodyTimer = setTimeout(() => {
       if (this.killed) return;
-      this.write(plan.body);
+      this.writeRaw(plan.body);
       if (plan.submitKey) {
-        const submitTimer = setTimeout(() => this.write(plan.submitKey!), 25);
+        const submitTimer = setTimeout(() => this.writeSubmittedInput(plan.submitKey!), 25);
         submitTimer.unref?.();
       }
     }, 100);

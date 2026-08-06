@@ -100,7 +100,7 @@ export async function POST(
   // after a short delay so the TUI registers it as Enter, not a pasted newline.
   try {
     if (body.length > 0) {
-      session.write(body);
+      session.writeRaw(body);
     }
 
     if (submitKey) {
@@ -112,12 +112,12 @@ export async function POST(
           session.releaseInputKey(idempotencyKey);
           return NextResponse.json({ error: "Session changed before input submission" }, { status: 409 });
         }
-        live.write(submitKey);
+        live.writeSubmittedInput(submitKey);
       } else {
         setTimeout(() => {
           const live = getSession(taskId);
           if (live && !live.killed) {
-            live.write(submitKey);
+            live.writeSubmittedInput(submitKey);
           }
         }, delay);
       }

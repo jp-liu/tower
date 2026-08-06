@@ -14,7 +14,7 @@
  * (`CSI 14 t`), OSC color queries, DECRQSS/XTGETTCAP, etc. These land in the ring
  * buffer. When that buffer is replayed into a *fresh* xterm, xterm dutifully
  * **auto-answers each query** (that is standard, correct terminal behavior) and the
- * answer travels back out through `terminal.onData → ws.send → session.write()`
+ * answer travels back out through `terminal.onData → ws.send → session.writeRaw()`
  * straight into the PTY as input the user never typed.
  *
  * Claude already received answers to these queries long ago; the replayed burst of

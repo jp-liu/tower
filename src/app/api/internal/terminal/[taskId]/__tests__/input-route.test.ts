@@ -30,7 +30,8 @@ describe("internal terminal input idempotency", () => {
     const pending = new Set<string>();
     const session = {
       killed: false,
-      write: vi.fn(),
+      writeRaw: vi.fn(),
+      writeSubmittedInput: vi.fn(),
       claimInputKey: vi.fn((key: string) => {
         if (accepted.has(key)) return "accepted";
         if (pending.has(key)) return "pending";
@@ -60,15 +61,15 @@ describe("internal terminal input idempotency", () => {
 
     expect(await first.json()).toMatchObject({ ok: true, deduped: false });
     expect(await duplicate.json()).toMatchObject({ ok: true, deduped: true });
-    expect(session.write).toHaveBeenCalledTimes(2);
-    expect(session.write).toHaveBeenNthCalledWith(1, "continue");
-    expect(session.write).toHaveBeenNthCalledWith(2, "\r");
+    expect(session.writeRaw).toHaveBeenCalledWith("continue");
+    expect(session.writeSubmittedInput).toHaveBeenCalledWith("\r");
   });
 
   it("returns a retryable conflict while the same key is pending", async () => {
     const session = {
       killed: false,
-      write: vi.fn(),
+      writeRaw: vi.fn(),
+      writeSubmittedInput: vi.fn(),
       claimInputKey: vi.fn(() => "pending"),
       acceptInputKey: vi.fn(),
       releaseInputKey: vi.fn(),
@@ -82,6 +83,27 @@ describe("internal terminal input idempotency", () => {
 
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ inProgress: true });
-    expect(session.write).not.toHaveBeenCalled();
+    expect(session.writeRaw).not.toHaveBeenCalled();
+    expect(session.writeSubmittedInput).not.toHaveBeenCalled();
+  });
+
+  it("forwards unsubmitted text without opening a provider turn", async () => {
+    const session = {
+      killed: false,
+      writeRaw: vi.fn(),
+      writeSubmittedInput: vi.fn(),
+      claimInputKey: vi.fn(),
+      acceptInputKey: vi.fn(),
+      releaseInputKey: vi.fn(),
+    };
+    mocks.getSession.mockReturnValue(session);
+
+    const response = await POST(request({ text: "draft", submit: false }), {
+      params: Promise.resolve({ taskId: "task-1" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(session.writeRaw).toHaveBeenCalledWith("draft");
+    expect(session.writeSubmittedInput).not.toHaveBeenCalled();
   });
 });

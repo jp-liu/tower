@@ -126,34 +126,58 @@ describe("PtySession", () => {
     });
   });
 
-  describe("write", () => {
+  describe("terminal input", () => {
     it("forwards data to PTY when not killed", () => {
-      session.write("hello");
+      session.writeRaw("hello");
       expect(mockPty.write).toHaveBeenCalledWith("hello");
     });
 
     it("does NOT write to PTY when killed", () => {
       session.kill();
-      session.write("hello");
+      session.writeRaw("hello");
       expect(mockPty.write).not.toHaveBeenCalled();
     });
 
-    it("keeps a completed-turn boundary until the next terminal input", () => {
+    it("keeps a completed-turn boundary across terminal protocol bytes", () => {
       expect(session.isAtTurnBoundary).toBe(false);
       session.markTurnComplete();
       expect(session.isAtTurnBoundary).toBe(true);
 
-      session.write("next turn");
+      session.writeRaw("\x1b[I");
+      session.writeRaw("\x1b[12;40R");
+      session.writeRaw("\x1b[?1;2c");
+
+      expect(session.isAtTurnBoundary).toBe(true);
+      expect(session.lastInputAt).toBeNull();
+      expect(mockPty.write).toHaveBeenCalledTimes(3);
+    });
+
+    it("closes a completed-turn boundary only for submitted semantic input", () => {
+      session.markTurnComplete();
+      session.writeRaw("next turn");
+      expect(session.isAtTurnBoundary).toBe(true);
+
+      session.writeSubmittedInput("\r");
       expect(session.isAtTurnBoundary).toBe(false);
+      expect(session.lastInputAt).not.toBeNull();
     });
 
     it("publishes a generic input-start lifecycle notification", () => {
       const inputStarted = vi.fn();
       setPtyLifecycleObserver({ inputStarted });
 
-      session.write("next turn");
+      session.writeSubmittedInput("\r");
 
       expect(inputStarted).toHaveBeenCalledWith("task-1");
+    });
+
+    it("does not publish input-start lifecycle notifications for protocol bytes", () => {
+      const inputStarted = vi.fn();
+      setPtyLifecycleObserver({ inputStarted });
+
+      session.writeRaw("\x1b[O");
+
+      expect(inputStarted).not.toHaveBeenCalled();
     });
   });
 
