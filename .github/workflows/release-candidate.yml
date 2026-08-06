@@ -58,7 +58,7 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP/npm-pack"
       - uses: actions/upload-artifact@v4
         with:
-          name: candidate-npm-pack-${{ steps.identity.outputs.short-sha }}
+          name: tower-npm-pack-${{ steps.identity.outputs.short-sha }}
           path: ${{ runner.temp }}/npm-pack/*.tgz
           if-no-files-found: error
           retention-days: 7
@@ -107,7 +107,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v4
         with:
-          name: candidate-npm-pack-${{ needs.prepare.outputs.short-sha }}
+          name: tower-npm-pack-${{ needs.prepare.outputs.short-sha }}
           path: ${{ runner.temp }}/npm-pack
       - name: Build native portable payload
         env:
@@ -159,12 +159,22 @@ jobs:
           node-version: 22
       - uses: actions/download-artifact@v4
         with:
-          pattern: tower-*
+          pattern: tower-macos-*
           path: ${{ runner.temp }}/candidate-input
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
-          name: candidate-npm-pack-${{ needs.prepare.outputs.short-sha }}
+          pattern: tower-linux-*
+          path: ${{ runner.temp }}/candidate-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tower-windows-*
+          path: ${{ runner.temp }}/candidate-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: tower-npm-pack-${{ needs.prepare.outputs.short-sha }}
           path: ${{ runner.temp }}/candidate-input/npm-pack
       - name: Assemble Candidate assets
         shell: bash

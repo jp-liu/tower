@@ -51,7 +51,7 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP/npm-pack"
       - uses: actions/upload-artifact@v4
         with:
-          name: npm-pack
+          name: tower-npm-pack-${{ inputs.tag }}
           path: ${{ runner.temp }}/npm-pack/*.tgz
           if-no-files-found: error
           retention-days: 7
@@ -99,7 +99,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v4
         with:
-          name: npm-pack
+          name: tower-npm-pack-${{ inputs.tag }}
           path: ${{ runner.temp }}/npm-pack
       - name: Build native portable payload
         env:
@@ -149,12 +149,22 @@ jobs:
           node-version: 22
       - uses: actions/download-artifact@v4
         with:
-          pattern: tower-*
+          pattern: tower-macos-*
           path: ${{ runner.temp }}/release-input
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
-          name: npm-pack
+          pattern: tower-linux-*
+          path: ${{ runner.temp }}/release-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tower-windows-*
+          path: ${{ runner.temp }}/release-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: tower-npm-pack-${{ inputs.tag }}
           path: ${{ runner.temp }}/release-input/npm-pack
       - run: node scripts/assemble-release-assets.js --input "$RUNNER_TEMP/release-input" --output "$RUNNER_TEMP/release-assets" --commit "$GITHUB_SHA"
 
@@ -192,12 +202,22 @@ jobs:
         run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA" --workflow-definition-sha "$GITHUB_WORKFLOW_SHA" --ref "$GITHUB_REF"
       - uses: actions/download-artifact@v4
         with:
-          pattern: tower-*
+          pattern: tower-macos-*
           path: ${{ runner.temp }}/release-input
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
-          name: npm-pack
+          pattern: tower-linux-*
+          path: ${{ runner.temp }}/release-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tower-windows-*
+          path: ${{ runner.temp }}/release-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: tower-npm-pack-${{ inputs.tag }}
           path: ${{ runner.temp }}/release-input/npm-pack
       - name: Reassemble verified release assets
         run: node scripts/assemble-release-assets.js --input "$RUNNER_TEMP/release-input" --output "$RUNNER_TEMP/release-assets" --commit "$GITHUB_SHA"

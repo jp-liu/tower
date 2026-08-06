@@ -122,6 +122,19 @@ describe("Release Candidate workflow", () => {
     const productionPortableUploads = stepsUsing(release.jobs.portable, "actions/upload-artifact@v4");
     const productionAssembleUploads = stepsUsing(release.jobs.assemble, "actions/upload-artifact@v4");
     expect(prepareUploads).toHaveLength(1);
+    expect(prepareUploads[0].with?.name).toBe("tower-npm-pack-${{ steps.identity.outputs.short-sha }}");
+    expect(stepsUsing(release.jobs.prepare, "actions/upload-artifact@v4")[0].with?.name)
+      .toBe("tower-npm-pack-${{ inputs.tag }}");
+    for (const workflowJob of [candidate.jobs.portable, candidate.jobs.assemble]) {
+      const npmDownloads = stepsUsing(workflowJob, "actions/download-artifact@v4")
+        .filter((step) => step.with?.name === "tower-npm-pack-${{ needs.prepare.outputs.short-sha }}");
+      expect(npmDownloads).toHaveLength(1);
+    }
+    for (const workflowJob of [release.jobs.portable, release.jobs.assemble, release.jobs.publish]) {
+      const npmDownloads = stepsUsing(workflowJob, "actions/download-artifact@v4")
+        .filter((step) => step.with?.name === "tower-npm-pack-${{ inputs.tag }}");
+      expect(npmDownloads).toHaveLength(1);
+    }
     expect(portableUploads).toHaveLength(1);
     expect(assembleUploads).toHaveLength(0);
     expect(productionAssembleUploads).toHaveLength(0);
@@ -140,6 +153,15 @@ describe("Release Candidate workflow", () => {
     ]);
     expect(candidate.jobs.portable.steps.indexOf(portableUploads[0]))
       .toBeGreaterThan(candidate.jobs.portable.steps.findIndex((step) => step.name === "Offline smoke on Node.js 24"));
+  });
+
+  it("downloads platform artifacts without matching the npm validation pack", () => {
+    for (const workflowJob of [candidate.jobs.assemble, release.jobs.assemble, release.jobs.publish]) {
+      const patterns = stepsUsing(workflowJob, "actions/download-artifact@v4")
+        .flatMap((step) => typeof step.with?.pattern === "string" ? [step.with.pattern] : []);
+      expect(patterns).toEqual(["tower-macos-*", "tower-linux-*", "tower-windows-*"]);
+      expect(patterns).not.toContain("tower-*");
+    }
   });
 
   it("assembles only after every matrix target succeeds and includes Candidate metadata", () => {
