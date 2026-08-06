@@ -178,7 +178,8 @@ experimental_bearer_token = "BEARER_SECRET"
     }));
     expect(ctx.process.stream).toHaveBeenCalledWith(expect.objectContaining({
       args: expect.arrayContaining([
-        "--ignore-user-config", "--json", "--sandbox", "read-only", "--disable", "shell_tool",
+        "--ignore-user-config", "--json", "--dangerously-bypass-approvals-and-sandbox",
+        "--disable", "shell_tool",
         "-c", 'model_reasoning_effort="medium"', "--image", "/safe/image.png",
         "-c", 'model="proxy-model"',
         "-c", 'model_provider="my-proxy"',
@@ -195,8 +196,36 @@ experimental_bearer_token = "BEARER_SECRET"
     }), expect.objectContaining({ timeoutMs: 12_345 }));
     expect(ctx.process.execute).not.toHaveBeenCalled();
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args)).not.toContain("blocked");
+    expect(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args).not.toContain("approval_policy=\"never\"");
+    expect(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args).not.toContain("read-only");
     expect(JSON.stringify(vi.mocked(ctx.process.stream!).mock.calls[0]?.[0].args))
       .not.toMatch(/CANARY_SECRET|STATIC_SECRET|BEARER_SECRET/);
+  });
+
+  it("preserves safe MCP cancellation diagnostics", async () => {
+    const ctx = host();
+    vi.mocked(ctx.process.stream!).mockImplementationOnce(processStream([
+      '{"type":"thread.started","thread_id":"codex-thread"}',
+      '{"type":"turn.started"}',
+      '{"type":"item.started","item":{"id":"tool-1","type":"mcp_tool_call","server":"tower","tool":"list_labels","arguments":{"workspaceId":"w1"},"status":"in_progress"}}',
+      '{"type":"item.completed","item":{"id":"tool-1","type":"mcp_tool_call","server":"tower","tool":"list_labels","status":"failed","error":{"message":"user cancelled MCP tool call"}}}',
+      '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}',
+    ].join("\n")));
+
+    const events = [];
+    for await (const event of new CodexCliAdapter(ctx).stream({
+      prompt: "list labels",
+      tools: ["mcp__tower__list_labels"],
+      allowedTools: ["mcp__tower__list_labels"],
+      mcpServers: [{ name: "tower", command: "node", args: ["server.js"] }],
+    })) events.push(event);
+
+    expect(events).toContainEqual(expect.objectContaining({
+      type: "tool-result",
+      toolResult: expect.objectContaining({
+        error: { code: "TOOL_ERROR", message: "Codex MCP tool call was cancelled" },
+      }),
+    }));
   });
 
   it.each([

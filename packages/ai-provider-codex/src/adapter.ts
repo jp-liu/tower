@@ -98,6 +98,14 @@ function queryFailureCode(event: Record<string, unknown>) {
   return classifyCliQueryFailure(text);
 }
 
+function codexToolFailureMessage(value: unknown): string {
+  const error = record(value);
+  const message = typeof error?.message === "string" ? error.message : "";
+  if (/user cancelled MCP tool call/i.test(message)) return "Codex MCP tool call was cancelled";
+  if (/timed? out/i.test(message)) return "Codex MCP tool call timed out";
+  return "Codex tool execution failed";
+}
+
 function codexTool(value: string): { server: string; tool: string } | null {
   const mcp = value.match(/^mcp__(.+?)__(.+)$/);
   if (mcp && /^[A-Za-z0-9_-]+$/.test(mcp[1]!)) return { server: mcp[1]!, tool: mcp[2]! };
@@ -297,13 +305,16 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   async *stream(options: CliQueryOptions): AsyncIterable<CliQueryEvent> {
+    // Headless `approval_policy=never` rejects MCP calls instead of approving them.
+    // Bypass prompts here; the request-scoped MCP enabled_tools list below is the
+    // authority boundary, while Codex's native execution and search tools stay off.
     const args = [
-      "exec", "--ignore-user-config", "--json", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral",
+      "exec", "--ignore-user-config", "--json", "--dangerously-bypass-approvals-and-sandbox",
+      "--skip-git-repo-check", "--ephemeral",
       "--disable", "shell_tool",
       "--disable", "unified_exec",
       "--disable", "web_search",
       "--disable", "search_tool",
-      "-c", 'approval_policy="never"',
       ...this.connectionConfigArgs(),
     ];
     if (options.systemPrompt) args.push("-c", `developer_instructions=${JSON.stringify(options.systemPrompt)}`);
@@ -412,7 +423,7 @@ export class CodexCliAdapter implements CliAdapter {
               id,
               name,
               output: item.result,
-              ...(failed ? { error: { code: "TOOL_ERROR", message: "Codex tool execution failed" } } : {}),
+              ...(failed ? { error: { code: "TOOL_ERROR", message: codexToolFailureMessage(item.error) } } : {}),
             },
           };
         }
