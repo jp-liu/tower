@@ -115,7 +115,7 @@ describe("Release Candidate workflow", () => {
     }
   });
 
-  it("uploads raw, per-platform, and all-platform artifacts with seven-day retention", () => {
+  it("uploads only raw npm and separate per-platform artifacts with seven-day retention", () => {
     const prepareUploads = stepsUsing(candidate.jobs.prepare, "actions/upload-artifact@v4");
     const portableUploads = stepsUsing(candidate.jobs.portable, "actions/upload-artifact@v4");
     const assembleUploads = stepsUsing(candidate.jobs.assemble, "actions/upload-artifact@v4");
@@ -123,8 +123,9 @@ describe("Release Candidate workflow", () => {
     const productionAssembleUploads = stepsUsing(release.jobs.assemble, "actions/upload-artifact@v4");
     expect(prepareUploads).toHaveLength(1);
     expect(portableUploads).toHaveLength(1);
-    expect(assembleUploads).toHaveLength(1);
-    for (const upload of [...prepareUploads, ...portableUploads, ...assembleUploads]) {
+    expect(assembleUploads).toHaveLength(0);
+    expect(productionAssembleUploads).toHaveLength(0);
+    for (const upload of [...prepareUploads, ...portableUploads]) {
       expect(upload.with?.["retention-days"]).toBeGreaterThanOrEqual(7);
       expect(upload.with?.["if-no-files-found"]).toBe("error");
     }
@@ -139,8 +140,6 @@ describe("Release Candidate workflow", () => {
     ]);
     expect(candidate.jobs.portable.steps.indexOf(portableUploads[0]))
       .toBeGreaterThan(candidate.jobs.portable.steps.findIndex((step) => step.name === "Offline smoke on Node.js 24"));
-    expect(assembleUploads[0].with?.name).toBe("tower-release-candidate");
-    expect(productionAssembleUploads[0].with?.name).toBe("tower-release-assets");
   });
 
   it("assembles only after every matrix target succeeds and includes Candidate metadata", () => {
@@ -161,7 +160,9 @@ describe("Release Candidate workflow", () => {
   it("requires exactly one npm tarball before production publication", () => {
     const locate = release.jobs.publish.steps.find((step) => step.name === "Locate the exact npm pack artifact");
     const publish = release.jobs.publish.steps.find((step) => step.name === "Publish or verify npm package with provenance");
-    expect(locate?.run).toContain('tarballs=("$RUNNER_TEMP"/npm-pack/*.tgz)');
+    const assemble = release.jobs.publish.steps.find((step) => step.name === "Reassemble verified release assets");
+    expect(assemble?.run).toContain("scripts/assemble-release-assets.js");
+    expect(locate?.run).toContain('tarballs=("$RUNNER_TEMP"/release-input/npm-pack/*.tgz)');
     expect(locate?.run).toContain('${#tarballs[@]}');
     expect(publish?.run).toContain('${{ steps.npm-tarball.outputs.path }}');
     expect(publish?.run).not.toContain("basename");

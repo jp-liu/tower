@@ -181,9 +181,3 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --generated-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tower-release-candidate
-          path: ${{ runner.temp }}/candidate-assets/*
-          if-no-files-found: error
-          retention-days: 7

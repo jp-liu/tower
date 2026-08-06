@@ -157,12 +157,6 @@ jobs:
           name: npm-pack
           path: ${{ runner.temp }}/release-input/npm-pack
       - run: node scripts/assemble-release-assets.js --input "$RUNNER_TEMP/release-input" --output "$RUNNER_TEMP/release-assets" --commit "$GITHUB_SHA"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tower-release-assets
-          path: ${{ runner.temp }}/release-assets/*
-          if-no-files-found: error
-          retention-days: 7
 
   publish:
     name: Protected npm and GitHub Release publication
@@ -191,25 +185,28 @@ jobs:
           scope: tower-org
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - uses: actions/download-artifact@v4
-        with:
-          name: npm-pack
-          path: ${{ runner.temp }}/npm-pack
-      - uses: actions/download-artifact@v4
-        with:
-          name: tower-release-assets
-          path: ${{ runner.temp }}/release-assets
       - name: Revalidate immutable release identity
         env:
           TOWER_RELEASE_TAG: ${{ inputs.tag }}
           TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
         run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA" --workflow-definition-sha "$GITHUB_WORKFLOW_SHA" --ref "$GITHUB_REF"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tower-*
+          path: ${{ runner.temp }}/release-input
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-pack
+          path: ${{ runner.temp }}/release-input/npm-pack
+      - name: Reassemble verified release assets
+        run: node scripts/assemble-release-assets.js --input "$RUNNER_TEMP/release-input" --output "$RUNNER_TEMP/release-assets" --commit "$GITHUB_SHA"
       - name: Locate the exact npm pack artifact
         id: npm-tarball
         shell: bash
         run: |
           shopt -s nullglob
-          tarballs=("$RUNNER_TEMP"/npm-pack/*.tgz)
+          tarballs=("$RUNNER_TEMP"/release-input/npm-pack/*.tgz)
           if [ "${#tarballs[@]}" -ne 1 ]; then
             echo "Expected exactly one npm tarball, found ${#tarballs[@]}" >&2
             exit 1

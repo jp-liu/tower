@@ -64,6 +64,9 @@ esac
     encoding: "utf8",
     env: {
       ...process.env,
+      GITHUB_SHA: "",
+      GITHUB_WORKFLOW_SHA: "",
+      GITHUB_REF: "",
       PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
       TOWER_RELEASE_APPROVED: "@tower-org/cli@0.4.0",
       TOWER_RELEASE_TAG: "v0.4.0",

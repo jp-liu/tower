@@ -31,9 +31,9 @@ The format follows Keep a Changelog and versions follow Semantic Versioning.
 - GitHub Pages documentation now separates product features, Gateway,
   Workbench, durable protocol, MCP, OpenClaw integration, and AI Provider
   extensions. Version-specific guide pages moved into this changelog.
-- Release Candidate and production workflow downloads use stable platform names
-  such as `tower-macos-arm64` and `tower-windows-x64` instead of commit-derived
-  artifact names.
+- Release Candidate and production workflow downloads expose separate platform
+  artifacts with stable names such as `tower-macos-arm64` and
+  `tower-windows-x64`, without a redundant all-platform bundle.
 
 ### Fixed
 
