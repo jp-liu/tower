@@ -19,6 +19,6 @@ description: 支持显式连接回退和固定会话目标的 PTY 终端
 - 每个 `taskId` 只有一个活跃 PTY；并发上限由 `system.maxConcurrentExecutions` 控制。
 - 运行中断连保活 2 小时，退出后输出保留 5 分钟；任务页与 Missions 可同时查看。
 - 注入 `TOWER_TASK_ID`、`TOWER_TASK_TITLE`、`TOWER_API_URL` 和可选 `CALLBACK_URL`，额外变量通过受控 env patch 合并。
-- 生产 `tower` 默认绑定 `127.0.0.1`。只有显式 `--host` 才扩大监听；HTTP、WebSocket、origin 和内部路由共享该生产解析结果。dev/preview 配置不受此项改变。
+- 生产 `tower` 仅允许绑定 `127.0.0.1`、`localhost` 或 `::1`，并拒绝 `0.0.0.0` 和局域网地址；HTTP、WebSocket、origin 和内部路由共享该生产解析结果。dev/preview 配置不受此项改变。
 
 核心实现位于 `src/actions/agent-actions.ts`、`src/lib/ai/terminal-target.ts`、`src/lib/pty/` 和 `/api/internal/terminal/[taskId]/*`。

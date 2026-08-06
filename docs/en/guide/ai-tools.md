@@ -1,5 +1,5 @@
 ---
-title: AI Tools 0.3
+title: AI Tools
 description: Connections, capability slots, Assistant, and CLI plugins
 ---
 
@@ -66,4 +66,4 @@ Developer mode registers an absolute local directory in place for provider itera
 | Permission required | Review and explicitly confirm the declared permissions |
 | `slot unconfigured` | Add at least one enabled, connected target to the slot |
 
-See [Upgrading to 0.3.0](/en/guide/upgrade-0.3) for migration and backup boundaries.
+See [Upgrade and migration](/en/guide/upgrading) for migration and backup boundaries.

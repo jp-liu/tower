@@ -5,7 +5,7 @@ description: Tower 自有会话、SSE、附件和工具执行
 
 **Slug:** `assistant`
 
-0.3.0 的 Assistant 使用 Tower 自有 SQLite 会话和消息作为恢复真源，不再绑定 Claude Agent SDK transcript。Assistant 插槽可以选择 CLI 或 API 连接，并共享 AI Tools 的显式回退规则。
+Assistant 使用 Tower 自有 SQLite 会话和消息作为恢复真源，不绑定特定 CLI 的 transcript。Assistant 插槽可以选择 CLI 或 API 连接，并共享 AI Tools 的显式回退规则。
 
 ## 会话与流式执行
 
@@ -30,4 +30,4 @@ description: Tower 自有会话、SSE、附件和工具执行
 | `/api/internal/assistant/sessions` | 会话 CRUD/导入 |
 | `/api/internal/assistant/attachments` | 附件上传 |
 
-数据升级和备份范围见 [升级到 0.3.0](/guide/upgrade-0.3)。
+数据升级和备份范围见 [升级与迁移](/guide/upgrading)。

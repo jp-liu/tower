@@ -1,5 +1,5 @@
 ---
-title: AI Tools 0.3
+title: AI Tools
 description: 连接、能力插槽、Assistant 与 CLI 插件使用指南
 ---
 
@@ -66,4 +66,4 @@ Qwen Code 社区扩展依赖本机 `qwen` 命令，支持 `>=0.18.0 <1.0.0`。To
 | 权限待确认 | 审阅权限清单并显式确认；未确认时插件不会加载 |
 | `slot unconfigured` | 给对应插槽添加至少一个已启用、已连接的目标 |
 
-完整升级和备份边界见 [升级到 0.3.0](/guide/upgrade-0.3)。
+完整升级和备份边界见 [升级与迁移](/guide/upgrading)。

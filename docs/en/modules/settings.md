@@ -25,4 +25,4 @@ Terminal, Summary, Dreaming, Analysis, and Assistant each store a primary and or
 
 Legacy `CliProfile` and `AgentConfig` rows remain. `CliProfile` still supplies compatible command, arguments, and environment settings for built-in CLIs, while AI Tools connections/slots are the 0.3 configuration surface. See [AI Tools 0.3](/en/guide/ai-tools).
 
-Other sections cover Terminal WebSocket settings, system limits, prompts, Git paths, Tower Agent extensions, and backup/restore. See [Upgrading to 0.3.0](/en/guide/upgrade-0.3) for credential and attachment scope.
+Other sections cover Terminal WebSocket settings, system limits, prompts, Git paths, Tower Agent extensions, and backup/restore. See [Upgrade and migration](/en/guide/upgrading) for credential and attachment scope.

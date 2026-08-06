@@ -21,6 +21,6 @@ Each task gets an interactive xterm.js, WebSocket, and node-pty terminal. The Te
 - One active PTY per `taskId`; `system.maxConcurrentExecutions` controls concurrency.
 - Disconnected sessions remain for two hours while running and five minutes after exit. Task pages and Missions can observe the same session.
 - Tower injects `TOWER_TASK_ID`, `TOWER_TASK_TITLE`, `TOWER_API_URL`, and optional `CALLBACK_URL`; additional variables use controlled env patches.
-- Production `tower` binds `127.0.0.1` by default. Only an explicit `--host` broadens exposure; HTTP, WebSocket, origin checks, and internal routes share that production result. Dev and preview settings are unchanged.
+- Production `tower` only accepts `127.0.0.1`, `localhost`, or `::1`, and rejects wildcard and LAN addresses. HTTP, WebSocket, origin checks, and internal routes share that production result. Dev and preview settings are unchanged.
 
 Key code lives in `src/actions/agent-actions.ts`, `src/lib/ai/terminal-target.ts`, `src/lib/pty/`, and `/api/internal/terminal/[taskId]/*`.

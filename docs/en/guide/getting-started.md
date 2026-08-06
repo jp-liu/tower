@@ -90,8 +90,8 @@ Deterministic non-interactive options:
 
 ```sh
 sh install.sh --help
-sh install.sh --version 0.3.1 --yes --no-start
-sh install.sh --download-base https://mirror.example/tower/v0.3.1 --version 0.3.1 --yes --no-start
+sh install.sh --version X.Y.Z --yes --no-start
+sh install.sh --download-base https://mirror.example/tower/vX.Y.Z --version X.Y.Z --yes --no-start
 sh install.sh --prefix "$HOME/apps/tower" --bin-dir "$HOME/bin" --yes --no-start
 sh install.sh --verify --yes --no-start
 ```
@@ -102,7 +102,7 @@ override the user directories.
 
 ## 4. Manual download, verification, and extraction
 
-Choose exactly one asset for the machine:
+Choose a version on the Release page, replace `X.Y.Z` below, and select exactly one asset for the machine:
 
 | OS | CPU | Asset |
 | --- | --- | --- |
@@ -115,7 +115,7 @@ Choose exactly one asset for the machine:
 Complete macOS arm64 example (change `ASSET` for another Unix target):
 
 ```sh
-VERSION=0.3.1
+VERSION=X.Y.Z
 ASSET=tower-portable-darwin-arm64.tar.gz
 BASE="https://github.com/tower-org/tower/releases/download/v$VERSION"
 curl --proto '=https' --tlsv1.2 -fsSLO "$BASE/$ASSET"
@@ -137,7 +137,7 @@ grep "  $ASSET$" SHA256SUMS | sha256sum -c -
 Windows x64:
 
 ```powershell
-$Version = "0.3.1"
+$Version = "X.Y.Z"
 $Asset = "tower-portable-windows-x64.tar.gz"
 $Base = "https://github.com/tower-org/tower/releases/download/v$Version"
 Invoke-WebRequest "$Base/$Asset" -OutFile $Asset
@@ -164,11 +164,11 @@ connected machine. On Windows, download both adjacent files, `install.cmd` and
 `install.ps1`. Copy the files to the offline machine:
 
 ```sh
-sh install.sh --asset-dir /mnt/tower-release --version 0.3.1 --yes --no-start
+sh install.sh --asset-dir /mnt/tower-release --version X.Y.Z --yes --no-start
 ```
 
 ```powershell
-.\install.cmd -AssetDir D:\tower-release -Version 0.3.1 -ConfirmNonInteractive -NoStart
+.\install.cmd -AssetDir D:\tower-release -Version X.Y.Z -ConfirmNonInteractive -NoStart
 ```
 
 This path never invokes npm/pnpm. A mirror must retain the assets and
@@ -198,7 +198,7 @@ default.
 Upgrade while retaining the previous version, then roll back if needed:
 
 ```sh
-sh install.sh --version 0.3.1 --yes --no-start
+sh install.sh --version X.Y.Z --yes --no-start
 sh install.sh --rollback --yes
 ```
 
@@ -212,7 +212,7 @@ sh install.sh --uninstall --yes
 PowerShell equivalents:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Version 0.3.1 -ConfirmNonInteractive -NoStart
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Version X.Y.Z -ConfirmNonInteractive -NoStart
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Rollback -ConfirmNonInteractive
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall -ConfirmNonInteractive
 ```

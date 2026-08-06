@@ -5,7 +5,7 @@ description: "@tower-org/ai-sdk Manifest v1, adapters, schemas, and trust bounda
 
 ## Publication status
 
-`packages/ai-sdk` defines the public CLI Provider v1 contract, but remains a `private@0.1.0` workspace package in Tower 0.3.0. `ai-runtime` and the three official providers are also private. This release creates no GitHub organization/npm scope and publishes no standalone package. Repository/local development may reference source and should bundle runtime SDK imports until a later public release.
+`packages/ai-sdk` defines CLI Provider contract v1 and remains an embedded `private@0.1.0` workspace package. `ai-runtime` and the three official providers are not published independently. Repository and local development may reference source and should bundle runtime SDK imports until a standalone SDK is released.
 
 ## Minimal package
 
@@ -27,7 +27,7 @@ description: "@tower-org/ai-sdk Manifest v1, adapters, schemas, and trust bounda
       "knownPaths": { "darwin": ["~/.local/bin/acme"], "linux": ["~/.local/bin/acme"] },
       "versionArgs": ["--version"]
     },
-    "compatibility": { "tower": ">=0.3.0 <0.4.0", "node": ">=20" },
+    "compatibility": { "tower": ">=0.3.0 <1.0.0", "node": ">=20" },
     "capabilities": {
       "sessions": { "fresh": true, "resume": true },
       "query": { "generate": true, "stream": true },

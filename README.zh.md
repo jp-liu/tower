@@ -32,6 +32,7 @@ tower
 如需不访问 npm registry 的 GitHub Release 安装、离线分发、校验、便携运行、
 升级回滚、后台服务与卸载，请使用[官方安装指南](https://tower-org.github.io/tower/guide/getting-started.html)。
 npm 与 GitHub Release 是并行维护的发行渠道。
+版本变化见 [CHANGELOG](./CHANGELOG.md)，发布与失败恢复规则见[发布流程](https://tower-org.github.io/tower/guide/releases.html)。
 
 从源码开发：
 
@@ -62,7 +63,7 @@ pnpm build
 pnpm start
 ```
 
-生产模式默认只监听 `127.0.0.1`。只有确实需要远程访问时才使用 `pnpm start -- --host 0.0.0.0` 或明确的局域网地址。
+生产模式仅允许监听回环地址（`127.0.0.1`、`localhost` 或 `::1`）。Tower 会拒绝通配地址和局域网地址，避免本地工作台暴露给其他设备。
 
 ### 可选无人值守服务
 
@@ -178,7 +179,7 @@ Workspace（工作空间）
 - 内置 Claude/Codex/Gemini CLI，以及 OpenAI、OpenAI Compatible、Anthropic、Google API 连接
 - Tower 自有多轮 Assistant 会话，支持 SSE、附件、Tower 工具、取消和旧 Claude 会话按需导入
 - 显式主备目标只在首活动前切换；API 多健康 Key round-robin
-- 详见 [AI Tools 0.3](./docs/guide/ai-tools.md)、[升级说明](./docs/guide/upgrade-0.3.md) 和 [CLI Provider 开发](./docs/guide/cli-provider-sdk.md)
+- 详见 [AI Tools](./docs/guide/ai-tools.md)、[升级说明](./docs/guide/upgrading.md) 和 [CLI Provider 开发](./docs/guide/cli-provider-sdk.md)
 
 ### 版本时间线
 

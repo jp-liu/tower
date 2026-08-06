@@ -1,13 +1,13 @@
 ---
 title: AI 模块
-description: AI Tools 0.3 的连接、能力插槽、CLI 插件与 API Runtime
+description: AI Tools 的连接、能力插槽、CLI 插件与 API Runtime
 ---
 
 **Slug:** `ai`
 
-## 0.3.0 状态
+## 当前架构
 
-AI Tools 已从 Claude 专用调用重构为“连接 + 能力插槽”。设置页上半区管理 CLI/API 连接，下半区为 Terminal、Summary、Dreaming、Analysis、Assistant 五个使用场景选择有序目标。完整用户说明见 [AI Tools 0.3](/guide/ai-tools)；插件契约见 [CLI Provider 开发](/guide/cli-provider-sdk)。
+AI Tools 使用“连接 + 能力插槽”。设置页上半区管理 CLI/API 连接，下半区为 Terminal、Summary、Dreaming、Analysis、Assistant 五个使用场景选择有序目标。完整用户说明见 [AI Tools](/guide/ai-tools)；插件契约见 [CLI Provider 开发](/guide/cli-provider-sdk)。
 
 | 插槽 | 用途 | 连接类型 |
 |---|---|---|
@@ -36,7 +36,7 @@ AI Tools 已从 Claude 专用调用重构为“连接 + 能力插槽”。设置
 | 内置 Provider | `packages/ai-provider-*` | Claude/Codex/Gemini 参数、解析与 MCP/Hooks/Skills 集成 |
 | 应用服务 | `src/lib/ai` | 连接 CRUD、能力解析、Assistant 会话、工具执行与审计 |
 
-这些 workspace 包当前都保持 `private@0.1.0`。`0.1.0` 是内部包契约版本，不跟随 Tower 主应用 `0.3.0`；本期没有创建外部组织、发布 SDK/Provider 包或承诺独立安装。
+这些 workspace 包当前都保持 `private@0.1.0`。`0.1.0` 是内部包契约版本，不跟随 Tower 应用版本；SDK/Provider 包尚未承诺独立安装。
 
 ## 安全模型
 
@@ -47,4 +47,4 @@ AI Tools 已从 Claude 专用调用重构为“连接 + 能力插槽”。设置
 
 ## 后续
 
-公共 npm 发布、外部组织/scope、任意 API Adapter 插件、插件操作系统级沙箱均为后续工作，0.3.0 未实现或未发布。架构依据保留在 `docs/ai/ai-tools-architecture-decisions.md`。
+独立 SDK npm 发布、任意 API Adapter 插件和插件操作系统级沙箱均为后续工作。架构依据保留在 `docs/ai/ai-tools-architecture-decisions.md`。

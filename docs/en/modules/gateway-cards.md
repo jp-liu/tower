@@ -1,14 +1,11 @@
 ---
-title: Gateway Message Cards
-description: Information hierarchy, status presentation, and acceptance rules for native Feishu reply cards
+title: Gateway responses
+description: Cross-channel structured response hierarchy, states, and privacy boundaries
 ---
 
-# Gateway Message Cards
+# Gateway responses
 
-Tower replies to the original Feishu message with a native interactive card.
-The card is a reviewed Workbench conclusion, not a dump of terminal output.
-
-![Real Feishu card acceptance](/diagrams/feishu-card-e2e-2026-07-29.jpeg)
+Gateway uses a channel's structured-message capability when available and falls back to equivalent text. A response is a reviewed Workbench conclusion, not a terminal transcript dump. Public documentation never embeds real company chat environments, contacts, groups, or watermarked screenshots.
 
 ## Three-stage feedback
 
@@ -48,12 +45,12 @@ such as `none No commit recorded`.
 
 ## Delivery contract
 
-- The platform message must be a native reply to the original parent.
-- The card payload is persisted in the outbox before delivery.
-- Stable semantic deduplication keys prevent duplicate cards during retries.
-- Delivery succeeds only after the receipt confirms the `interactive` type and
-  the correct parent ID.
-- Structured text is used only when the platform cannot render a native card.
+- The platform message must reply to the original parent.
+- The structured payload is persisted in the outbox before delivery.
+- Stable semantic deduplication keys prevent duplicate responses during retries.
+- Delivery succeeds only after the receipt confirms the expected message type
+  and correct parent ID.
+- Equivalent text is used only when the platform cannot render structured content.
 
 ## Design principles
 
@@ -63,3 +60,5 @@ such as `none No commit recorded`.
   paragraph.
 - Terminal output is evidence, not the final answer.
 - Request and task IDs remain in a visually quiet footer for diagnostics.
+- Real channels are private acceptance environments; public assets use redacted
+  illustrations or automated contract results.

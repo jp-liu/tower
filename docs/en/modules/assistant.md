@@ -7,7 +7,7 @@ description: Tower-owned sessions, SSE, attachments, and tool execution
 
 **Slug:** `assistant`
 
-In 0.3.0, Tower-owned SQLite sessions and messages are the recovery source. Assistant is no longer tied to Claude Agent SDK transcripts. Its slot may use CLI or API connections and follows the same explicit fallback rules as other AI Tools slots.
+Tower-owned SQLite sessions and messages are the recovery source. Assistant is not tied to one CLI's transcript. Its slot may use CLI or API connections and follows the same explicit fallback rules as other AI Tools slots.
 
 ## Sessions and streaming
 
@@ -21,4 +21,4 @@ In 0.3.0, Tower-owned SQLite sessions and messages are the recovery source. Assi
 
 Tower lists up to 50 legacy Claude Agent SDK sessions. Opening or sending to one imports a copy on demand and records `legacySource + legacyId` to prevent duplicates. Failed conversion leaves the original transcript untouched. After import, Tower's database messages provide multi-provider continuation context.
 
-See [Upgrading to 0.3.0](/en/guide/upgrade-0.3) for data and backup boundaries.
+See [Upgrade and migration](/en/guide/upgrading) for data and backup boundaries.

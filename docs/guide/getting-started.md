@@ -84,8 +84,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ConfirmNonInt
 
 ```sh
 sh install.sh --help
-sh install.sh --version 0.3.1 --yes --no-start
-sh install.sh --download-base https://mirror.example/tower/v0.3.1 --version 0.3.1 --yes --no-start
+sh install.sh --version X.Y.Z --yes --no-start
+sh install.sh --download-base https://mirror.example/tower/vX.Y.Z --version X.Y.Z --yes --no-start
 sh install.sh --prefix "$HOME/apps/tower" --bin-dir "$HOME/bin" --yes --no-start
 sh install.sh --verify --yes --no-start
 ```
@@ -95,7 +95,7 @@ HTTPS 目录。`TOWER_INSTALL_DIR` 与 `TOWER_BIN_DIR` 可覆盖用户安装目�
 
 ## 4. 手动下载、校验、解压
 
-先从 Release 页面确定版本，以下以 `0.3.1` 为例。macOS/Linux 根据机器选择
+先从 Release 页面确定版本，并用该版本替换下文的 `X.Y.Z`。macOS/Linux 根据机器选择
 唯一匹配的资产：
 
 | 系统 | `uname -m` | 资产 |
@@ -109,7 +109,7 @@ HTTPS 目录。`TOWER_INSTALL_DIR` 与 `TOWER_BIN_DIR` 可覆盖用户安装目�
 macOS arm64 完整示例（其他 Unix 目标只替换 `ASSET`）：
 
 ```sh
-VERSION=0.3.1
+VERSION=X.Y.Z
 ASSET=tower-portable-darwin-arm64.tar.gz
 BASE="https://github.com/tower-org/tower/releases/download/v$VERSION"
 curl --proto '=https' --tlsv1.2 -fsSLO "$BASE/$ASSET"
@@ -131,7 +131,7 @@ grep "  $ASSET$" SHA256SUMS | sha256sum -c -
 Windows x64：
 
 ```powershell
-$Version = "0.3.1"
+$Version = "X.Y.Z"
 $Asset = "tower-portable-windows-x64.tar.gz"
 $Base = "https://github.com/tower-org/tower/releases/download/v$Version"
 Invoke-WebRequest "$Base/$Asset" -OutFile $Asset
@@ -157,11 +157,11 @@ Set-Location "tower-v$Version-windows-x64"
 需同时下载相邻的 `install.cmd` 和 `install.ps1`。将这些文件复制到离线机器后执行：
 
 ```sh
-sh install.sh --asset-dir /mnt/tower-release --version 0.3.1 --yes --no-start
+sh install.sh --asset-dir /mnt/tower-release --version X.Y.Z --yes --no-start
 ```
 
 ```powershell
-.\install.cmd -AssetDir D:\tower-release -Version 0.3.1 -ConfirmNonInteractive -NoStart
+.\install.cmd -AssetDir D:\tower-release -Version X.Y.Z -ConfirmNonInteractive -NoStart
 ```
 
 该路径不调用 npm/pnpm。企业镜像必须原样保存资产与 `SHA256SUMS`；内容冲突应
@@ -189,7 +189,7 @@ Linux 第一阶段不支持 `tower service`；直接运行 `tower`，或由你�
 升级到指定版本并保留上一版本：
 
 ```sh
-sh install.sh --version 0.3.1 --yes --no-start
+sh install.sh --version X.Y.Z --yes --no-start
 sh install.sh --rollback --yes
 ```
 
@@ -202,7 +202,7 @@ sh install.sh --uninstall --yes
 PowerShell 对应命令：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Version 0.3.1 -ConfirmNonInteractive -NoStart
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Version X.Y.Z -ConfirmNonInteractive -NoStart
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Rollback -ConfirmNonInteractive
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Uninstall -ConfirmNonInteractive
 ```

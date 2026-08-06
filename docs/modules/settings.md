@@ -28,5 +28,5 @@ Terminal、Summary、Dreaming、Analysis、Assistant 各自保存一个主目标
 - Terminal：WebSocket 端口、空闲时间；生产监听 host 由 `tower --host` 控制。
 - System：并发、上传、Git/搜索超时和任务归档期限。
 - Prompt/Agent：全局或 workspace prompt、旧 Agent 附加配置。
-- 数据管理：创建/恢复完整归档、存储位置和系统重置。凭据与附件范围见 [升级到 0.3.0](/guide/upgrade-0.3)。
+- 数据管理：创建/恢复完整归档、存储位置和系统重置。凭据与附件范围见 [升级与迁移](/guide/upgrading)。
 - Tower Agent 扩展：见 [Tower Agent 能力扩展](/modules/agent-extension)。

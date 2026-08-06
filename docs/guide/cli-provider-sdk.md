@@ -5,7 +5,7 @@ description: "@tower-org/ai-sdk Manifest v1、Adapter、Schema 与信任边界"
 
 ## 发布状态
 
-`packages/ai-sdk` 定义公共 CLI Provider 契约 v1，但 0.3.0 中仍为 `private@0.1.0` workspace 包。`ai-runtime` 和三个官方 Provider 同样 private；本期没有创建 GitHub Organization/npm scope，也没有发布独立包。外部正式依赖需等待后续发布；仓库内或本地开发可引用源码，并应把运行时 SDK 依赖打入插件产物。
+`packages/ai-sdk` 定义 CLI Provider 契约 v1，目前仍作为 `private@0.1.0` workspace 包随 Tower 内嵌。`ai-runtime` 和三个官方 Provider 同样不独立发布；外部正式依赖需等待单独的 SDK 发布。仓库内或本地开发可引用源码，并应把运行时 SDK 依赖打入插件产物。
 
 ## 最小包结构
 
@@ -29,7 +29,7 @@ description: "@tower-org/ai-sdk Manifest v1、Adapter、Schema 与信任边界"
       "knownPaths": { "darwin": ["~/.local/bin/acme"], "linux": ["~/.local/bin/acme"] },
       "versionArgs": ["--version"]
     },
-    "compatibility": { "tower": ">=0.3.0 <0.4.0", "node": ">=20" },
+    "compatibility": { "tower": ">=0.3.0 <1.0.0", "node": ">=20" },
     "capabilities": {
       "sessions": { "fresh": true, "resume": true },
       "query": { "generate": true, "stream": true },

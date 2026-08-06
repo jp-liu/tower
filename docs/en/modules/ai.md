@@ -1,15 +1,15 @@
 ---
 title: AI
-description: AI Tools 0.3 connections, capability slots, CLI plugins, and API runtime
+description: AI Tools connections, capability slots, CLI plugins, and API runtime
 ---
 
 # AI Module
 
 **Slug:** `ai`
 
-## 0.3.0 status
+## Current architecture
 
-AI Tools now uses a connection-and-slot model instead of a Claude-only call path. The top half of Settings manages CLI/API connections; the bottom half assigns ordered targets to Terminal, Summary, Dreaming, Analysis, and Assistant. See [AI Tools 0.3](/en/guide/ai-tools) for user workflows and [CLI Provider development](/en/guide/cli-provider-sdk) for the contract.
+AI Tools uses a connection-and-slot model. The top half of Settings manages CLI/API connections; the bottom half assigns ordered targets to Terminal, Summary, Dreaming, Analysis, and Assistant. See [AI Tools](/en/guide/ai-tools) for user workflows and [CLI Provider development](/en/guide/cli-provider-sdk) for the contract.
 
 | Slot | Purpose | Connection types |
 |---|---|---|
@@ -38,7 +38,7 @@ Built-in CLI providers are Claude Code, Codex CLI, and Gemini CLI. The API runti
 | Built-in providers | `packages/ai-provider-*` | Claude/Codex/Gemini arguments, parsing, and MCP/Hooks/Skills integration |
 | Application services | `src/lib/ai` | Connections, slot resolution, Assistant sessions/tools, and auditing |
 
-All workspace packages remain `private@0.1.0`. That is an internal contract version independent of the Tower app's `0.3.0`; this release creates no external organization and publishes no SDK or provider package.
+All workspace packages remain `private@0.1.0`. That internal contract version is independent of the Tower application version; SDK and Provider packages are not yet published independently.
 
 ## Security
 

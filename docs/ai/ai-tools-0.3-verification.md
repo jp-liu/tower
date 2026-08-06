@@ -68,8 +68,8 @@ ports, and no real credentials or provider network.
 | ARC-03 | API calls use the thin Runtime adapter for OpenAI, OpenAI Compatible, Anthropic, and Google. | `packages/ai-runtime/src/api-types.ts` defines exactly four protocols; `api-adapter.ts` constructs all four Vercel AI SDK providers. Runtime request proof is API-01..04. | proved |
 | ARC-04 | Five explicit capability slots exist: Terminal, Summary, Dreaming, Analysis, Assistant. | `packages/ai-runtime/src/capability-types.ts` defines the exact five-slot tuple; `prisma/schema.prisma` persists capability targets. Runtime proof is SLOT-01..04. | proved |
 | ARC-05 | Connection instances, models, multi-Key state, targets, plugins, Terminal snapshots, and Assistant history are persisted. | `prisma/schema.prisma`; migrations `0009` through `0013`. Data-preservation proof is MIG-01..06. | proved |
-| ARC-06 | First release remains local/workspace-only and performs no external publish, tag, organization, or registry creation. | All five AI package manifests have `private: true`; `docs/guide/release-0.3.0.md` says no publish/tag/release; acceptance commands exclude publish/tag/push. | proved |
-| ARC-07 | User and upgrade documentation covers 0.3.0, setup, migration, security, plugin trust, and limitations in zh/en. | `docs/{guide,en/guide}/{ai-tools,cli-provider-sdk,release-0.3.0,upgrade-0.3}.md`; commit `2a57537`. | proved |
+| ARC-06 | First release remains local/workspace-only and performs no external publish, tag, organization, or registry creation. | All five AI package manifests have `private: true`; the original release guide is preserved in commit `2a57537`; acceptance commands exclude publish/tag/push. | proved |
+| ARC-07 | User and upgrade documentation covers 0.3.0, setup, migration, security, plugin trust, and limitations in zh/en. | The original versioned guides are preserved in commit `2a57537`; current guidance is evergreen under `docs/{guide,en/guide}/{ai-tools,cli-provider-sdk,upgrading}.md`. | proved |
 | ARC-08 | Production CLI defaults to loopback and supports an explicit host override. | `bin/network.mjs`, `bin/tower.mjs`, README zh/en. Runtime proof is REL-01 and REL-02. | proved |
 | ARC-09 | API models are discovered plus manually addable; Base URL is not rewritten with `/v1`. | `packages/ai-runtime/src/api-adapter.ts`, `api-config.ts`; runtime proof is API-05. | proved |
 | ARC-10 | API Keys are local plaintext, masked by default, revealable/copyable/editable, and included in full backup with a static warning. | Schema and `src/components/settings/{api-connections-section,backup-section}.tsx`; docs. UI/backup proof is SEC-05 and UI-02. | proved |
@@ -254,6 +254,6 @@ evidence, not a claim of Hub acceptance.
 
 The official Catalog repository/Organization/hosted URL is still unauthorized.
 Until it exists, operators must configure the server-side
-`TOWER_EXTENSION_CATALOG_URL` or the system Catalog URL. Manual acceptance items
-and external prerequisites are maintained in
-`docs/guide/acceptance-0.3.0.md`.
+`TOWER_EXTENSION_CATALOG_URL` or the system Catalog URL. The original manual
+acceptance items and external prerequisites are preserved with this record in
+Git history; current release decisions live under `docs/releases/`.

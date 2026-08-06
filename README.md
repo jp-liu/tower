@@ -33,6 +33,8 @@ For a registry-free GitHub Release install, offline distribution, checksums,
 portable use, upgrades, rollback, services, and uninstall, follow the
 [official installation guide](https://tower-org.github.io/tower/en/guide/getting-started.html).
 The npm and GitHub Release channels are maintained in parallel.
+See the [Changelog](./CHANGELOG.md) for notable changes and the
+[release process](https://tower-org.github.io/tower/en/guide/releases.html) for publication and recovery rules.
 
 For source development:
 
@@ -63,7 +65,7 @@ pnpm build
 pnpm start
 ```
 
-Production binds to `127.0.0.1` by default. Use `pnpm start -- --host 0.0.0.0` or an explicit LAN address only when remote access is intentional.
+Production is restricted to loopback hosts (`127.0.0.1`, `localhost`, or `::1`). Tower rejects wildcard and LAN bind addresses so the local workbench is not exposed to other devices.
 
 ### Optional unattended service
 
@@ -180,7 +182,7 @@ Create task → Click Execute → TODO auto-transitions to IN_PROGRESS
 - Built-in Claude/Codex/Gemini CLI connections plus OpenAI, OpenAI Compatible, Anthropic, and Google API connections
 - Tower-owned multi-turn Assistant sessions with SSE, attachments, Tower tools, cancellation, and on-demand legacy Claude import
 - Explicit primary/fallback targets switch only before first activity; API connections support healthy multi-key round-robin
-- See [AI Tools 0.3](./docs/en/guide/ai-tools.md), [upgrade guide](./docs/en/guide/upgrade-0.3.md), and [CLI Provider SDK](./docs/en/guide/cli-provider-sdk.md)
+- See [AI Tools](./docs/en/guide/ai-tools.md), [upgrade guide](./docs/en/guide/upgrading.md), and [CLI Provider SDK](./docs/en/guide/cli-provider-sdk.md)
 
 ### Version Timeline
 

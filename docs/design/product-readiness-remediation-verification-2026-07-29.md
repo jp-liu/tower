@@ -84,7 +84,7 @@
 > 2026-08-05 后续架构更新：上述三段链路只是历史验收证据，已被单次
 > `route_gateway_query` 取代。新链路不创建 `GatewayInbound`、会话或 Workbench 事件。
 
-新版卡片真实截图：[`assets/feishu-card-e2e-2026-07-29.jpeg`](./assets/feishu-card-e2e-2026-07-29.jpeg)。
+真实渠道验收曾使用公司环境截图取证；该截图不属于公开产品文档，现已从仓库与 GitHub Pages 资产中移除。自动化契约测试继续覆盖字段、状态、引用关系与重复投递边界。
 
 ## 运维与故障定位
 
