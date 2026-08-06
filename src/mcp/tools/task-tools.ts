@@ -227,16 +227,6 @@ export const taskTools = {
         }
         gatewayInboundId = inbound.id;
       }
-      if (resolvedParentId) {
-        const { assertUnattendedGoalOperationAllowed } = await import(
-          "@/lib/unattended-goal/policy"
-        );
-        await assertUnattendedGoalOperationAllowed(resolvedParentId, "CREATE_CHILD", db);
-        if (autoStart) {
-          await assertUnattendedGoalOperationAllowed(resolvedParentId, "START_CHILD", db);
-        }
-      }
-
       // Source is a HARD server-side rule, not left to the model: strip any raw
       // <task-source> bridge block, render a channel-generic `## 来源`, add the
       // parent-derivation source for child tasks, and fall back to `## 来源\n无`

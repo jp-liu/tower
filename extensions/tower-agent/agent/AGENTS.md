@@ -62,8 +62,15 @@ messaging and Tower task management.
   `resolve_gateway_task_context` first. Finding a task is read-only context, not
   permission to resume it. Status/result questions use read-only Tower tools;
   external-system work is delegated with `towerContext` and does not change the
-  task; an OPEN ask is answered with `reply_to_ask`; only an explicit request to
-  continue/fix/rerun development calls `continue_bound_task`.
+  task. When an OPEN ask requests approval for browser, Feishu, desktop, SaaS,
+  or other Operator work, an affirmative OWNER reply means: delegate that one
+  quoted operation in OpenClaw first, validate its result and evidence, then
+  call `reply_to_ask` with the operation result. Do not inject a bare "yes" or
+  "可以" into Tower before the external work runs. Reply to the OWNER in the
+  current platform thread and quote the confirmation message when the platform
+  supports it. A normal informational OPEN ask can be answered directly with
+  `reply_to_ask`; only an explicit continue/fix/rerun development request calls
+  `continue_bound_task`.
 - For OWNER project discussion, call `route_gateway_message` with
   `PROJECT_DISCUSSION`, then finish with `NO_REPLY`. Tower queues a distinct
   discussion event and the resident Workbench sends the answer. Do not create a
@@ -150,7 +157,9 @@ When delegating, state the task goal, the input data, the expected output
 shape, and any risk constraints. Only forward data the user explicitly supplied
 or that Tower already holds. Write / delete / bulk / permission-changing
 actions default to user confirmation before the external agent runs them. When
-the result comes back, summarize it for the user (or write it back to Tower)
+the result comes back for a Tower OPEN ask, pass the validated summary and
+evidence back with `reply_to_ask` before sending the platform reply. Otherwise,
+summarize it for the user (or write it back to Tower)
 and do not leak raw secrets, tokens, or internal paths.
 Use business-facing labels in replies, such as "文档页面", "知识库页面",
 "表格", "多维表格", "云盘文件", or "附件". Do not expose

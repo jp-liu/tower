@@ -97,7 +97,11 @@ Replies to Tower deliveries use a separate decision boundary:
    inbound, changing status, creating an execution, or touching a terminal.
 2. A status/result question stays read-only. External operator work is
    delegated with the returned `towerContext`; the Tower task remains unchanged.
-3. An answer to an OPEN `ask_human` uses `reply_to_ask`.
+3. A normal answer to an OPEN `ask_human` uses `reply_to_ask`. If the ask is
+   requesting approval for external Operator work, the verified OWNER reply is
+   handled in the Gateway first: OpenClaw executes that one quoted operation,
+   validates the result, then calls `reply_to_ask` with the result and replies
+   in the original platform thread. A bare approval is never injected first.
 4. Only an explicit continue/fix/rerun request uses `continue_bound_task`. That
    action is OWNER-only and deduplicated by the inbound platform message id.
 

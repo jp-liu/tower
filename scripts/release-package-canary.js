@@ -23,6 +23,8 @@ const REQUIRED_FILES = [
   "scripts/migrations/0031-capability-result-wakeup.ts",
   "scripts/migrations/0032-unattended-goal-policy.ts",
   "scripts/migrations/0033-capability-completion-callback.ts",
+  "scripts/migrations/0036-unattended-final-notification.ts",
+  "scripts/migrations/0037-decouple-goal-notification-state.ts",
   "extensions/tower-agent/openclaw-capability/package.json",
   "extensions/tower-agent/openclaw-capability/openclaw.plugin.json",
   "extensions/tower-agent/openclaw-capability/index.js",

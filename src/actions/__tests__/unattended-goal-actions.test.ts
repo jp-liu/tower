@@ -55,7 +55,6 @@ beforeEach(() => {
     capability: "human.message.send",
     targetKind: "OWNER_HOME_ROUTE",
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    maxUses: 5,
   }]);
   mocks.revokeGrants.mockResolvedValue(1);
   mocks.applyLifecycle.mockResolvedValue({ state: "ACTIVE", active: true });
@@ -68,7 +67,6 @@ describe("unattended Goal UI actions", () => {
     await expect(enableUnattendedGoalFromUi({
       taskId: "task-1",
       durationMinutes: 120,
-      maxUses: 5,
     })).resolves.toMatchObject({
       active: true,
       ownerMessageGrant: { authorizationRef: "grant-1" },
@@ -78,7 +76,7 @@ describe("unattended Goal UI actions", () => {
     expect(mocks.replaceGrants).toHaveBeenCalledWith(expect.objectContaining({
       taskId: "task-1",
       durationMinutes: 120,
-      maxUses: 5,
+      targets: [expect.objectContaining({ capability: "human.message.send" })],
     }), mocks.transaction);
     expect(mocks.applyLifecycle).toHaveBeenCalledWith(mocks.transaction, {
       taskId: "task-1",
@@ -86,7 +84,6 @@ describe("unattended Goal UI actions", () => {
       refreshActive: true,
       policy: {
         maxDurationMs: 120 * 60_000,
-        maxCapabilityJobs: 5,
       },
     });
     expect(mocks.setSignal).toHaveBeenCalledWith("task-1", true);
@@ -110,15 +107,13 @@ describe("unattended Goal UI actions", () => {
     expect(mocks.setSignal).toHaveBeenCalledWith("task-1", false);
   });
 
-  it("renews an active Goal authorization without restarting its budget", async () => {
-    mocks.readMode.mockResolvedValueOnce({ active: true, runtime: { state: "ACTIVE" } });
-
-    await enableUnattendedGoalFromUi({ taskId: "task-1", durationMinutes: 120, maxUses: 5 });
+  it("restarts the selected duration when unattended mode is enabled again", async () => {
+    await enableUnattendedGoalFromUi({ taskId: "task-1", durationMinutes: 120 });
 
     expect(mocks.applyLifecycle).toHaveBeenCalledWith(mocks.transaction, expect.objectContaining({
       taskId: "task-1",
       event: "ACTIVATED",
-      refreshActive: false,
+      refreshActive: true,
     }));
   });
 
@@ -126,7 +121,7 @@ describe("unattended Goal UI actions", () => {
     mocks.readMode.mockResolvedValueOnce({
       active: false,
       runtime: {
-        state: "BLOCKED",
+        state: "ENDED",
         ownerNotificationRequestId: "request-1",
         ownerNotificationKind: "COMPLETED",
         ownerNotificationState: "BLOCKED",
@@ -138,7 +133,7 @@ describe("unattended Goal UI actions", () => {
 
     expect(mocks.replaceGrants).toHaveBeenCalledWith(expect.objectContaining({
       taskId: "task-1",
-      maxUses: 1,
+      durationMinutes: 120,
     }), mocks.transaction);
     expect(mocks.applyLifecycle).not.toHaveBeenCalled();
     expect(mocks.recoverNotification).toHaveBeenCalledWith("task-1", expect.anything(), true);

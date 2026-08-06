@@ -126,6 +126,8 @@ async function prepareNotificationIntent(
     const binding = runtime.ownerNotificationBinding ?? `[[tower:task=${task.id}]]`;
     const requestState = existingRequest?.state ?? runtime.ownerNotificationState ?? "INTENT";
     const createdAt = runtime.ownerNotificationCreatedAt ?? new Date();
+    const needsOwnerAttention = requestKind === "BLOCKED";
+    const terminalAt = new Date();
 
     await tx.task.update({
       where: { id: task.id },
@@ -135,13 +137,13 @@ async function prepareNotificationIntent(
     const updated = await tx.unattendedGoalRuntime.update({
       where: { taskId: task.id },
       data: {
-        state: "BLOCKED",
+        state: needsOwnerAttention ? "BLOCKED" : "ENDED",
         lastEventKind: input.lifecycleEvent,
-        endedAt: null,
-        blockedAt: runtime.blockedAt ?? new Date(),
-        blockedReason: requestKind === "BLOCKED"
+        endedAt: needsOwnerAttention ? null : (runtime.endedAt ?? terminalAt),
+        blockedAt: needsOwnerAttention ? (runtime.blockedAt ?? terminalAt) : null,
+        blockedReason: needsOwnerAttention
           ? (input.reason ?? runtime.blockedReason ?? "The unattended Goal needs OWNER attention")
-          : "Final OWNER notification has not been confirmed",
+          : null,
         nextWakeAt: null,
         wakeReason: null,
         ownerNotificationRequestId: requestId,
@@ -171,7 +173,7 @@ async function settleNotification(
     const status = snapshot?.status ?? "BLOCKED";
     const delivered = status === "SUCCEEDED";
     const completed = delivered || status === "SIDE_EFFECT_UNKNOWN" || RETRYABLE_TERMINAL_STATES.has(status);
-    const runtimeState = kind === "COMPLETED" && delivered ? "ENDED" : "BLOCKED";
+    const runtimeState = kind === "BLOCKED" ? "BLOCKED" : "ENDED";
     const diagnostic = error
       ?? (status === "SIDE_EFFECT_UNKNOWN"
         ? "The OWNER message may have been accepted; automatic retry is disabled pending manual reconciliation"
@@ -193,12 +195,10 @@ async function settleNotification(
       data: {
         state: runtimeState,
         endedAt: runtimeState === "ENDED" ? (runtime.endedAt ?? now) : null,
-        blockedAt: runtimeState === "BLOCKED" ? (runtime.blockedAt ?? now) : runtime.blockedAt,
+        blockedAt: runtimeState === "BLOCKED" ? (runtime.blockedAt ?? now) : null,
         blockedReason: runtimeState === "ENDED"
           ? null
-          : kind === "BLOCKED"
-            ? runtime.blockedReason
-            : diagnostic,
+          : runtime.blockedReason,
         ownerNotificationState: status,
         ownerNotificationError: diagnostic,
         ownerNotificationCompletedAt: completed ? (runtime.ownerNotificationCompletedAt ?? now) : null,

@@ -39,7 +39,7 @@ import {
   recordUnattendedGoalProgressFact,
   type GoalPolicyDb,
 } from "@/lib/unattended-goal/policy";
-import { readUnattendedGoalAuthorizationState } from "@/lib/unattended-goal/runtime";
+import { readUnattendedGoalAuthorizationContext } from "@/lib/unattended-goal/runtime";
 
 type CapabilityDb = Pick<
   PrismaClient,
@@ -239,8 +239,8 @@ export async function discoverGatewayCapabilities(
   database: CapabilityDb = db,
 ) {
   const capabilities = await readRuntimeCapabilities();
-  const goalState = taskId
-    ? await readUnattendedGoalAuthorizationState(database, taskId)
+  const goalContext = taskId
+    ? await readUnattendedGoalAuthorizationContext(database, taskId)
     : null;
   return {
     schemaVersion: CAPABILITY_SCHEMA_VERSION,
@@ -248,8 +248,14 @@ export async function discoverGatewayCapabilities(
     registryAuthority: "gateway" as const,
     capabilities: await Promise.all(capabilities.map(async (capability) => {
       const target = grantTarget(capability);
-      const grantContextActive = goalState === "ACTIVE"
-        || (goalState === "BLOCKED" && capability.capability === OWNER_MESSAGE_CAPABILITY);
+      const ownerTerminalNotificationPending = capability.capability === OWNER_MESSAGE_CAPABILITY
+        && goalContext?.state === "ENDED"
+        && Boolean(goalContext.ownerNotificationRequestId)
+        && Boolean(goalContext.ownerNotificationKind)
+        && !["SUCCEEDED", "SIDE_EFFECT_UNKNOWN"].includes(goalContext.ownerNotificationState ?? "");
+      const grantContextActive = goalContext?.state === "ACTIVE"
+        || (goalContext?.state === "BLOCKED" && capability.capability === OWNER_MESSAGE_CAPABILITY)
+        || ownerTerminalNotificationPending;
       const grant = taskId && target && grantContextActive
         && (capability.risk === "R2" || capability.risk === "R3")
         ? capability.capability === OWNER_MESSAGE_CAPABILITY
@@ -262,7 +268,6 @@ export async function discoverGatewayCapabilities(
           required: capability.risk === "R2" || capability.risk === "R3",
           authorizationRef: grant?.authorizationRef ?? null,
           expiresAt: grant?.expiresAt ?? null,
-          remainingUses: grant?.remainingUses ?? 0,
         },
       };
     })),
@@ -316,11 +321,18 @@ async function createCapabilityRequest(
     const task = await tx.task.findUnique({ where: { id: envelope.towerContext.taskId }, select: { id: true } });
     if (!task) throw new Error("task not found");
     if (requiresGrant) {
-      const goalState = await readUnattendedGoalAuthorizationState(tx, envelope.towerContext.taskId);
-      const grantContextActive = goalState === "ACTIVE"
-        || (goalState === "BLOCKED" && descriptor.capability === OWNER_MESSAGE_CAPABILITY);
+      const goalContext = await readUnattendedGoalAuthorizationContext(tx, envelope.towerContext.taskId);
+      const matchesPersistedTerminalNotification = descriptor.capability === OWNER_MESSAGE_CAPABILITY
+        && Boolean(goalTerminalKind)
+        && goalContext?.ownerNotificationRequestId === envelope.requestId
+        && goalContext.ownerNotificationKind === goalTerminalKind;
+      const grantContextActive = goalContext?.state === "ACTIVE"
+        || (goalContext?.state === "BLOCKED" && descriptor.capability === OWNER_MESSAGE_CAPABILITY)
+        || matchesPersistedTerminalNotification;
       if (!grantContextActive) {
-        throw new Error("Bounded OWNER authorization is valid only for an active unattended Goal");
+        throw new Error(
+          "Bounded OWNER authorization is valid only for an active Goal or its persisted terminal notification",
+        );
       }
       const grant = envelope.authorizationRef
         ? await tx.capabilityGrant.findUnique({ where: { id: envelope.authorizationRef } })
@@ -335,7 +347,7 @@ async function createCapabilityRequest(
         || grant.issuer !== "TOWER_UI"
         || grant.revokedAt
         || grant.expiresAt <= new Date()
-        || grant.usedCount >= grant.maxUses
+        || (grant.maxUses !== 0 && grant.usedCount >= grant.maxUses)
       ) throw new Error(`${envelope.risk} capability requires a valid bounded OWNER authorization grant`);
       if (goalTerminalKind) {
         const runtime = await tx.unattendedGoalRuntime.findUnique({
@@ -365,7 +377,7 @@ async function createCapabilityRequest(
           id: grant.id,
           revokedAt: null,
           expiresAt: { gt: new Date() },
-          usedCount: { lt: grant.maxUses },
+          ...(grant.maxUses === 0 ? {} : { usedCount: { lt: grant.maxUses } }),
         },
         data: { usedCount: { increment: 1 } },
       });

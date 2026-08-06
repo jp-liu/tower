@@ -21,6 +21,14 @@ state. On `channel_access_denied`, return only its fixed instructions (or
 Never replace an unavailable Tower tool with `exec`, filesystem access, a
 generic MCP bridge, or another agent.
 
+For a reply to an OPEN Tower ask that requests an external operation, keep the
+operation in OpenClaw: resolve the task, delegate the single approved action to
+the configured Operator, validate the result, then call `reply_to_ask` with the
+result. Do not send a bare approval into the Tower terminal and do not create a
+Tower `CapabilityRequest` for work that the verified OWNER just approved in the
+gateway. The platform response should quote the OWNER confirmation when
+supported; Tower receives the same validated result through `reply_to_ask`.
+
 Project-content routing takes precedence over presentation routing. Questions
 about a Tower-registered project's architecture, documentation, repository,
 facts, tasks, status, or assets must first use the Tower gateway/project

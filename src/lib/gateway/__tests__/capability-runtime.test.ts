@@ -190,20 +190,41 @@ describe("Gateway capability runtime", () => {
     expect(before.capabilities[0]).toMatchObject({ available: true, authorization: { authorizationRef: null } });
     expect(JSON.stringify(before)).not.toContain("oc_owner");
 
-    const grant = await issueOwnerMessageGrant({ taskId: "task-1", maxUses: 2 }, prisma);
+    const grant = await issueOwnerMessageGrant({ taskId: "task-1" }, prisma);
     const after = await discoverGatewayCapabilities("task-1", prisma);
     expect(after.capabilities[0].authorization).toMatchObject({
       authorizationRef: grant.authorizationRef,
-      remainingUses: 2,
     });
+    expect(after.capabilities[0].authorization).not.toHaveProperty("remainingUses");
 
     await expect(submitCapabilityRequest(envelope("invented-grant"), prisma))
       .rejects.toThrow(/valid bounded OWNER authorization/);
   });
 
+  it("keeps the default OWNER grant usable until its deadline without a send counter", async () => {
+    const prisma = await database();
+    const grant = await issueOwnerMessageGrant({ taskId: "task-1" }, prisma);
+
+    await expect(submitCapabilityRequest(envelope(grant.authorizationRef), prisma))
+      .resolves.toMatchObject({ status: "SUCCEEDED" });
+    await expect(submitCapabilityRequest(envelope(grant.authorizationRef, {
+      requestId: "b6957554-b010-4faf-8295-738ee3b030fa",
+    }), prisma)).resolves.toMatchObject({ status: "SUCCEEDED" });
+
+    expect(mocks.outbound).toHaveBeenCalledTimes(2);
+    expect(await prisma.capabilityGrant.findUniqueOrThrow({ where: { id: grant.authorizationRef } }))
+      .toMatchObject({ maxUses: 0, usedCount: 2, revokedAt: null });
+    const discovery = await discoverGatewayCapabilities("task-1", prisma);
+    expect(discovery.capabilities[0].authorization).toEqual(expect.objectContaining({
+      authorizationRef: grant.authorizationRef,
+      expiresAt: expect.any(String),
+    }));
+    expect(discovery.capabilities[0].authorization).not.toHaveProperty("remainingUses");
+  });
+
   it("does not expose or accept a stale grant after the unattended Goal ends", async () => {
     const prisma = await database();
-    const grant = await issueOwnerMessageGrant({ taskId: "task-1", maxUses: 2 }, prisma);
+    const grant = await issueOwnerMessageGrant({ taskId: "task-1" }, prisma);
     await prisma.unattendedGoalRuntime.update({
       where: { taskId: "task-1" },
       data: { state: "ENDED", endedAt: new Date(), lastEventKind: "TERMINAL_COMPLETED" },
@@ -212,15 +233,39 @@ describe("Gateway capability runtime", () => {
     const discovery = await discoverGatewayCapabilities("task-1", prisma);
     expect(discovery.capabilities[0].authorization.authorizationRef).toBeNull();
     await expect(submitCapabilityRequest(envelope(grant.authorizationRef), prisma))
-      .rejects.toThrow(/active unattended Goal/);
+      .rejects.toThrow(/active Goal or its persisted terminal notification/);
     expect(await prisma.capabilityGrant.findUniqueOrThrow({ where: { id: grant.authorizationRef } }))
       .toMatchObject({ usedCount: 0, revokedAt: null });
     expect(mocks.outbound).not.toHaveBeenCalled();
   });
 
+  it("allows only the persisted terminal notification after a completed Goal ends", async () => {
+    const prisma = await database();
+    const grant = await issueOwnerMessageGrant({ taskId: "task-1" }, prisma);
+    const terminalRequestId = "f6b32617-2c16-4e16-97fa-28a8288a61a0";
+    await prisma.unattendedGoalRuntime.update({
+      where: { taskId: "task-1" },
+      data: {
+        state: "ENDED",
+        endedAt: new Date(),
+        ownerNotificationRequestId: terminalRequestId,
+        ownerNotificationKind: "COMPLETED",
+        ownerNotificationState: "INTENT",
+      },
+    });
+
+    await expect(submitCapabilityRequest(envelope(grant.authorizationRef, {
+      requestId: terminalRequestId,
+      inputs: { message: "Goal completed", expectReply: true, goalTerminal: "COMPLETED" },
+    }), prisma)).resolves.toMatchObject({ status: "SUCCEEDED" });
+    await expect(submitCapabilityRequest(envelope(grant.authorizationRef, {
+      requestId: "2ba43ca5-a344-40a9-8fba-14355ddc9c47",
+    }), prisma)).rejects.toThrow(/active Goal or its persisted terminal notification/);
+  });
+
   it("keeps the bounded OWNER notification path available while a Goal is BLOCKED", async () => {
     const prisma = await database();
-    const grant = await issueOwnerMessageGrant({ taskId: "task-1", maxUses: 1 }, prisma);
+    const grant = await issueOwnerMessageGrant({ taskId: "task-1" }, prisma);
     await prisma.unattendedGoalRuntime.update({
       where: { taskId: "task-1" },
       data: {
@@ -240,7 +285,7 @@ describe("Gateway capability runtime", () => {
 
   it("delivers once for one requestId and rejects payload mutation", async () => {
     const prisma = await database();
-    const grant = await issueOwnerMessageGrant({ taskId: "task-1", maxUses: 2 }, prisma);
+    const grant = await issueOwnerMessageGrant({ taskId: "task-1" }, prisma);
     const request = envelope(grant.authorizationRef);
 
     await expect(submitCapabilityRequest(request, prisma)).resolves.toMatchObject({

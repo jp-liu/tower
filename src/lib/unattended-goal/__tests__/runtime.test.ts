@@ -148,7 +148,7 @@ describe("unattended goal runtime", () => {
     const result = await activateUnattendedGoal(db as never, "task-1");
 
     expect(result.activatedAt).toEqual(activatedAt);
-    expect(result.policy.maxCapabilityJobs).toBe(20);
+    expect(result.policy.maxDurationMs).toBe(28_800_000);
     expect(unattendedGoalRuntime.create).not.toHaveBeenCalled();
     expect(unattendedGoalRuntime.update).not.toHaveBeenCalled();
     expect(setSignal).toHaveBeenCalledWith("task-1", true);

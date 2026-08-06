@@ -1,12 +1,11 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findConfig, activate, end, readMode, readBudget, scheduleWakeup } = vi.hoisted(() => ({
+const { findConfig, activate, end, readMode, scheduleWakeup } = vi.hoisted(() => ({
   findConfig: vi.fn(),
   activate: vi.fn(),
   end: vi.fn(),
   readMode: vi.fn(),
-  readBudget: vi.fn(),
   scheduleWakeup: vi.fn(),
 }));
 vi.mock("../../db", () => ({
@@ -20,7 +19,6 @@ vi.mock("@/lib/unattended-goal/runtime", () => ({
 }));
 
 vi.mock("@/lib/unattended-goal/policy", () => ({
-  readUnattendedGoalBudget: readBudget,
   scheduleUnattendedGoalWakeup: scheduleWakeup,
 }));
 
@@ -34,12 +32,10 @@ beforeEach(() => {
     active: true,
     runtime: {
       state: "ACTIVE",
+      activatedAt: new Date("2026-08-02T00:00:00.000Z"),
       nextWakeAt: null,
-      policy: { maxDurationMs: 28_800_000, maxProviderTurns: 100 },
+      policy: { maxDurationMs: 28_800_000 },
     },
-  });
-  readBudget.mockResolvedValue({
-    snapshot: { elapsedMs: 0, providerTurns: 0 },
   });
   scheduleWakeup.mockResolvedValue({ nextWakeAt: new Date("2026-08-02T00:05:00.000Z") });
 });
@@ -67,8 +63,8 @@ describe("set_goal_mode module tool", () => {
       goalMode: true,
       runtimeState: "ACTIVE",
       nextWakeAt: null,
-      budget: { elapsedMs: 0, providerTurns: 0 },
-      limits: { maxDurationMs: 28_800_000, maxProviderTurns: 100 },
+      activatedAt: "2026-08-02T00:00:00.000Z",
+      endsAt: "2026-08-02T08:00:00.000Z",
       authorizationGranted: false,
     });
   });
@@ -81,6 +77,7 @@ describe("set_goal_mode module tool", () => {
       active: true,
       runtime: {
         state: "ACTIVE",
+        activatedAt: new Date("2026-08-02T00:00:00.000Z"),
         nextWakeAt: new Date("2026-08-02T00:05:00.000Z"),
         policy: { maxDurationMs: 28_800_000 },
       },
@@ -110,8 +107,6 @@ describe("set_goal_mode module tool", () => {
       active: false,
       runtime: { state: "ENDED", nextWakeAt: null, policy: null },
     });
-    readBudget.mockResolvedValue(null);
-
     const result = await unattendedGoalTools.set_goal_mode.handler({ taskId: "task-1", on: false });
 
     expect(end).toHaveBeenCalledWith(expect.anything(), "task-1", "DEACTIVATED");

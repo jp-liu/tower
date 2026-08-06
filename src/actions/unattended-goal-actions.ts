@@ -31,51 +31,31 @@ export async function getUnattendedGoalControl(taskId: string) {
 export async function enableUnattendedGoalFromUi(input: {
   taskId: string;
   durationMinutes?: number;
-  maxUses?: number;
-  capabilities?: string[];
 }) {
-  const [discovery, current] = await Promise.all([
-    discoverGatewayCapabilities(input.taskId),
-    readUnattendedGoalMode(db, input.taskId),
-  ]);
+  const discovery = await discoverGatewayCapabilities(input.taskId);
   const owner = discovery.capabilities.find((item) => item.capability === OWNER_MESSAGE_CAPABILITY);
   if (!owner?.available || !owner.routeRevision) {
     throw new Error("A fixed unattended OWNER home route is required before enabling unattended mode");
   }
-  const selected = new Set(input.capabilities ?? []);
-  const unknown = [...selected].find((name) => !discovery.capabilities.some((item) => item.capability === name));
-  if (unknown) throw new Error(`Capability is not advertised by the Gateway: ${unknown}`);
-  const authorized = discovery.capabilities.filter((item) =>
-    item.capability === OWNER_MESSAGE_CAPABILITY
-    || selected.has(item.capability)
-  ).filter((item) => item.risk === "R2" || item.risk === "R3");
+  const ownerRouteRevision = owner.routeRevision;
   const durationMinutes = Math.trunc(input.durationMinutes ?? 480);
-  const maxCapabilityJobs = Math.trunc(input.maxUses ?? 20);
-  const targets = authorized.map((item) => {
-    if (!item.available || !item.routeRevision) {
-      throw new Error(`Capability is unavailable: ${item.capability}`);
-    }
-    return {
-      capability: item.capability,
-      risk: item.risk,
-      targetKind: item.targetKind,
-      targetFingerprint: item.routeRevision,
-    };
-  });
   const result = await db.$transaction(async (tx) => {
     const grants = await replaceCapabilityGrantsInTransaction({
       taskId: input.taskId,
       durationMinutes,
-      maxUses: maxCapabilityJobs,
-      targets,
+      targets: [{
+        capability: OWNER_MESSAGE_CAPABILITY,
+        risk: owner.risk,
+        targetKind: owner.targetKind,
+        targetFingerprint: ownerRouteRevision,
+      }],
     }, tx);
     const runtime = await applyUnattendedGoalLifecycleEventInTransaction(tx, {
       taskId: input.taskId,
       event: "ACTIVATED",
-      refreshActive: !current.active,
+      refreshActive: true,
       policy: {
         maxDurationMs: durationMinutes * 60_000,
-        maxCapabilityJobs,
       },
     });
     return {
@@ -92,7 +72,6 @@ export async function enableUnattendedGoalFromUi(input: {
 export async function recoverUnattendedGoalNotificationFromUi(input: {
   taskId: string;
   durationMinutes?: number;
-  maxUses?: number;
 }) {
   const [discovery, mode] = await Promise.all([
     discoverGatewayCapabilities(input.taskId),
@@ -111,7 +90,6 @@ export async function recoverUnattendedGoalNotificationFromUi(input: {
   const [grant] = await db.$transaction((tx) => replaceCapabilityGrantsInTransaction({
     taskId: input.taskId,
     durationMinutes: Math.trunc(input.durationMinutes ?? 120),
-    maxUses: Math.trunc(input.maxUses ?? 1),
     targets: [{
       capability: OWNER_MESSAGE_CAPABILITY,
       risk: owner.risk,

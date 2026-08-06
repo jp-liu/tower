@@ -69,7 +69,7 @@ There are two outbound intents. Choose exactly one path per logical message.
 ### Failure & idempotency
 - **If a work-message send fails, do NOT call `ask_human`**; otherwise the task parks but nobody received the question.
 - A capability request uses UUID `requestId` as its durable idempotency key. `SIDE_EFFECT_UNKNOWN` is terminal and must not be retried or rerouted.
-- Active parent Goals persist a final-notification intent before leaving the loop. Delivery failure or expired authorization leaves the Goal visibly BLOCKED and recoverable; child tasks do not inherit grants and never create this OWNER notification.
+- Active parent Goals persist a final-notification intent before leaving the loop. Completion ends the Goal independently; delivery failure or expired authorization remains visible and recoverable through the notification state. A genuine task blocker remains `BLOCKED`. Child tasks do not inherit grants and never create this OWNER notification.
 - One pending ask per task is supported; `reply_to_ask` is idempotent against an already-answered ask and will not double-inject.
 
 > The recorded `content` should match what you sent (the token may be omitted in the record) so the `/harness` log shows "what was asked" accurately.

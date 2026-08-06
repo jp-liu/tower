@@ -4,6 +4,7 @@ import { setUnattendedSignal } from "@/lib/harness/unattended-signal";
 export type UnattendedGoalLifecycleEvent =
   | "ACTIVATED"
   | "DEACTIVATED"
+  | "DURATION_EXPIRED"
   | "TASK_LEFT_ACTIVE_LOOP"
   | "TERMINAL_STOPPED"
   | "TERMINAL_COMPLETED"
@@ -15,26 +16,10 @@ type GoalStateDb = Pick<PrismaClient, "unattendedGoalRuntime">;
 
 export interface UnattendedGoalPolicy {
   maxDurationMs: number;
-  maxProviderTurns: number;
-  maxChildTasks: number;
-  maxConcurrentChildren: number;
-  maxConsecutiveFailures: number;
-  maxNoProgressTurns: number;
-  maxCapabilityJobs: number;
-  maxTokens?: number | null;
-  maxCostUsdCents?: number | null;
 }
 
 export const DEFAULT_UNATTENDED_GOAL_POLICY: UnattendedGoalPolicy = {
   maxDurationMs: 8 * 60 * 60 * 1_000,
-  maxProviderTurns: 100,
-  maxChildTasks: 50,
-  maxConcurrentChildren: 4,
-  maxConsecutiveFailures: 3,
-  maxNoProgressTurns: 5,
-  maxCapabilityJobs: 20,
-  maxTokens: null,
-  maxCostUsdCents: null,
 };
 
 function boundedInteger(name: string, value: number, min: number, max: number): number {
@@ -48,16 +33,6 @@ function normalizePolicy(input?: Partial<UnattendedGoalPolicy>): UnattendedGoalP
   const policy = { ...DEFAULT_UNATTENDED_GOAL_POLICY, ...input };
   return {
     maxDurationMs: boundedInteger("maxDurationMs", policy.maxDurationMs, 5 * 60_000, 7 * 24 * 60 * 60_000),
-    maxProviderTurns: boundedInteger("maxProviderTurns", policy.maxProviderTurns, 1, 10_000),
-    maxChildTasks: boundedInteger("maxChildTasks", policy.maxChildTasks, 1, 1_000),
-    maxConcurrentChildren: boundedInteger("maxConcurrentChildren", policy.maxConcurrentChildren, 1, 100),
-    maxConsecutiveFailures: boundedInteger("maxConsecutiveFailures", policy.maxConsecutiveFailures, 1, 100),
-    maxNoProgressTurns: boundedInteger("maxNoProgressTurns", policy.maxNoProgressTurns, 1, 100),
-    maxCapabilityJobs: boundedInteger("maxCapabilityJobs", policy.maxCapabilityJobs, 1, 1_000),
-    maxTokens: policy.maxTokens == null ? null : boundedInteger("maxTokens", policy.maxTokens, 1, 2_000_000_000),
-    maxCostUsdCents: policy.maxCostUsdCents == null
-      ? null
-      : boundedInteger("maxCostUsdCents", policy.maxCostUsdCents, 1, 2_000_000_000),
   };
 }
 
@@ -70,10 +45,6 @@ export interface UnattendedGoalSnapshot {
   endedAt: Date | null;
   blockedAt: Date | null;
   blockedReason: string | null;
-  providerTurns: number;
-  consecutiveFailures: number;
-  noProgressTurns: number;
-  lastProgressAt: Date | null;
   nextWakeAt: Date | null;
   wakeReason: string | null;
   ownerNotificationRequestId: string | null;
@@ -87,15 +58,25 @@ export interface UnattendedGoalSnapshot {
   policy: UnattendedGoalPolicy;
 }
 
-export async function readUnattendedGoalAuthorizationState(
+export async function readUnattendedGoalAuthorizationContext(
   db: GoalStateDb,
   taskId: string,
-): Promise<"ACTIVE" | "BLOCKED" | "ENDED" | null> {
+): Promise<{
+  state: "ACTIVE" | "BLOCKED" | "ENDED";
+  ownerNotificationRequestId: string | null;
+  ownerNotificationKind: string | null;
+  ownerNotificationState: string | null;
+} | null> {
   const runtime = await db.unattendedGoalRuntime.findUnique({
     where: { taskId },
-    select: { state: true },
+    select: {
+      state: true,
+      ownerNotificationRequestId: true,
+      ownerNotificationKind: true,
+      ownerNotificationState: true,
+    },
   });
-  return runtime?.state ?? null;
+  return runtime;
 }
 
 function snapshot(runtime: {
@@ -106,10 +87,6 @@ function snapshot(runtime: {
   endedAt: Date | null;
   blockedAt: Date | null;
   blockedReason: string | null;
-  providerTurns: number;
-  consecutiveFailures: number;
-  noProgressTurns: number;
-  lastProgressAt: Date | null;
   nextWakeAt: Date | null;
   wakeReason: string | null;
   ownerNotificationRequestId: string | null;
@@ -121,14 +98,6 @@ function snapshot(runtime: {
   ownerNotificationCreatedAt: Date | null;
   ownerNotificationCompletedAt: Date | null;
   maxDurationMs: number;
-  maxProviderTurns: number;
-  maxChildTasks: number;
-  maxConcurrentChildren: number;
-  maxConsecutiveFailures: number;
-  maxNoProgressTurns: number;
-  maxCapabilityJobs: number;
-  maxTokens: number | null;
-  maxCostUsdCents: number | null;
 }): UnattendedGoalSnapshot {
   return {
     taskId: runtime.taskId,
@@ -139,10 +108,6 @@ function snapshot(runtime: {
     endedAt: runtime.endedAt,
     blockedAt: runtime.blockedAt,
     blockedReason: runtime.blockedReason,
-    providerTurns: runtime.providerTurns,
-    consecutiveFailures: runtime.consecutiveFailures,
-    noProgressTurns: runtime.noProgressTurns,
-    lastProgressAt: runtime.lastProgressAt,
     nextWakeAt: runtime.nextWakeAt,
     wakeReason: runtime.wakeReason,
     ownerNotificationRequestId: runtime.ownerNotificationRequestId,
@@ -155,14 +120,6 @@ function snapshot(runtime: {
     ownerNotificationCompletedAt: runtime.ownerNotificationCompletedAt,
     policy: {
       maxDurationMs: runtime.maxDurationMs,
-      maxProviderTurns: runtime.maxProviderTurns,
-      maxChildTasks: runtime.maxChildTasks,
-      maxConcurrentChildren: runtime.maxConcurrentChildren,
-      maxConsecutiveFailures: runtime.maxConsecutiveFailures,
-      maxNoProgressTurns: runtime.maxNoProgressTurns,
-      maxCapabilityJobs: runtime.maxCapabilityJobs,
-      maxTokens: runtime.maxTokens,
-      maxCostUsdCents: runtime.maxCostUsdCents,
     },
   };
 }

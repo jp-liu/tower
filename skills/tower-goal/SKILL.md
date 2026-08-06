@@ -34,8 +34,8 @@ inspect `human.message.send`:
 - `available: false` → ask the user to configure an unattended OWNER channel,
   and **do not** call `set_goal_mode`.
 - `authorization.authorizationRef: null` → ask the user to click **Enable
-  unattended** on this Tower task and confirm the bounded duration/message
-  limit. Do not claim that the explicit chat instruction itself minted a grant.
+  unattended** on this Tower task and choose the duration. The default is 8
+  hours. Do not claim that the explicit chat instruction itself minted a grant.
 - Available plus a non-null authorizationRef → retain that opaque ref for
   `submit_capability_request` and continue.
 
@@ -44,6 +44,9 @@ inspect `human.message.send`:
 Now call **`set_goal_mode(taskId, true)`**. It marks this task as goal mode and **persists it** — so even if your context is later compacted, or park/resume/a new session makes you "forget you're looping", `list_notify_targets` still resolves the default channel to `unattended` (reach the owner), and you won't misroute or fail to send when you hit a wall.
 
 The flag is **auto-cleared** when the task leaves the active loop (you Stop the terminal, or the task moves to DONE/CANCELLED/IN_REVIEW), so you rarely close it by hand.
+It is also auto-cleared at the selected deadline. The OWNER can disable it
+early at any time. New tasks never inherit this flag and their creation or
+startup is not gated by the parent task's Goal state.
 
 ### 3. Advance autonomously, silently
 
@@ -65,14 +68,21 @@ records/parks the task. Stop after the result is `SUCCEEDED`; on
 
 Tower also persists a terminal-notification intent when an active Goal leaves
 the loop. If the agent omitted the request, Tower uses the remaining bounded
-OWNER grant to submit the same logical notification once. An expired grant or
-delivery failure leaves the Goal visibly `BLOCKED` for UI recovery; it never
-silently marks the Goal ended. `SIDE_EFFECT_UNKNOWN` remains terminal and is
-never retried automatically.
+OWNER grant to submit the same logical notification once. A completed Goal is
+`ENDED` independently of delivery; an expired grant or delivery failure remains
+visible and recoverable through `ownerNotificationState`. A genuine blocker
+remains `BLOCKED`. `SIDE_EFFECT_UNKNOWN` remains terminal and is never retried
+automatically.
 
 ### 5. Reply → continue; no reply → leave it
 
 - Human replies → the platform bridge injects it via `reply_to_ask` as your next message → **continue per the reply**.
+- If the blocker asked the OWNER to approve browser, Feishu, desktop, SaaS, or
+  other Operator work that this terminal cannot perform, ask them to have
+  OpenClaw execute the exact operation. The Gateway executes it after approval
+  and injects the validated operation result through `reply_to_ask`. Continue
+  from that result; never treat a bare "可以" as external authorization and do
+  not submit the same operation again from Tower.
 - No reply → it just stays parked, **harmless** (recorded in the `/harness` panel, unconsumed). The user will handle it themselves; don't poll, don't nag.
 
 ## Iron rules
@@ -80,7 +90,7 @@ never retried automatically.
 - **OWNER outbound uses the CapabilityRequest path**: do not duplicate the same
   logical message through `push_to_human` or a platform MCP.
 - **Sign-off through an authorized OWNER capability request before any risky/irreversible action**, no exceptions.
-- **Goal mode is not external authorization**: no valid bounded grant means BLOCKED, even when the overall goal was approved.
+- **Goal mode is not external authorization**: no valid bounded grant can authorize a new external action, even when the overall goal was approved. A failed final notification changes only `ownerNotificationState`, not an already completed Goal's state.
 - **End your turn immediately after a successful request with `expectReply: true`** — don't keep working; it parks the task and closes the terminal to save resources, and resumes automatically when the human replies.
 - **Don't change task status or close the terminal on your own** — even "done" just parks and stops; let the user review/close it.
 - taskId comes from env `TOWER_TASK_ID`.

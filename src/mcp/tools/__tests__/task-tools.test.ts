@@ -662,6 +662,27 @@ describe("task-tools", () => {
         });
       });
 
+      it("creates a child task even when the parent has a legacy BLOCKED runtime", async () => {
+        vi.stubEnv("TOWER_TASK_ID", "parent-1");
+        mockDb.task.findUnique.mockResolvedValue({ id: "parent-1", title: "父" });
+        mockDb.unattendedGoalRuntime.findUnique.mockResolvedValue({
+          taskId: "parent-1",
+          state: "BLOCKED",
+          blockedReason: "legacy limit",
+        });
+        mockDb.task.create.mockResolvedValue({ id: "t1", title: "T" });
+
+        await expect(taskTools.create_task.handler({
+          projectId: "p1",
+          title: "T",
+          autoStart: false,
+        })).resolves.toMatchObject({ id: "t1" });
+        expect(mockDb.task.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({ parentTaskId: "parent-1" }),
+        });
+        expect(mockDb.unattendedGoalRuntime.findUnique).not.toHaveBeenCalled();
+      });
+
       it("appends the parent-derivation source when derived from a parent task", async () => {
         vi.stubEnv("TOWER_TASK_ID", "parent-1");
         mockDb.task.findUnique.mockResolvedValue({ id: "parent-1", title: "父任务标题" });

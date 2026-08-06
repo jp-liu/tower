@@ -106,7 +106,7 @@ afterEach(async () => {
 describe("unattended Goal final notification", () => {
   it("persists and delivers one final notification across duplicate lifecycle callbacks", async () => {
     const prisma = await database();
-    const grant = await issueOwnerMessageGrant({ taskId: "goal-1", maxUses: 2 }, prisma as never);
+    const grant = await issueOwnerMessageGrant({ taskId: "goal-1" }, prisma as never);
 
     const first = await ensureUnattendedGoalFinalNotification({
       taskId: "goal-1",
@@ -137,7 +137,7 @@ describe("unattended Goal final notification", () => {
 
   it("adopts an agent-sent terminal CapabilityRequest instead of sending a duplicate", async () => {
     const prisma = await database();
-    const grant = await issueOwnerMessageGrant({ taskId: "goal-1", maxUses: 2 }, prisma as never);
+    const grant = await issueOwnerMessageGrant({ taskId: "goal-1" }, prisma as never);
     const requestId = "9f34172c-62bf-4c68-9bca-66e7f6711bb5";
     await submitCapabilityRequest({
       schemaVersion: 1,
@@ -175,7 +175,7 @@ describe("unattended Goal final notification", () => {
     expect(mocks.outbound).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps an expired-authorization failure visible and recovers the same persisted intent", async () => {
+  it("keeps a completed Goal ended while an authorization failure remains recoverable", async () => {
     const prisma = await database();
     const blocked = await ensureUnattendedGoalFinalNotification({
       taskId: "goal-1",
@@ -183,10 +183,19 @@ describe("unattended Goal final notification", () => {
       lifecycleEvent: "TERMINAL_COMPLETED",
     }, prisma);
 
-    expect(blocked).toMatchObject({ state: "BLOCKED", runtimeState: "BLOCKED" });
+    expect(blocked).toMatchObject({ state: "BLOCKED", runtimeState: "ENDED" });
     expect(await prisma.capabilityRequest.count()).toBe(0);
+    expect(await prisma.unattendedGoalRuntime.findUniqueOrThrow({ where: { taskId: "goal-1" } }))
+      .toMatchObject({
+        state: "ENDED",
+        endedAt: expect.any(Date),
+        blockedAt: null,
+        blockedReason: null,
+        ownerNotificationState: "BLOCKED",
+        ownerNotificationError: expect.stringContaining("OWNER authorization"),
+      });
     const requestId = blocked!.requestId;
-    await issueOwnerMessageGrant({ taskId: "goal-1", maxUses: 1 }, prisma as never);
+    await issueOwnerMessageGrant({ taskId: "goal-1" }, prisma as never);
     const recovered = await recoverUnattendedGoalFinalNotification("goal-1", prisma, true);
 
     expect(recovered).toMatchObject({ requestId, state: "SUCCEEDED", runtimeState: "ENDED" });
@@ -196,7 +205,7 @@ describe("unattended Goal final notification", () => {
 
   it("never retries SIDE_EFFECT_UNKNOWN automatically or through explicit recovery", async () => {
     const prisma = await database();
-    await issueOwnerMessageGrant({ taskId: "goal-1", maxUses: 1 }, prisma as never);
+    await issueOwnerMessageGrant({ taskId: "goal-1" }, prisma as never);
     mocks.outbound.mockResolvedValueOnce({
       outboundId: "outbound-unknown",
       state: "SENT_UNVERIFIED",
@@ -212,7 +221,7 @@ describe("unattended Goal final notification", () => {
       lifecycleEvent: "TERMINAL_COMPLETED",
     }, prisma);
 
-    expect(result).toMatchObject({ state: "SIDE_EFFECT_UNKNOWN", runtimeState: "BLOCKED" });
+    expect(result).toMatchObject({ state: "SIDE_EFFECT_UNKNOWN", runtimeState: "ENDED" });
     await expect(reconcileUnattendedGoalFinalNotifications(prisma)).resolves.toEqual({ scanned: 0, recovered: 0 });
     await recoverUnattendedGoalFinalNotification("goal-1", prisma, true);
     expect(mocks.outbound).toHaveBeenCalledTimes(1);
@@ -240,7 +249,7 @@ describe("unattended Goal final notification", () => {
   ] as const)("closes %s from task status %s through the same final-notification boundary", async (event, status) => {
     const prisma = await database();
     await prisma.$executeRawUnsafe(`UPDATE "Task" SET "status" = ? WHERE "id" = 'goal-1'`, status);
-    await issueOwnerMessageGrant({ taskId: "goal-1", maxUses: 1 }, prisma as never);
+    await issueOwnerMessageGrant({ taskId: "goal-1" }, prisma as never);
 
     await endUnattendedGoalIfActive(prisma as never, "goal-1", event);
 
@@ -251,7 +260,7 @@ describe("unattended Goal final notification", () => {
 
   it("parks a failed terminal as BLOCKED after notifying the OWNER", async () => {
     const prisma = await database();
-    await issueOwnerMessageGrant({ taskId: "goal-1", maxUses: 1 }, prisma as never);
+    await issueOwnerMessageGrant({ taskId: "goal-1" }, prisma as never);
 
     await endUnattendedGoalIfActive(prisma as never, "goal-1", "TERMINAL_FAILED");
 

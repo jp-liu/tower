@@ -2,8 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient, UnattendedGoalRuntime } from "@prisma/client";
 import { db } from "@/lib/db";
 import { persistWorkbenchCommand } from "@/lib/workbench/event-contract";
-import { setUnattendedSignal } from "@/lib/harness/unattended-signal";
-import { TurnTimeBudgetGuard } from "./budget";
+import { endUnattendedGoal } from "./runtime";
 
 export type GoalPolicyDb = Pick<
   PrismaClient,
@@ -27,15 +26,7 @@ export type GoalProgressFactKind =
   | "CAPABILITY_JOB_FAILED";
 
 export type GoalBudgetReason =
-  | "MAX_DURATION"
-  | "MAX_PROVIDER_TURNS"
-  | "MAX_CHILD_TASKS"
-  | "MAX_CONCURRENT_CHILDREN"
-  | "MAX_CONSECUTIVE_FAILURES"
-  | "MAX_NO_PROGRESS_TURNS"
-  | "MAX_CAPABILITY_JOBS"
-  | "MAX_TOKENS"
-  | "MAX_COST";
+  | "MAX_DURATION";
 
 export interface GoalBudgetSnapshot {
   elapsedMs: number;
@@ -113,46 +104,13 @@ export async function readUnattendedGoalBudget(
 }
 
 function evaluateRuntimeBudget(runtime: UnattendedGoalRuntime, snapshot: GoalBudgetSnapshot): GoalBudgetVerdict {
-  const base = new TurnTimeBudgetGuard({
-    maxTurns: runtime.maxProviderTurns,
-    maxDurationMs: runtime.maxDurationMs,
-  }).check({ turns: snapshot.providerTurns, elapsedMs: snapshot.elapsedMs });
-  if (!base.ok) {
+  if (snapshot.elapsedMs >= runtime.maxDurationMs) {
     return {
       ok: false,
-      reason: base.reason === "max_turns" ? "MAX_PROVIDER_TURNS" : "MAX_DURATION",
-      detail: base.detail,
+      reason: "MAX_DURATION",
+      detail: `Unattended mode reached its ${Math.round(runtime.maxDurationMs / 60_000)} minute duration`,
       snapshot,
     };
-  }
-  if (snapshot.concurrentChildren > runtime.maxConcurrentChildren) {
-    return { ok: false, reason: "MAX_CONCURRENT_CHILDREN", detail: `Concurrent child executions ${snapshot.concurrentChildren} exceed limit ${runtime.maxConcurrentChildren}`, snapshot };
-  }
-  if (snapshot.childTasks > runtime.maxChildTasks) {
-    return { ok: false, reason: "MAX_CHILD_TASKS", detail: `Child task count ${snapshot.childTasks} exceeds limit ${runtime.maxChildTasks}`, snapshot };
-  }
-  if (snapshot.consecutiveFailures >= runtime.maxConsecutiveFailures) {
-    return { ok: false, reason: "MAX_CONSECUTIVE_FAILURES", detail: `Consecutive failure count ${snapshot.consecutiveFailures} reached limit ${runtime.maxConsecutiveFailures}`, snapshot };
-  }
-  if (snapshot.noProgressTurns >= runtime.maxNoProgressTurns) {
-    return { ok: false, reason: "MAX_NO_PROGRESS_TURNS", detail: `Turns without a durable progress fact ${snapshot.noProgressTurns} reached limit ${runtime.maxNoProgressTurns}`, snapshot };
-  }
-  if (snapshot.capabilityJobs > runtime.maxCapabilityJobs) {
-    return { ok: false, reason: "MAX_CAPABILITY_JOBS", detail: `External Job count ${snapshot.capabilityJobs} exceeds limit ${runtime.maxCapabilityJobs}`, snapshot };
-  }
-  if (
-    runtime.maxTokens !== null
-    && snapshot.consumedTokens !== null
-    && snapshot.consumedTokens >= runtime.maxTokens
-  ) {
-    return { ok: false, reason: "MAX_TOKENS", detail: `Observed token usage ${snapshot.consumedTokens} reached limit ${runtime.maxTokens}`, snapshot };
-  }
-  if (
-    runtime.maxCostUsdCents !== null
-    && snapshot.consumedCostUsdCents !== null
-    && snapshot.consumedCostUsdCents >= runtime.maxCostUsdCents
-  ) {
-    return { ok: false, reason: "MAX_COST", detail: `Observed cost ${snapshot.consumedCostUsdCents} cents reached limit ${runtime.maxCostUsdCents} cents`, snapshot };
   }
   return { ok: true, snapshot };
 }
@@ -190,46 +148,6 @@ async function publishBlockedGoalIfNeeded(runtime: UnattendedGoalRuntime, databa
   return database.unattendedGoalRuntime.findUniqueOrThrow({ where: { taskId: runtime.taskId } });
 }
 
-async function blockGoal(
-  taskId: string,
-  verdict: Exclude<GoalBudgetVerdict, { ok: true }>,
-  database: GoalPolicyDb,
-): Promise<UnattendedGoalRuntime> {
-  const blocked = await database.$transaction(async (tx) => {
-    const runtime = await tx.unattendedGoalRuntime.findUnique({ where: { taskId } });
-    if (!runtime || runtime.state !== "ACTIVE") return runtime;
-    await tx.task.update({
-      where: { id: taskId },
-      data: { unattended: false },
-      select: { id: true },
-    });
-    return tx.unattendedGoalRuntime.update({
-      where: { taskId },
-      data: {
-        state: "BLOCKED",
-        lastEventKind: `BUDGET_${verdict.reason}`,
-        blockedAt: new Date(),
-        blockedReason: verdict.detail.slice(0, 2_000),
-        nextWakeAt: null,
-        wakeReason: null,
-        blockGeneration: { increment: 1 },
-        blockEventPublishedAt: null,
-      },
-    });
-  });
-  if (!blocked) throw new Error("Unattended Goal no longer exists");
-  setUnattendedSignal(taskId, false);
-  const published = await publishBlockedGoalIfNeeded(blocked, database);
-  const { ensureUnattendedGoalFinalNotification } = await import("./final-notification");
-  await ensureUnattendedGoalFinalNotification({
-    taskId,
-    kind: "BLOCKED",
-    lifecycleEvent: blocked.lastEventKind,
-    reason: blocked.blockedReason,
-  }, database as never);
-  return database.unattendedGoalRuntime.findUniqueOrThrow({ where: { taskId: published.taskId } });
-}
-
 export async function enforceUnattendedGoalBudget(
   taskId: string,
   database: GoalPolicyDb = db,
@@ -238,13 +156,15 @@ export async function enforceUnattendedGoalBudget(
   const current = await readUnattendedGoalBudget(taskId, database, now);
   if (!current) return null;
   const verdict = evaluateRuntimeBudget(current.runtime, current.snapshot);
-  if (!verdict.ok) await blockGoal(taskId, verdict, database);
+  if (!verdict.ok) {
+    await endUnattendedGoal(database as never, taskId, "DURATION_EXPIRED");
+  }
   return verdict;
 }
 
 export async function assertUnattendedGoalOperationAllowed(
   taskId: string,
-  operation: "CREATE_CHILD" | "START_CHILD" | "CAPABILITY_JOB",
+  operation: "CAPABILITY_JOB",
   database: GoalPolicyDb = db,
 ): Promise<void> {
   const runtime = await readActiveRuntime(taskId, database);
@@ -257,18 +177,11 @@ export async function assertUnattendedGoalOperationAllowed(
   const current = await readUnattendedGoalBudget(taskId, database);
   if (!current) throw new Error("Unattended Goal changed state during budget validation");
   const general = evaluateRuntimeBudget(current.runtime, current.snapshot);
-  let verdict: GoalBudgetVerdict = general;
-  if (general.ok && operation === "CREATE_CHILD" && current.snapshot.childTasks >= current.runtime.maxChildTasks) {
-    verdict = { ok: false, reason: "MAX_CHILD_TASKS", detail: `Child task count ${current.snapshot.childTasks} reached limit ${current.runtime.maxChildTasks}`, snapshot: current.snapshot };
-  } else if (general.ok && operation === "START_CHILD" && current.snapshot.concurrentChildren >= current.runtime.maxConcurrentChildren) {
-    verdict = { ok: false, reason: "MAX_CONCURRENT_CHILDREN", detail: `Concurrent child executions ${current.snapshot.concurrentChildren} reached limit ${current.runtime.maxConcurrentChildren}`, snapshot: current.snapshot };
-  } else if (general.ok && operation === "CAPABILITY_JOB" && current.snapshot.capabilityJobs >= current.runtime.maxCapabilityJobs) {
-    verdict = { ok: false, reason: "MAX_CAPABILITY_JOBS", detail: `External Job count ${current.snapshot.capabilityJobs} reached limit ${current.runtime.maxCapabilityJobs}`, snapshot: current.snapshot };
+  if (!general.ok) {
+    await endUnattendedGoal(database as never, taskId, "DURATION_EXPIRED");
+    throw new Error(`Unattended Goal expired: ${general.detail}`);
   }
-  if (!verdict.ok) {
-    await blockGoal(taskId, verdict, database);
-    throw new Error(`Unattended Goal blocked: ${verdict.detail}`);
-  }
+  void operation;
 }
 
 export async function recordUnattendedGoalProgressFact(
@@ -316,7 +229,7 @@ export async function scheduleUnattendedGoalWakeup(
   now = new Date(),
 ) {
   const verdict = await enforceUnattendedGoalBudget(input.taskId, database, now);
-  if (verdict && !verdict.ok) throw new Error(`Unattended Goal blocked: ${verdict.detail}`);
+  if (verdict && !verdict.ok) throw new Error(`Unattended Goal expired: ${verdict.detail}`);
   const runtime = await readActiveRuntime(input.taskId, database);
   if (!runtime || runtime.state !== "ACTIVE") throw new Error("Unattended Goal is not active");
   const delaySeconds = Math.max(10, Math.min(Math.trunc(input.delaySeconds), 7 * 24 * 60 * 60));
@@ -379,7 +292,7 @@ async function publishDueWakeup(runtime: UnattendedGoalRuntime, database: GoalPo
 export async function reconcileUnattendedGoals(
   now = new Date(),
   database: GoalPolicyDb = db,
-): Promise<{ scanned: number; timersPublished: number; blocked: number; recoveredBlockEvents: number }> {
+): Promise<{ scanned: number; timersPublished: number; expired: number; recoveredBlockEvents: number }> {
   const [active, unpublishedBlocks] = await Promise.all([
     database.unattendedGoalRuntime.findMany({
       where: { state: "ACTIVE" },
@@ -393,12 +306,12 @@ export async function reconcileUnattendedGoals(
     }),
   ]);
   let timersPublished = 0;
-  let blocked = 0;
+  let expired = 0;
   let recoveredBlockEvents = 0;
   for (const runtime of active) {
     const verdict = await enforceUnattendedGoalBudget(runtime.taskId, database, now);
     if (verdict && !verdict.ok) {
-      blocked++;
+      expired++;
       continue;
     }
     if (runtime.nextWakeAt && runtime.nextWakeAt <= now && await publishDueWakeup(runtime, database, now)) {
@@ -409,5 +322,5 @@ export async function reconcileUnattendedGoals(
     await publishBlockedGoalIfNeeded(runtime, database);
     recoveredBlockEvents++;
   }
-  return { scanned: active.length + unpublishedBlocks.length, timersPublished, blocked, recoveredBlockEvents };
+  return { scanned: active.length + unpublishedBlocks.length, timersPublished, expired, recoveredBlockEvents };
 }

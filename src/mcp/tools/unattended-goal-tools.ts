@@ -6,7 +6,6 @@ import {
   readUnattendedGoalMode,
 } from "@/lib/unattended-goal/runtime";
 import {
-  readUnattendedGoalBudget,
   scheduleUnattendedGoalWakeup,
 } from "@/lib/unattended-goal/policy";
 
@@ -37,10 +36,10 @@ export const unattendedGoalTools = {
     description:
       "Enable or disable the optional unattended-goal runtime for this task. Enabling is allowed only when " +
       "an active OpenClaw or Hermes unattended channel exists. This records runtime state; it never grants " +
-      "third-party write permission or upgrades the risk authorization of the current run. Optionally persist " +
-      "one future wakeup; calling on=true again is idempotent and does not reset consumed budget. Child tasks " +
-      "report only to the parent Hub; only overall completion, a real blocker, or risky-action approval contacts " +
-      "the OWNER. The returned runtime includes durable final-notification failure diagnostics.",
+      "third-party write permission or upgrades the risk authorization of the current run. It applies only to " +
+      "this task and defaults to 8 hours. New tasks never inherit or depend on this state. Optionally persist one " +
+      "future wakeup before the deadline. Browser, SaaS, and desktop work is confirmed and executed separately " +
+      "through the Gateway/OpenClaw flow.",
     schema: z.object({
       taskId: z.string().describe("The task entering/leaving unattended goal mode (TOWER_TASK_ID)"),
       on: z.boolean().describe("true = activate, false = end"),
@@ -76,18 +75,19 @@ export const unattendedGoalTools = {
           reason: args.wakeReason!,
         }, db);
       }
-      const [current, budget] = await Promise.all([
-        readUnattendedGoalMode(db, args.taskId),
-        readUnattendedGoalBudget(args.taskId, db),
-      ]);
+      const current = await readUnattendedGoalMode(db, args.taskId);
+      const activatedAt = current.runtime?.activatedAt ?? null;
+      const durationMs = current.runtime?.policy?.maxDurationMs ?? null;
       return {
         ok: true,
         taskId: args.taskId,
         goalMode: current.active,
         runtimeState: current.runtime?.state ?? runtime.state,
         nextWakeAt: current.runtime?.nextWakeAt?.toISOString() ?? null,
-        budget: budget?.snapshot ?? null,
-        limits: current.runtime?.policy ?? null,
+        activatedAt: activatedAt?.toISOString() ?? null,
+        endsAt: activatedAt && durationMs
+          ? new Date(activatedAt.getTime() + durationMs).toISOString()
+          : null,
         authorizationGranted: false,
       };
     },

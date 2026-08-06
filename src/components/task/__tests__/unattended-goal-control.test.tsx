@@ -61,7 +61,10 @@ const inactive = {
 const active = {
   ...inactive,
   active: true,
-  ownerMessageGrant: { authorizationRef: "grant-1", remainingUses: 19 },
+  ownerMessageGrant: {
+    authorizationRef: "grant-1",
+    expiresAt: "2026-08-02T08:00:00.000Z",
+  },
 };
 
 function deferred<T>() {
@@ -104,6 +107,9 @@ describe("UnattendedGoalControl", () => {
     initialLoad.resolve(inactive);
     const trigger = await screen.findByRole("button", { name: "启用无人值守" });
     await user.click(trigger);
+    expect(screen.getByRole("combobox")).toHaveTextContent("8 小时");
+    expect(screen.queryByText(/每项能力上限/)).not.toBeInTheDocument();
+    expect(screen.queryByText("computer.gui.act")).not.toBeInTheDocument();
     const submit = screen.getByRole("button", { name: "确认启用" });
     await user.dblClick(submit);
 
@@ -112,7 +118,7 @@ describe("UnattendedGoalControl", () => {
     expect(submit).toHaveAttribute("aria-busy", "true");
 
     enableCall.resolve({ active: true });
-    await waitFor(() => expect(screen.getByRole("button", { name: "无人值守已授权" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "无人值守中" })).toBeEnabled());
     expect(mocks.toastSuccess).toHaveBeenCalledWith("无人值守已启用");
   });
 
@@ -125,7 +131,7 @@ describe("UnattendedGoalControl", () => {
     const user = userEvent.setup();
 
     renderControl();
-    await user.click(await screen.findByRole("button", { name: "无人值守已授权" }));
+    await user.click(await screen.findByRole("button", { name: "无人值守中" }));
     const submit = screen.getByRole("button", { name: "确认关闭" });
     await user.dblClick(submit);
 
@@ -157,7 +163,7 @@ describe("UnattendedGoalControl", () => {
     expect(mocks.toastError).toHaveBeenCalledWith("OWNER route temporarily unavailable");
 
     await user.click(submit);
-    await waitFor(() => expect(screen.getByRole("button", { name: "无人值守已授权" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "无人值守中" })).toBeEnabled());
     expect(mocks.enable).toHaveBeenCalledTimes(2);
   });
 
@@ -178,7 +184,8 @@ describe("UnattendedGoalControl", () => {
     const failedNotification = {
       ...inactive,
       runtime: {
-        state: "BLOCKED",
+        state: "ENDED",
+        endedAt: "2026-08-02T08:00:00.000Z",
         ownerNotificationRequestId: "request-1",
         ownerNotificationKind: "COMPLETED",
         ownerNotificationState: "BLOCKED",
@@ -193,7 +200,7 @@ describe("UnattendedGoalControl", () => {
     renderControl();
     await user.click(await screen.findByRole("button", { name: "最终通知待恢复" }));
 
-    expect(screen.getByText(/子任务和里程碑保持静默/)).toBeInTheDocument();
+    expect(screen.getByText(/新建任务不会继承/)).toBeInTheDocument();
     expect(screen.getByText("OWNER authorization expired")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "授权并恢复" }));
 

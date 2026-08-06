@@ -82,7 +82,17 @@ task and resumes it when the reply is durably bound.
 
 ## Other external capabilities
 
-Form one `CapabilityRequest v1` before dispatch:
+If the current task does not already have an authorized executable route, do
+not ask the user to pre-authorize a generic GUI capability in Tower. Send one
+OWNER question describing the exact external operation, set `expectReply:
+true`, and park. Ask the OWNER to approve execution by OpenClaw. The Gateway
+handles an affirmative reply by executing that one quoted operation and
+returns the validated result through `reply_to_ask`; continue from that result.
+Do not treat a bare approval injected into the terminal as an
+`authorizationRef`, and do not submit the same operation again from Tower.
+
+When a valid request-specific grant already exists, form one
+`CapabilityRequest v1` before dispatch:
 
 ```yaml
 schemaVersion: 1

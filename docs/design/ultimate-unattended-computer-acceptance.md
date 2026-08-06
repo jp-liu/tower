@@ -1,5 +1,8 @@
 # 终极无人值守电脑验收方案
 
+> 2026-08-05 行为变更：无人值守只按时间生效，默认 8 小时；次数、回合、子任务和 Job 上限不再参与停止或阻断。
+> 下方“当前预验收记录”保留的是旧版本历史证据，涉及 `maxUses` 或多重预算的结论已被本变更取代，需按新版 B/F Gate 重验。
+
 > 状态：验收完成；Gate A-F、飞书 GPT-5.5 手机主入口、全量回归、Claude 独立复核与环境清理均已通过
 > 基线分支：`codex/ultimate-unattended-runtime`
 > 基线提交：`643934d`
@@ -162,7 +165,7 @@ SQLite 查询负责证明 UI 后面的权威状态真实存在。
 前置条件：隔离库不存在 active unattended OWNER route。
 
 1. 用 Computer Use 打开一个任务详情页；
-2. 点击“启用无人值守”，保留默认时长和次数；
+2. 点击“启用无人值守”，保留默认 8 小时；
 3. 确认启用；
 4. 记录错误提示和服务端响应；
 5. 查询数据库。
@@ -172,7 +175,7 @@ SELECT taskId, state, lastEventKind
 FROM UnattendedGoalRuntime
 WHERE taskId = '<taskId>';
 
-SELECT id, capability, usedCount, maxUses, expiresAt, revokedAt
+SELECT id, capability, expiresAt, revokedAt
 FROM CapabilityGrant
 WHERE taskId = '<taskId>';
 ```
@@ -201,11 +204,11 @@ ON CONFLICT(key) DO UPDATE SET
 重启验收服务后，用 Computer Use 再次启用。页面必须显示“无人值守已授权”，并立即执行：
 
 ```sql
-SELECT taskId, state, lastEventKind, maxDurationMs, maxCapabilityJobs
+SELECT taskId, state, lastEventKind, maxDurationMs, activatedAt, endedAt
 FROM UnattendedGoalRuntime
 WHERE taskId = '<taskId>';
 
-SELECT id, capability, risk, targetKind, usedCount, maxUses, expiresAt, revokedAt
+SELECT id, capability, risk, targetKind, expiresAt, revokedAt
 FROM CapabilityGrant
 WHERE taskId = '<taskId>'
 ORDER BY createdAt DESC;
@@ -219,7 +222,7 @@ WHERE id = '<taskId>';
 
 - 恰有一个 `ACTIVE / ACTIVATED` runtime；
 - `human.message.send / R2 / OWNER_HOME_ROUTE` grant 存在、未撤销、未过期；
-- `usedCount = 0`，`maxUses` 和 UI 选择一致；
+- UI 和 capability discovery 只显示截止时间，不显示或要求次数；
 - `Task.unattended = 1` 仅作为兼容影子；
 - 刷新页面后仍显示已授权；
 - 服务心跳继续更新，日志无 `SQL error or missing database`。
@@ -256,8 +259,9 @@ WHERE id = '<taskId>';
 | C06 | `requestId` 重放 | 相同 payload 返回同一快照，不产生第二次副作用 |
 | C07 | `requestId` 变更 payload | 明确拒绝，不覆盖原请求 |
 | C08 | route revision 改变 | 已签 grant 失效；请求在 dispatch 前进入保守状态 |
-| C09 | Goal `ENDED` | discovery 不再暴露旧授权，不能创建新的 R2/R3 请求 |
+| C09 | Goal `ENDED` | discovery 不再暴露旧授权，也不能创建新的 R2/R3 请求；只允许 runtime 已持久化且 request id/kind 完全匹配的最终 OWNER 通知完成投递 |
 | C10 | Goal `BLOCKED` | 不接受新 Job；只保留限域 OWNER 通知路径 |
+| C10a | 完成通知失败 | Goal 保持 `ENDED`；`ownerNotificationState/error` 独立显示并支持恢复，不伪装成任务阻塞 |
 | C11 | `SIDE_EFFECT_UNKNOWN` | 终态；恢复扫描不自动重试、不 fallback 到第二条路径 |
 | C12 | completion callback | 仅 localhost 固定 path + 正确 bearer token 可用；错误 token、非本机 URL 和错误 runId 被拒绝 |
 | C13 | 乱序状态 | 迟到 `RUNNING` 不覆盖 `SUCCEEDED/FAILED/BLOCKED/CANCELLED/EXPIRED/SIDE_EFFECT_UNKNOWN` |
@@ -334,7 +338,7 @@ E01-E10 每项都要同时核对 `CapabilityRequest`、`WorkbenchEvent/Batch`、
 
 使用一个只读 Operator Job 和一个 OWNER 测试消息完成：
 
-1. OWNER 在 Tower UI 签发 2 小时、5 次 grant；
+1. OWNER 在 Tower UI 签发 2 小时的无人值守；
 2. Goal 启动一轮 provider turn；
 3. provider 进入持久 `WAITING`，而不是靠终端静默猜测；
 4. 提交一个只读 Job；
@@ -345,12 +349,13 @@ E01-E10 每项都要同时核对 `CapabilityRequest`、`WorkbenchEvent/Batch`、
 通过条件：每次唤醒都能追溯到持久事件或 timer；没有空转；没有重复通知；Tower 只保存项目摘要和
 `requestId/jobRef` 关联，不复制 OpenClaw 完整状态机。
 
-### F02：预算与阻塞
+### F02：时间截止与任务隔离
 
-分别把 provider turn、无进展、连续失败、duration、child、concurrency 和 capability Job 上限调到最小可测值。
+设置 5 分钟 duration，并在期间创建多个子任务、记录多个 provider turn、失败事实和 capability Job。
 
-通过条件：达到任一硬限制后原子进入 `BLOCKED`，只发布一次 `GOAL_BLOCKED`；没有新 Job；无有效 OWNER
-授权时保持阻塞并等待 OWNER，不从任务文本推断权限。
+通过条件：截止前 runtime 始终为 `ACTIVE`，新任务均可创建且不继承父 runtime；消息授权可重复使用且 discovery
+不返回剩余次数。到期后原子进入 `ENDED / DURATION_EXPIRED`、撤销授权且不发布 `GOAL_BLOCKED`。人工关闭则
+立即进入 `ENDED / DEACTIVATED`。
 
 ### F03：OWNER ask/reply
 

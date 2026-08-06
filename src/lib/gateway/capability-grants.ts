@@ -10,7 +10,7 @@ type GrantDb = GrantStore & Pick<PrismaClient, "$transaction">;
 
 const MIN_GRANT_MINUTES = 5;
 const MAX_GRANT_MINUTES = 7 * 24 * 60;
-const MAX_GRANT_USES = 100;
+const DURATION_ONLY_GRANT = 0;
 
 export interface CapabilityGrantTarget {
   capability: string;
@@ -24,29 +24,23 @@ export interface CapabilityGrantSnapshot {
   capability: string;
   targetKind: string;
   expiresAt: string;
-  maxUses: number;
 }
 
 function normalizeGrantInput(input: {
   taskId: string;
   targets: CapabilityGrantTarget[];
   durationMinutes?: number;
-  maxUses?: number;
 }) {
   const durationMinutes = Math.trunc(input.durationMinutes ?? 8 * 60);
-  const maxUses = Math.trunc(input.maxUses ?? 20);
   if (durationMinutes < MIN_GRANT_MINUTES || durationMinutes > MAX_GRANT_MINUTES) {
     throw new Error(`Grant duration must be ${MIN_GRANT_MINUTES}-${MAX_GRANT_MINUTES} minutes`);
-  }
-  if (maxUses < 1 || maxUses > MAX_GRANT_USES) {
-    throw new Error(`Grant maxUses must be 1-${MAX_GRANT_USES}`);
   }
   if (input.targets.length < 1 || input.targets.length > 64) {
     throw new Error("At least one and at most 64 capability grants are required");
   }
   const unique = new Map(input.targets.map((target) => [target.capability, target]));
   if (unique.size !== input.targets.length) throw new Error("Capability grants must be unique");
-  return { durationMinutes, maxUses };
+  return { durationMinutes };
 }
 
 export async function replaceCapabilityGrantsInTransaction(
@@ -54,11 +48,10 @@ export async function replaceCapabilityGrantsInTransaction(
     taskId: string;
     targets: CapabilityGrantTarget[];
     durationMinutes?: number;
-    maxUses?: number;
   },
   database: GrantStore,
 ): Promise<CapabilityGrantSnapshot[]> {
-  const { durationMinutes, maxUses } = normalizeGrantInput(input);
+  const { durationMinutes } = normalizeGrantInput(input);
   const task = await database.task.findUnique({ where: { id: input.taskId }, select: { id: true } });
   if (!task) throw new Error("task not found");
   const expiresAt = new Date(Date.now() + durationMinutes * 60_000);
@@ -76,7 +69,7 @@ export async function replaceCapabilityGrantsInTransaction(
         targetKind: target.targetKind,
         targetFingerprint: target.targetFingerprint,
         issuer: "TOWER_UI",
-        maxUses,
+        maxUses: DURATION_ONLY_GRANT,
         expiresAt,
       },
     }));
@@ -86,7 +79,6 @@ export async function replaceCapabilityGrantsInTransaction(
     capability: grant.capability,
     targetKind: grant.targetKind,
     expiresAt: grant.expiresAt.toISOString(),
-    maxUses: grant.maxUses,
   }));
 }
 
@@ -94,7 +86,6 @@ export async function issueCapabilityGrants(input: {
   taskId: string;
   targets: CapabilityGrantTarget[];
   durationMinutes?: number;
-  maxUses?: number;
 }, database: GrantDb = db): Promise<CapabilityGrantSnapshot[]> {
   normalizeGrantInput(input);
   return database.$transaction((tx) => replaceCapabilityGrantsInTransaction(input, tx));
@@ -103,13 +94,11 @@ export async function issueCapabilityGrants(input: {
 export async function issueOwnerMessageGrant(input: {
   taskId: string;
   durationMinutes?: number;
-  maxUses?: number;
 }, database: GrantDb = db): Promise<{
   authorizationRef: string;
   capability: typeof OWNER_MESSAGE_CAPABILITY;
   targetKind: "OWNER_HOME_ROUTE";
   expiresAt: string;
-  maxUses: number;
 }> {
   const [task, target] = await Promise.all([
     database.task.findUnique({ where: { id: input.taskId }, select: { id: true } }),
@@ -131,7 +120,6 @@ export async function issueOwnerMessageGrant(input: {
     capability: OWNER_MESSAGE_CAPABILITY,
     targetKind: "OWNER_HOME_ROUTE",
     expiresAt: grant.expiresAt,
-    maxUses: grant.maxUses,
   };
 }
 
@@ -166,7 +154,7 @@ export async function readActiveCapabilityGrant(
   taskId: string,
   target: CapabilityGrantTarget,
   database: GrantDb = db,
-): Promise<{ authorizationRef: string; expiresAt: string; remainingUses: number } | null> {
+): Promise<{ authorizationRef: string; expiresAt: string } | null> {
   if (target.risk === "R0" || target.risk === "R1") return null;
   const grant = await database.capabilityGrant.findFirst({
     where: {
@@ -180,11 +168,10 @@ export async function readActiveCapabilityGrant(
     },
     orderBy: { createdAt: "desc" },
   });
-  if (!grant || grant.usedCount >= grant.maxUses) return null;
+  if (!grant || (grant.maxUses !== DURATION_ONLY_GRANT && grant.usedCount >= grant.maxUses)) return null;
   return {
     authorizationRef: grant.id,
     expiresAt: grant.expiresAt.toISOString(),
-    remainingUses: grant.maxUses - grant.usedCount,
   };
 }
 
@@ -194,7 +181,6 @@ export async function readActiveOwnerMessageGrant(
 ): Promise<{
   authorizationRef: string;
   expiresAt: string;
-  remainingUses: number;
 } | null> {
   const target = await readOwnerHomeTarget();
   if (!target) return null;
@@ -209,10 +195,9 @@ export async function readActiveOwnerMessageGrant(
     },
     orderBy: { createdAt: "desc" },
   });
-  if (!grant || grant.usedCount >= grant.maxUses) return null;
+  if (!grant || (grant.maxUses !== DURATION_ONLY_GRANT && grant.usedCount >= grant.maxUses)) return null;
   return {
     authorizationRef: grant.id,
     expiresAt: grant.expiresAt.toISOString(),
-    remainingUses: grant.maxUses - grant.usedCount,
   };
 }
