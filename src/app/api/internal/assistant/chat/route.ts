@@ -10,7 +10,7 @@ import { streamAssistantTurn } from "@/lib/ai/assistant-stream-executor";
 import { recordCapabilityAttemptService } from "@/lib/ai/capability-config-service";
 import { assistantLegacyAdapter } from "@/lib/ai/assistant-legacy-adapter";
 import { buildAssistantCliPrompt, buildAssistantSystemPrompt } from "@/lib/ai/assistant-prompt";
-import { normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";
+import { DEFAULT_ASSISTANT_HISTORY_TURNS, normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";
 import {
   AssistantSessionError,
   MAX_ASSISTANT_MESSAGE_BYTES,
@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
   let historyTurns: number;
   try {
     historyTurns = normalizeAssistantHistoryTurns(
-      await readConfigValue<number>("assistant.historyTurns", 20),
+      await readConfigValue<number>("assistant.historyTurns", DEFAULT_ASSISTANT_HISTORY_TURNS),
     );
     await assistantSessionService.prepareHistory({
       sessionId,

@@ -17,6 +17,11 @@ import {
   parseAssistantParts,
   trimAssistantHistory,
 } from "../assistant-session-service";
+import {
+  DEFAULT_ASSISTANT_HISTORY_TURNS,
+  MAX_ASSISTANT_HISTORY_TURNS,
+  normalizeAssistantHistoryTurns,
+} from "../assistant-history";
 
 vi.mock("server-only", () => ({}));
 
@@ -43,6 +48,14 @@ afterEach(async () => {
 });
 
 describe("AssistantSessionService", () => {
+  it("defaults to five history turns and caps explicit values at twenty", () => {
+    expect(DEFAULT_ASSISTANT_HISTORY_TURNS).toBe(5);
+    expect(MAX_ASSISTANT_HISTORY_TURNS).toBe(20);
+    expect(normalizeAssistantHistoryTurns(undefined)).toBe(5);
+    expect(normalizeAssistantHistoryTurns(100)).toBe(20);
+    expect(normalizeAssistantHistoryTurns(0)).toBe(1);
+  });
+
   it("accepts an attachment-free first turn before the cache root exists", async () => {
     const missingRoot = join(tmpdir(), `tower-missing-assistant-${Date.now()}-${Math.random()}`);
     await expect(attachmentParts([], missingRoot)).resolves.toEqual([]);
@@ -143,6 +156,39 @@ describe("AssistantSessionService", () => {
       await expect(sessions.beginTurn({ sessionId: session.id, clientTurnId: "same_12345678", userParts: [{ type: "text", text: "again" }] }))
         .rejects.toMatchObject({ code: "turn_already_exists" });
       expect(await prisma.assistantTurn.count()).toBe(1);
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
+  it("clears messages and turns while preserving the session title and binding", async () => {
+    const { prisma, sessions } = await service();
+    try {
+      const session = await sessions.createSession({ versionId: "v1" }, "Keep this session");
+      const turn = await sessions.beginTurn({
+        sessionId: session.id,
+        clientTurnId: "clear_12345678",
+        userParts: [{ type: "text", text: "temporary" }],
+      });
+      await expect(sessions.clearConversation(session.id)).rejects.toMatchObject({ code: "turn_in_progress" });
+      await sessions.finishTurn({
+        sessionId: session.id,
+        turnId: turn.turnId,
+        assistantMessageId: turn.assistantMessageId,
+        parts: [{ type: "text", text: "temporary answer" }],
+        status: "COMPLETE",
+      });
+
+      await sessions.clearConversation(session.id);
+
+      expect(await prisma.assistantTurn.count({ where: { sessionId: session.id } })).toBe(0);
+      expect(await prisma.assistantMessage.count({ where: { sessionId: session.id } })).toBe(0);
+      expect(await sessions.getSessionView(session.id)).toMatchObject({
+        title: "Keep this session",
+        workspaceId: "w1",
+        projectId: "p1",
+        versionId: "v1",
+      });
     } finally {
       await prisma.$disconnect();
     }
@@ -401,6 +447,36 @@ describe("AssistantSessionService", () => {
       expect(await prisma.assistantSession.count()).toBe(1);
       const messages = await sessions.getMessages(first.id);
       expect(trimAssistantHistory(messages, 1).map((message) => message.turnId)).toEqual([messages[0]!.turnId, messages[1]!.turnId]);
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
+  it("removes only imported legacy sessions containing the Tower CLI carrier envelope", async () => {
+    const { prisma, sessions } = await service();
+    try {
+      const carrier = await sessions.importLegacy({
+        legacyId: "77777777-7777-4777-8777-777777777777",
+        title: "Carrier",
+        createdAt: new Date("2025-01-01"),
+        updatedAt: new Date("2025-01-02"),
+        messages: [{
+          role: "USER",
+          parts: [{ type: "text", text: "Conversation history (Tower is the source of truth):\nUSER: old\n\nCURRENT USER: new" }],
+          turnKey: "one",
+        }],
+      });
+      const real = await sessions.importLegacy({
+        legacyId: "88888888-8888-4888-8888-888888888888",
+        title: "Real",
+        createdAt: new Date("2025-01-01"),
+        updatedAt: new Date("2025-01-02"),
+        messages: [{ role: "USER", parts: [{ type: "text", text: "Explain CURRENT USER fields" }], turnKey: "one" }],
+      });
+
+      await expect(sessions.removeImportedCarrierSessions()).resolves.toBe(1);
+      expect(await prisma.assistantSession.findUnique({ where: { id: carrier.id } })).toBeNull();
+      expect(await prisma.assistantSession.findUnique({ where: { id: real.id } })).not.toBeNull();
     } finally {
       await prisma.$disconnect();
     }

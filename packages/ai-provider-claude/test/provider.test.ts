@@ -153,6 +153,7 @@ describe("Claude provider", () => {
       args: expect.arrayContaining([
         "--output-format", "stream-json", "--tools", "mcp__tower-dev__list_tasks,Read",
         "--max-turns", "4", "--effort", "low", "--input-format", "stream-json",
+        "--no-session-persistence",
         "--allowedTools", "mcp__tower-dev__list_tasks,Read",
         "--strict-mcp-config",
       ]),

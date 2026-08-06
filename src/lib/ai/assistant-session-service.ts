@@ -8,6 +8,7 @@ import type { ApiMessage, ApiMessageContentPart } from "@tower-org/ai-runtime";
 import type { PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import { DEFAULT_ASSISTANT_HISTORY_TURNS, normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";
+import { isAssistantCarrierPrompt } from "@/lib/ai/assistant-carrier-session";
 import { ATTACHMENT_SUBPATH_RE, MAX_ATTACHMENTS, classifyAttachmentSubPath } from "@/lib/attachment-utils";
 import { getAssistantCacheRoot } from "@/lib/file-utils";
 import { detectImageMime, isLikelyTextFile, TEXT_EXT_TO_MIME } from "@/lib/mime-magic";
@@ -168,8 +169,10 @@ interface ActiveTurn {
 
 const globalAssistant = globalThis as typeof globalThis & {
   __towerAssistantTurns?: Map<string, ActiveTurn>;
+  __towerAssistantClearing?: Set<string>;
 };
 const activeTurns = globalAssistant.__towerAssistantTurns ??= new Map<string, ActiveTurn>();
+const clearingSessions = globalAssistant.__towerAssistantClearing ??= new Set<string>();
 
 export function abortAssistantTurn(sessionId: string): void {
   activeTurns.get(sessionId)?.controller.abort();
@@ -328,6 +331,33 @@ export class AssistantSessionService {
     return new Set(rows.flatMap((row) => row.legacyId ? [row.legacyId] : []));
   }
 
+  async removeImportedCarrierSessions(): Promise<number> {
+    const sessions = await this.client.assistantSession.findMany({
+      where: { legacySource: "claude-agent-sdk", origin: "UI" },
+      select: {
+        id: true,
+        messages: {
+          where: { role: "USER" }, orderBy: { sequence: "asc" }, take: 1,
+          select: { partsJson: true },
+        },
+      },
+    });
+    const carrierIds = sessions.flatMap((session) => {
+      try {
+        const firstText = session.messages[0]
+          ? parseAssistantParts(session.messages[0].partsJson)
+            .find((part): part is Extract<AssistantPart, { type: "text" }> => part.type === "text")?.text
+          : undefined;
+        return isAssistantCarrierPrompt(firstText) ? [session.id] : [];
+      } catch {
+        return [];
+      }
+    });
+    if (!carrierIds.length) return 0;
+    const deleted = await this.client.assistantSession.deleteMany({ where: { id: { in: carrierIds } } });
+    return deleted.count;
+  }
+
   async findImportedLegacy(legacyId: string) {
     legacySessionIdSchema.parse(legacyId);
     return this.client.assistantSession.findUnique({
@@ -351,6 +381,28 @@ export class AssistantSessionService {
     towerSessionIdSchema.parse(sessionId);
     abortAssistantTurn(sessionId);
     await this.client.assistantSession.delete({ where: { id: sessionId } });
+  }
+
+  async clearConversation(sessionId: string): Promise<void> {
+    towerSessionIdSchema.parse(sessionId);
+    if (activeTurns.has(sessionId) || clearingSessions.has(sessionId)) {
+      throw new AssistantSessionError("turn_in_progress", "Wait for the active Assistant turn to finish before clearing the conversation");
+    }
+    clearingSessions.add(sessionId);
+    try {
+      await this.reconcileInterrupted();
+      await this.getSession(sessionId);
+      await this.client.$transaction(async (transaction) => {
+        const streaming = await transaction.assistantTurn.count({ where: { sessionId, status: "STREAMING" } });
+        if (streaming) {
+          throw new AssistantSessionError("turn_in_progress", "Wait for the active Assistant turn to finish before clearing the conversation");
+        }
+        await transaction.assistantMessage.deleteMany({ where: { sessionId } });
+        await transaction.assistantTurn.deleteMany({ where: { sessionId } });
+      });
+    } finally {
+      clearingSessions.delete(sessionId);
+    }
   }
 
   async getMessages(sessionId: string): Promise<StoredMessage[]> {
@@ -446,6 +498,9 @@ export class AssistantSessionService {
   }): Promise<{ turnId: string; userMessageId: string; assistantMessageId: string; controller: AbortController }> {
     towerSessionIdSchema.parse(options.sessionId);
     clientTurnIdSchema.parse(options.clientTurnId);
+    if (clearingSessions.has(options.sessionId)) {
+      throw new AssistantSessionError("session_clearing", "The Assistant conversation is being cleared; retry this message");
+    }
     const userParts = normalizeAssistantParts(options.userParts);
     const incomingBytes = Buffer.byteLength(JSON.stringify(userParts)) + MAX_ASSISTANT_MESSAGE_BYTES;
     await this.prepareHistory({
@@ -453,6 +508,9 @@ export class AssistantSessionService {
       historyTurns: options.historyTurns,
       reserveBytes: incomingBytes,
     });
+    if (clearingSessions.has(options.sessionId)) {
+      throw new AssistantSessionError("session_clearing", "The Assistant conversation is being cleared; retry this message");
+    }
     const current = activeTurns.get(options.sessionId);
     if (current) {
       current.controller.abort();

@@ -23,6 +23,7 @@ import {
 } from "@/lib/assistant-sessions";
 import { getWorkspacesWithProjects } from "@/actions/workspace-actions";
 import { AssistantRequestState, settleAssistantMessages } from "@/lib/assistant-request-state";
+import { useI18n } from "@/lib/i18n";
 
 /** Cascading workspace → project options for the binding dropdowns. */
 export interface WorkspaceTreeItem {
@@ -59,6 +60,7 @@ interface AssistantContextValue {
   sessions: AssistantSession[];
   activeSessionId: string | null;
   createNewSession: () => void;
+  clearConversation: () => void;
   switchSession: (sessionId: string) => void;
   removeSession: (sessionId: string) => void;
   renameSession: (sessionId: string, title: string) => void;
@@ -96,6 +98,7 @@ interface SSEEvent {
 // ---------------------------------------------------------------------------
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [inputFocusSignal, setInputFocusSignal] = useState(0);
@@ -124,7 +127,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   // being re-created on every change. `workspaceTree` feeds the cascading menus.
   const [binding, setBindingState] = useState<SessionBinding>({});
   const bindingRef = useRef<SessionBinding>({});
-  useEffect(() => { bindingRef.current = binding; }, [binding]);
+  const applyBinding = useCallback((next: SessionBinding) => {
+    bindingRef.current = next;
+    setBindingState(next);
+  }, []);
   const [workspaceTree, setWorkspaceTree] = useState<WorkspaceTreeItem[]>([]);
 
   useEffect(() => {
@@ -134,7 +140,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setSessionBinding = useCallback((next: SessionBinding) => {
-    setBindingState(next);
+    applyBinding(next);
     const sid = sessionIdRef.current;
     if (sid) {
       void fetch(`/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sid)}`, {
@@ -158,7 +164,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         }
       }).catch(() => toast.error("Failed to save Assistant scope"));
     }
-  }, []);
+  }, [applyBinding]);
 
   const flushChat = useCallback(() => {
     setChatMessages([...msgsRef.current]);
@@ -259,7 +265,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         setActiveSessionId(resolvedSessionId);
       }
       if (data.session) {
-        setBindingState({
+        applyBinding({
           ...(data.session.workspaceId ? { workspaceId: data.session.workspaceId } : {}),
           ...(data.session.workspaceName ? { workspaceName: data.session.workspaceName } : {}),
           ...(data.session.projectId ? { projectId: data.session.projectId } : {}),
@@ -284,7 +290,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         setIsLoadingHistory(false);
       }
     }
-  }, [refreshSessions]);
+  }, [applyBinding, refreshSessions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -301,7 +307,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       sessionIdRef.current = chosen;
       setActiveSessionId(chosen);
       const selected = merged.find((session) => session.id === chosen);
-      setBindingState(selected ? {
+      applyBinding(selected ? {
         ...(selected.workspaceId ? { workspaceId: selected.workspaceId } : {}),
         ...(selected.workspaceName ? { workspaceName: selected.workspaceName } : {}),
         ...(selected.projectId ? { projectId: selected.projectId } : {}),
@@ -314,7 +320,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshSessions, loadSessionHistory]);
+  }, [applyBinding, refreshSessions, loadSessionHistory]);
 
   const createNewSession = useCallback(() => {
     cancelHistoryLoad();
@@ -323,10 +329,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setActiveSessionIdState(null);
     setActiveSessionId(null);
     // A fresh session starts with no scope — the user picks one if they want.
-    setBindingState({});
+    applyBinding({});
     msgsRef.current = [];
     setChatMessages([]);
-  }, [cancelHistoryLoad, settleCurrentChat]);
+  }, [applyBinding, cancelHistoryLoad, settleCurrentChat]);
 
   const switchSession = useCallback((sessionId: string) => {
     cancelHistoryLoad();
@@ -335,7 +341,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setActiveSessionIdState(sessionId);
     setActiveSessionId(sessionId);
     const selected = sessions.find((session) => session.id === sessionId);
-    setBindingState(selected ? {
+    applyBinding(selected ? {
       ...(selected.workspaceId ? { workspaceId: selected.workspaceId } : {}),
       ...(selected.workspaceName ? { workspaceName: selected.workspaceName } : {}),
       ...(selected.projectId ? { projectId: selected.projectId } : {}),
@@ -346,7 +352,34 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     msgsRef.current = [];
     setChatMessages([]);
     void loadSessionHistory(sessionId);
-  }, [cancelHistoryLoad, loadSessionHistory, sessions, settleCurrentChat]);
+  }, [applyBinding, cancelHistoryLoad, loadSessionHistory, sessions, settleCurrentChat]);
+
+  const clearConversation = useCallback(() => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId || chatStatus === "connecting" || chatStatus === "streaming") return;
+    cancelHistoryLoad();
+    void fetch(`/api/internal/assistant/sessions?sessionId=${encodeURIComponent(sessionId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clear" }),
+    }).then(async (response) => {
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(payload.error ?? "conversation_clear_failed");
+      }
+      if (sessionIdRef.current === sessionId) {
+        requestStateRef.current!.cancelStream();
+        msgsRef.current = [];
+        setChatMessages([]);
+        setChatStatus("idle");
+      }
+      void refreshSessions();
+    }).catch((error: Error) => {
+      toast.error(error.message === "turn_in_progress"
+        ? t("assistant.clearConversationBusy")
+        : t("assistant.clearConversationFailed"));
+    });
+  }, [cancelHistoryLoad, chatStatus, refreshSessions, t]);
 
   const removeSession = useCallback((sessionId: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
@@ -730,7 +763,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         toggleAssistant, closeAssistant, inputFocusSignal,
         chatMessages, chatStatus, isChatThinking, isLoadingHistory, sendChatMessage, cancelChat,
         binding, setSessionBinding, workspaceTree,
-        sessions, activeSessionId, createNewSession, switchSession, removeSession, renameSession, refreshSessions,
+        sessions, activeSessionId, createNewSession, clearConversation, switchSession, removeSession, renameSession, refreshSessions,
       }}
     >
       {children}

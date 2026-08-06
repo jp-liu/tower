@@ -231,6 +231,7 @@ export class ClaudeCliAdapter implements CliAdapter {
       "--output-format", "stream-json",
       "--verbose",
       "--include-partial-messages",
+      "--no-session-persistence",
       "--permission-mode", "bypassPermissions",
       "--tools", allowed.join(","),
     ];

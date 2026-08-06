@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireLocalhost } from "@/lib/internal-api-guard";
 import { readConfigValue } from "@/lib/config-reader";
-import { normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";
+import { DEFAULT_ASSISTANT_HISTORY_TURNS, normalizeAssistantHistoryTurns } from "@/lib/ai/assistant-history";
 import {
   AssistantSessionError,
   assistantMessagesToClient,
@@ -26,6 +26,7 @@ const patchSchema = z.object({
   versionId: z.string().min(1).max(128).nullable().optional(),
   versionName: z.string().max(256).nullable().optional(),
 }).strict();
+const actionSchema = z.object({ action: z.literal("clear") }).strict();
 
 function safeError(code: string, status = 500) {
   return NextResponse.json({ error: code }, { status });
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
     const originParam = request.nextUrl.searchParams.get("origin")?.toLowerCase();
     const origin = originParam === "gateway" ? "GATEWAY" : originParam === "all" ? "ALL" : "UI";
     try {
+      if (origin !== "GATEWAY") await assistantSessionService.removeImportedCarrierSessions();
       const databaseSessions = await assistantSessionService.listSessions({ origin });
       // Legacy disk sessions are always UI-origin — skip them when explicitly asking for gateway.
       if (origin === "GATEWAY") {
@@ -85,7 +87,7 @@ export async function GET(request: NextRequest) {
   try {
     const sessionId = await resolveTowerSessionId(requestedId);
     const historyTurns = normalizeAssistantHistoryTurns(
-      await readConfigValue<number>("assistant.historyTurns", 20),
+      await readConfigValue<number>("assistant.historyTurns", DEFAULT_ASSISTANT_HISTORY_TURNS),
     );
     await assistantSessionService.prepareHistory({ sessionId, historyTurns });
     const [session, messages] = await Promise.all([
@@ -95,6 +97,29 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ sessionId, session, messages: assistantMessagesToClient(messages) });
   } catch {
     return safeError(legacySessionIdSchema.safeParse(requestedId).success ? "legacy_import_failed" : "session_unavailable");
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const blocked = requireLocalhost(request);
+  if (blocked) return blocked;
+  const requestedId = request.nextUrl.searchParams.get("sessionId");
+  if (!requestedId || !assistantSessionIdSchema.safeParse(requestedId).success) return safeError("invalid_session_id", 400);
+  try {
+    actionSchema.parse(await request.json());
+  } catch {
+    return safeError("invalid_request", 400);
+  }
+
+  try {
+    const sessionId = await resolveTowerSessionId(requestedId);
+    await assistantSessionService.clearConversation(sessionId);
+    return NextResponse.json({ ok: true, sessionId });
+  } catch (error) {
+    if (error instanceof AssistantSessionError) {
+      return safeError(error.code, error.code === "turn_in_progress" ? 409 : 400);
+    }
+    return safeError("conversation_clear_failed");
   }
 }
 

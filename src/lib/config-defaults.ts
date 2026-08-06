@@ -166,7 +166,7 @@ export const CONFIG_DEFAULTS: Record<string, ConfigEntry> = {
     label: "Assistant Max Turns",
   },
   "assistant.historyTurns": {
-    defaultValue: 20,
+    defaultValue: 5,
     type: "number",
     label: "Assistant History Turns",
   },

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
-import { Bot, ChevronDown, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Bot, ChevronDown, MessageSquareX, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -54,7 +54,10 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
     closeAssistant,
     sessions,
     activeSessionId,
+    chatStatus,
+    isLoadingHistory,
     createNewSession,
+    clearConversation,
     switchSession,
     removeSession,
     renameSession,
@@ -163,6 +166,18 @@ export function AssistantPanel({ mode }: AssistantPanelProps) {
             </DropdownMenu>
 
             {/* New session button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground"
+              onClick={clearConversation}
+              disabled={!activeSessionId || isLoadingHistory || chatStatus === "connecting" || chatStatus === "streaming"}
+              aria-label={t("assistant.clearConversation")}
+              title={t("assistant.clearConversation")}
+            >
+              <MessageSquareX className="h-4 w-4" />
+            </Button>
+
             <Button
               variant="ghost"
               size="icon"

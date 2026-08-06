@@ -134,7 +134,14 @@ describe("CapabilitySlotsSection", () => {
     await user.clear(input);
     await user.type(input, "42");
     await user.tab();
-    expect(actionMocks.setConfigValue).toHaveBeenCalledWith("assistant.historyTurns", 42);
+    expect(actionMocks.setConfigValue).toHaveBeenCalledWith("assistant.historyTurns", 20);
     expect(actionMocks.setConfigValue).not.toHaveBeenCalledWith("assistant.maxTurns", expect.anything());
+  });
+
+  it("normalizes an existing Assistant history value to the new maximum", async () => {
+    actionMocks.getConfigValue.mockImplementation(async (key: string) =>
+      key === "assistant.effort" ? "low" : 100);
+    renderSection();
+    expect(await screen.findByLabelText(/保留对话轮次|Conversation history/)).toHaveValue(20);
   });
 });

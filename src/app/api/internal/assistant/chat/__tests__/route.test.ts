@@ -234,7 +234,7 @@ describe("Assistant chat SSE route", () => {
     expect((mocks.requests[0].messages as Array<{ role: string }>).some((message) => message.role === "system")).toBe(false);
     expect(mocks.prepareHistory).toHaveBeenCalledWith({
       sessionId: "as_11111111-1111-1111-1111-111111111111",
-      historyTurns: 20,
+      historyTurns: 5,
       reserveBytes: Buffer.byteLength(JSON.stringify([
         { type: "text", text: "hello" },
         ...mocks.attachmentParts,
@@ -258,7 +258,7 @@ describe("Assistant chat SSE route", () => {
     expect(mocks.turnController?.signal.aborted).toBe(true);
     expect(mocks.finishTurn).toHaveBeenCalledWith(expect.objectContaining({
       status: "FAILED",
-      historyTurns: 20,
+      historyTurns: 5,
       parts: [
         { type: "text", text: safeText },
         expect.objectContaining({ type: "error", code: "output_limit" }),

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { up } from "../../../../scripts/migrations/0013-assistant-sessions";
+import { up as addOrigin } from "../../../../scripts/migrations/0035-assistant-session-origin";
 import type { SDKSessionMessage } from "@/lib/assistant-message-converter";
 import { AssistantLegacyAdapter, type LegacyAssistantStore } from "../assistant-legacy-adapter";
 import { AssistantSessionService } from "../assistant-session-service";
@@ -19,7 +20,9 @@ async function fixture() {
   await prisma.$executeRawUnsafe(`CREATE TABLE "Workspace" ("id" TEXT NOT NULL PRIMARY KEY)`);
   await prisma.$executeRawUnsafe(`CREATE TABLE "Project" ("id" TEXT NOT NULL PRIMARY KEY)`);
   await prisma.$executeRawUnsafe(`CREATE TABLE "Version" ("id" TEXT NOT NULL PRIMARY KEY)`);
+  await prisma.$executeRawUnsafe(`CREATE TABLE "GatewaySession" ("id" TEXT NOT NULL PRIMARY KEY, "assistantSessionId" TEXT)`);
   await up(prisma);
+  await addOrigin(prisma);
   return { dir, prisma, sessions: new AssistantSessionService(prisma) };
 }
 
@@ -29,6 +32,53 @@ afterEach(async () => {
 });
 
 describe("AssistantLegacyAdapter", () => {
+  it("removes Tower CLI carrier sessions without hiding ordinary user sessions", async () => {
+    const { dir, prisma } = await fixture();
+    const carrierId = "44444444-4444-4444-8444-444444444444";
+    const userId = "55555555-5555-4555-8555-555555555555";
+    const deleteSession = vi.fn(async () => undefined);
+    const store: LegacyAssistantStore = {
+      listSessions: async () => [
+        { sessionId: carrierId, firstPrompt: "CURRENT USER: list my tasks", lastModified: 2 },
+        { sessionId: userId, firstPrompt: "Discuss the CURRENT USER field", lastModified: 1 },
+      ],
+      getSessionMessages: async () => [],
+      renameSession: async () => undefined,
+      deleteSession,
+    };
+    try {
+      const listed = await new AssistantLegacyAdapter(async () => store, dir).list();
+      expect(listed.map((session) => session.sessionId)).toEqual([userId]);
+      expect(deleteSession).toHaveBeenCalledWith(carrierId, { dir });
+      expect(deleteSession).not.toHaveBeenCalledWith(userId, expect.anything());
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
+  it("blocks direct import of a Tower CLI carrier session", async () => {
+    const { dir, prisma, sessions } = await fixture();
+    const carrierId = "66666666-6666-4666-8666-666666666666";
+    const deleteSession = vi.fn(async () => undefined);
+    const store: LegacyAssistantStore = {
+      listSessions: async () => [{ sessionId: carrierId, firstPrompt: "CURRENT USER: hidden", lastModified: 1 }],
+      getSessionMessages: async () => [{
+        type: "user", uuid: "u1", session_id: carrierId, parent_tool_use_id: null,
+        message: { content: "CURRENT USER: hidden" },
+      }],
+      renameSession: async () => undefined,
+      deleteSession,
+    };
+    try {
+      await expect(new AssistantLegacyAdapter(async () => store, dir).import(carrierId, sessions))
+        .rejects.toThrow("carrier sessions cannot be imported");
+      expect(deleteSession).toHaveBeenCalledWith(carrierId, { dir });
+      expect(await prisma.assistantSession.count()).toBe(0);
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
   it("merges metadata and imports messages exactly once without deleting the source", async () => {
     const { dir, prisma, sessions } = await fixture();
     const legacyId = "22222222-2222-4222-8222-222222222222";

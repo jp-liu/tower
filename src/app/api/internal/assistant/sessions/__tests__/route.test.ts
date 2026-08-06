@@ -10,12 +10,14 @@ const NEW_LEGACY_ID = "33333333-3333-4333-8333-333333333333";
 const mocks = vi.hoisted(() => ({
   listSessions: vi.fn(),
   listImportedLegacyIds: vi.fn(),
+  removeImportedCarrierSessions: vi.fn(),
   getSessionView: vi.fn(),
   getMessages: vi.fn(),
   prepareHistory: vi.fn(),
   getSession: vi.fn(),
   updateSession: vi.fn(),
   deleteSession: vi.fn(),
+  clearConversation: vi.fn(),
   findImportedLegacy: vi.fn(),
   legacyList: vi.fn(),
   legacyImport: vi.fn(),
@@ -37,12 +39,14 @@ vi.mock("@/lib/ai/assistant-session-service", () => ({
   assistantSessionService: {
     listSessions: mocks.listSessions,
     listImportedLegacyIds: mocks.listImportedLegacyIds,
+    removeImportedCarrierSessions: mocks.removeImportedCarrierSessions,
     getSessionView: mocks.getSessionView,
     getMessages: mocks.getMessages,
     prepareHistory: mocks.prepareHistory,
     getSession: mocks.getSession,
     updateSession: mocks.updateSession,
     deleteSession: mocks.deleteSession,
+    clearConversation: mocks.clearConversation,
     findImportedLegacy: mocks.findImportedLegacy,
   },
 }));
@@ -55,7 +59,7 @@ vi.mock("@/lib/ai/assistant-legacy-adapter", () => ({
   },
 }));
 
-import { DELETE, GET, PATCH } from "../route";
+import { DELETE, GET, PATCH, POST } from "../route";
 
 function request(query = "", init?: ConstructorParameters<typeof NextRequest>[1]) {
   return new NextRequest(`http://localhost/api/internal/assistant/sessions${query}`, init);
@@ -71,6 +75,7 @@ beforeEach(() => {
     lastMessageAt: "2026-01-03T00:00:00.000Z",
   }]);
   mocks.listImportedLegacyIds.mockResolvedValue(new Set([IMPORTED_LEGACY_ID]));
+  mocks.removeImportedCarrierSessions.mockResolvedValue(0);
   mocks.legacyList.mockResolvedValue([
     { sessionId: IMPORTED_LEGACY_ID, title: "Already imported", lastModified: Date.parse("2026-01-02") },
     { sessionId: NEW_LEGACY_ID, title: "Legacy", lastModified: Date.parse("2026-01-04") },
@@ -85,6 +90,7 @@ beforeEach(() => {
   mocks.legacyRename.mockResolvedValue(undefined);
   mocks.legacyDelete.mockResolvedValue(undefined);
   mocks.deleteSession.mockResolvedValue(undefined);
+  mocks.clearConversation.mockResolvedValue(undefined);
 });
 
 describe("Assistant sessions route", () => {
@@ -92,12 +98,14 @@ describe("Assistant sessions route", () => {
     const payload = await (await GET(request())).json();
     expect(payload.sessions.map((session: { id: string }) => session.id)).toEqual([NEW_LEGACY_ID, TOWER_ID]);
     expect(mocks.listSessions).toHaveBeenCalledWith({ origin: "UI" });
+    expect(mocks.removeImportedCarrierSessions).toHaveBeenCalledOnce();
   });
 
   it("returns gateway-origin sessions without merging legacy disk sessions", async () => {
     const payload = await (await GET(request("?origin=gateway"))).json();
     expect(mocks.listSessions).toHaveBeenCalledWith({ origin: "GATEWAY" });
     expect(mocks.legacyList).not.toHaveBeenCalled();
+    expect(mocks.removeImportedCarrierSessions).not.toHaveBeenCalled();
     expect(payload.sessions.map((session: { id: string }) => session.id)).toEqual([TOWER_ID]);
   });
 
@@ -153,5 +161,28 @@ describe("Assistant sessions route", () => {
     await expect(response.json()).resolves.toEqual({ ok: true });
     expect(mocks.legacyDelete.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.deleteSession.mock.invocationCallOrder[0]!);
+  });
+
+  it("clears only the resolved session conversation", async () => {
+    const response = await POST(request(`?sessionId=${TOWER_ID}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clear" }),
+    }));
+    await expect(response.json()).resolves.toEqual({ ok: true, sessionId: TOWER_ID });
+    expect(mocks.clearConversation).toHaveBeenCalledWith(TOWER_ID);
+    expect(mocks.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it("returns a conflict while an Assistant turn is active", async () => {
+    const SessionError = (await import("@/lib/ai/assistant-session-service")).AssistantSessionError;
+    mocks.clearConversation.mockRejectedValueOnce(new SessionError("turn_in_progress", "busy"));
+    const response = await POST(request(`?sessionId=${TOWER_ID}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clear" }),
+    }));
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: "turn_in_progress" });
   });
 });
