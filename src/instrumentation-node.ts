@@ -285,29 +285,6 @@ async function initializeNodeRuntime() {
     setInterval(() => void runSweep(), 6 * 60 * 60 * 1000);
   }
 
-  const gBackup = globalThis as typeof globalThis & {
-    __scheduledBackupStarted?: boolean;
-    __scheduledBackupRunning?: boolean;
-  };
-  if (!gBackup.__scheduledBackupStarted) {
-    gBackup.__scheduledBackupStarted = true;
-    const runBackup = async () => {
-      if (gBackup.__scheduledBackupRunning) return;
-      gBackup.__scheduledBackupRunning = true;
-      try {
-        const { createScheduledBackupIfDue } = await import("@/lib/scheduled-backup");
-        const result = await createScheduledBackupIfDue();
-        if (result.created) console.info(`[backup] Scheduled backup created: ${result.filename}`);
-      } catch (error) {
-        console.error("[backup] Scheduled backup failed:", error);
-      } finally {
-        gBackup.__scheduledBackupRunning = false;
-      }
-    };
-    setTimeout(() => void runBackup(), 30_000);
-    setInterval(() => void runBackup(), 6 * 60 * 60 * 1_000);
-  }
-
   void (async () => {
     try {
       const { reconcileAllProviderIntegrations } = await import("@/lib/ai/provider-reconciliation");
