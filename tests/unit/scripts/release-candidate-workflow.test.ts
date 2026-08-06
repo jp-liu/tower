@@ -14,6 +14,7 @@ interface WorkflowStep {
 
 interface WorkflowJob {
   needs?: string | string[];
+  outputs?: Record<string, string>;
   if?: string;
   environment?: string | Record<string, unknown>;
   permissions?: Record<string, string>;
@@ -63,6 +64,18 @@ describe("Release Candidate workflow", () => {
     expect(candidate.jobs).toHaveProperty("prepare");
     expect(candidate.jobs).toHaveProperty("portable");
     expect(candidate.jobs).toHaveProperty("assemble");
+  });
+
+  it("automatically starts production only for stable semantic-version tags", () => {
+    expect(release.on?.push).toEqual({ tags: ["v[0-9]+.[0-9]+.[0-9]+"] });
+    expect(release.on).toHaveProperty("workflow_dispatch");
+    expect(release.jobs.prepare.outputs).toEqual({
+      tag: "${{ steps.identity.outputs.tag }}",
+      confirmation: "${{ steps.identity.outputs.confirmation }}",
+    });
+    const identity = release.jobs.prepare.steps.find((step) => step.id === "identity");
+    expect(identity?.run).toContain('if [ "$GITHUB_EVENT_NAME" = "push" ]');
+    expect(identity?.run).toContain('tag="$GITHUB_REF_NAME"');
   });
 
   it("resolves the selected pushed ref once and pins every build job to its commit", () => {
@@ -124,7 +137,7 @@ describe("Release Candidate workflow", () => {
     expect(prepareUploads).toHaveLength(1);
     expect(prepareUploads[0].with?.name).toBe("tower-npm-pack-${{ steps.identity.outputs.short-sha }}");
     expect(stepsUsing(release.jobs.prepare, "actions/upload-artifact@v4")[0].with?.name)
-      .toBe("tower-npm-pack-${{ inputs.tag }}");
+      .toBe("tower-npm-pack-${{ steps.identity.outputs.tag }}");
     for (const workflowJob of [candidate.jobs.portable, candidate.jobs.assemble]) {
       const npmDownloads = stepsUsing(workflowJob, "actions/download-artifact@v4")
         .filter((step) => step.with?.name === "tower-npm-pack-${{ needs.prepare.outputs.short-sha }}");
@@ -132,7 +145,7 @@ describe("Release Candidate workflow", () => {
     }
     for (const workflowJob of [release.jobs.portable, release.jobs.assemble, release.jobs.publish]) {
       const npmDownloads = stepsUsing(workflowJob, "actions/download-artifact@v4")
-        .filter((step) => step.with?.name === "tower-npm-pack-${{ inputs.tag }}");
+        .filter((step) => step.with?.name === "tower-npm-pack-${{ needs.prepare.outputs.tag }}");
       expect(npmDownloads).toHaveLength(1);
     }
     expect(portableUploads).toHaveLength(1);
@@ -188,6 +201,14 @@ describe("Release Candidate workflow", () => {
     expect(locate?.run).toContain('${#tarballs[@]}');
     expect(publish?.run).toContain('${{ steps.npm-tarball.outputs.path }}');
     expect(publish?.run).not.toContain("basename");
+  });
+
+  it("does not rebuild after production approval", () => {
+    expect(release.jobs.publish.needs).toEqual(["prepare", "assemble"]);
+    expect(release.jobs.publish.environment).toBe("npm-production");
+    const publishText = collectStrings(release.jobs.publish).join("\n");
+    expect(publishText).not.toMatch(/pnpm install|playwright install|release:prepare/);
+    expect(publishText).toContain("scripts/release.sh --publish --tarball");
   });
 
   it("contains no publication authority, environment, secret, or command", () => {

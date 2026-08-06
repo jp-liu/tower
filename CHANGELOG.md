@@ -5,6 +5,17 @@ section from this file and attach the complete changelog as an immutable asset.
 
 The format follows Keep a Changelog and versions follow Semantic Versioning.
 
+## [Unreleased]
+
+### Changed
+
+- Pushing a stable `v<version>` tag now starts the production release workflow
+  automatically. GitHub environment approval remains required before npm and
+  GitHub Release publication.
+- The protected publication job validates and publishes the npm tarball built
+  before approval instead of rebuilding the application and rerunning release
+  gates.
+
 ## [0.4.0] - 2026-08-06
 
 ### Added

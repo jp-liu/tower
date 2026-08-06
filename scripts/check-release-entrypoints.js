@@ -25,7 +25,7 @@ assertEqual("package.json#release:portable:check", pkg.scripts["release:portable
 
 const prepareIndex = releaseShell.indexOf("pnpm release:prepare");
 const packIndex = releaseShell.indexOf("npm pack --dry-run");
-const publishIndex = releaseShell.indexOf("npm publish --access public --provenance");
+const publishIndex = releaseShell.indexOf("npm publish \"$PACKAGE_TARBALL\" --access public --provenance");
 if (prepareIndex < 0 || packIndex < prepareIndex || publishIndex < packIndex) {
   throw new Error("scripts/release.sh must prepare, pack dry-run, then publish in that order");
 }
@@ -33,6 +33,8 @@ assertContains("scripts/release.sh", releaseShell, "TOWER_RELEASE_APPROVED");
 assertContains("scripts/release.sh", releaseShell, "git@github.com:tower-org/tower.git");
 assertContains("scripts/release.sh", releaseShell, "scripts/release-context.js");
 assertContains("scripts/release.sh", releaseShell, "TOWER_RELEASE_COMMIT");
+assertContains("scripts/release.sh", releaseShell, "scripts/verify-release-tarball.js");
+assertContains("scripts/release.sh", releaseShell, "dist.integrity");
 for (const forbidden of ["git pull", "git tag", "git push", "gh release create"]) {
   if (releaseShell.includes(forbidden)) throw new Error(`scripts/release.sh must not run ${forbidden}`);
 }

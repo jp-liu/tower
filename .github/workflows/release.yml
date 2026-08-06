@@ -1,6 +1,9 @@
 name: Publish npm package and GitHub Release
 
 on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
     inputs:
       confirmation:
@@ -23,10 +26,31 @@ jobs:
   prepare:
     name: Existing gates and exact npm pack
     runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.identity.outputs.tag }}
+      confirmation: ${{ steps.identity.outputs.confirmation }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Resolve release identity
+        id: identity
+        shell: bash
+        env:
+          DISPATCH_TAG: ${{ inputs.tag }}
+          DISPATCH_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          package_name=$(node -p "require('./package.json').name")
+          package_version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            tag="$GITHUB_REF_NAME"
+            confirmation="$package_name@$package_version"
+          else
+            tag="$DISPATCH_TAG"
+            confirmation="$DISPATCH_CONFIRMATION"
+          fi
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+          printf 'confirmation=%s\n' "$confirmation" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -36,13 +60,13 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org/
           scope: tower-org
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
       - name: Validate tag, commit, package version, and approval
         env:
-          TOWER_RELEASE_TAG: ${{ inputs.tag }}
-          TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
+          TOWER_RELEASE_TAG: ${{ steps.identity.outputs.tag }}
+          TOWER_RELEASE_APPROVED: ${{ steps.identity.outputs.confirmation }}
         run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA" --workflow-definition-sha "$GITHUB_WORKFLOW_SHA" --ref "$GITHUB_REF"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
       - name: Run existing release gates
         run: pnpm release:prepare
       - name: Create the exact npm pack input
@@ -51,7 +75,7 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP/npm-pack"
       - uses: actions/upload-artifact@v4
         with:
-          name: tower-npm-pack-${{ inputs.tag }}
+          name: tower-npm-pack-${{ steps.identity.outputs.tag }}
           path: ${{ runner.temp }}/npm-pack/*.tgz
           if-no-files-found: error
           retention-days: 7
@@ -99,7 +123,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v4
         with:
-          name: tower-npm-pack-${{ inputs.tag }}
+          name: tower-npm-pack-${{ needs.prepare.outputs.tag }}
           path: ${{ runner.temp }}/npm-pack
       - name: Build native portable payload
         env:
@@ -140,7 +164,7 @@ jobs:
 
   assemble:
     name: Assemble checksums and release notes
-    needs: portable
+    needs: [prepare, portable]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -164,13 +188,13 @@ jobs:
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
-          name: tower-npm-pack-${{ inputs.tag }}
+          name: tower-npm-pack-${{ needs.prepare.outputs.tag }}
           path: ${{ runner.temp }}/release-input/npm-pack
       - run: node scripts/assemble-release-assets.js --input "$RUNNER_TEMP/release-input" --output "$RUNNER_TEMP/release-assets" --commit "$GITHUB_SHA"
 
   publish:
     name: Protected npm and GitHub Release publication
-    needs: assemble
+    needs: [prepare, assemble]
     runs-on: ubuntu-24.04
     environment: npm-production
     permissions:
@@ -184,21 +208,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
           registry-url: https://registry.npmjs.org/
           scope: tower-org
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
       - name: Revalidate immutable release identity
         env:
-          TOWER_RELEASE_TAG: ${{ inputs.tag }}
-          TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
+          TOWER_RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          TOWER_RELEASE_APPROVED: ${{ needs.prepare.outputs.confirmation }}
         run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA" --workflow-definition-sha "$GITHUB_WORKFLOW_SHA" --ref "$GITHUB_REF"
       - uses: actions/download-artifact@v4
         with:
@@ -217,7 +235,7 @@ jobs:
           merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
-          name: tower-npm-pack-${{ inputs.tag }}
+          name: tower-npm-pack-${{ needs.prepare.outputs.tag }}
           path: ${{ runner.temp }}/release-input/npm-pack
       - name: Reassemble verified release assets
         run: node scripts/assemble-release-assets.js --input "$RUNNER_TEMP/release-input" --output "$RUNNER_TEMP/release-assets" --commit "$GITHUB_SHA"
@@ -235,13 +253,13 @@ jobs:
       - name: Publish or verify npm package with provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
-          TOWER_RELEASE_TAG: ${{ inputs.tag }}
+          TOWER_RELEASE_APPROVED: ${{ needs.prepare.outputs.confirmation }}
+          TOWER_RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           TOWER_RELEASE_COMMIT: ${{ github.sha }}
         run: bash scripts/release.sh --publish --tarball "${{ steps.npm-tarball.outputs.path }}"
       - name: Create or repair GitHub Release without overwriting conflicts
         env:
           GH_TOKEN: ${{ github.token }}
-          TOWER_RELEASE_TAG: ${{ inputs.tag }}
+          TOWER_RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
           TOWER_RELEASE_COMMIT: ${{ github.sha }}
         run: node scripts/publish-github-release.js --assets "$RUNNER_TEMP/release-assets"

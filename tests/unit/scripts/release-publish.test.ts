@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -17,16 +18,24 @@ function executable(file: string, source: string) {
   chmodSync(file, 0o755);
 }
 
-function runRelease(mode: "existing" | "conflict" | "absent" | "lookup-failure", publishExit = 0) {
+function runRelease(
+  mode: "existing" | "conflict" | "absent" | "lookup-failure",
+  publishExit = 0,
+  metadataVersion = "0.4.0",
+) {
   const root = mkdtempSync(path.join(tmpdir(), "tower-release-publish-test-"));
   roots.push(root);
   const bin = path.join(root, "bin");
   const log = path.join(root, "npm.log");
   const tarball = path.join(root, "tower.tgz");
+  const integrity = `sha512-${createHash("sha512").update("package").digest("base64")}`;
   mkdirSync(bin);
   writeFileSync(log, "");
   writeFileSync(tarball, "package");
-  executable(path.join(bin, "pnpm"), "#!/bin/sh\nexit 0\n");
+  executable(path.join(bin, "pnpm"), `#!/bin/sh
+printf 'pnpm %s\\n' "$*" >> "$NPM_TEST_LOG"
+exit 97
+`);
   executable(path.join(bin, "git"), `#!/bin/sh
 case "$1:$2" in
   rev-parse:HEAD|rev-list:-n) printf '%s\\n' '${commit}' ;;
@@ -37,15 +46,17 @@ case "$1:$2" in
 esac
 `);
   executable(path.join(bin, "npm"), `#!/bin/sh
-printf '%s\\n' "$*" >> "$NPM_TEST_LOG"
+printf 'npm %s\\n' "$*" >> "$NPM_TEST_LOG"
 case "$1" in
-  pack) exit 0 ;;
+  pack)
+    printf '[{"name":"@tower-org/cli","version":"%s","integrity":"%s"}]\\n' "$NPM_TEST_METADATA_VERSION" "$NPM_TEST_INTEGRITY"
+    ;;
   view)
     case "$*" in
-      *' gitHead '*)
+      *' dist.integrity '*)
         case "$NPM_TEST_MODE" in
-          existing) printf '%s\\n' '${commit}' ;;
-          conflict) printf '%s\\n' '${"b".repeat(40)}' ;;
+          existing) printf '%s\\n' "$NPM_TEST_INTEGRITY" ;;
+          conflict) printf '%s\\n' 'sha512-conflicting-bytes' ;;
           *) exit 2 ;;
         esac ;;
       *)
@@ -74,43 +85,55 @@ esac
       NPM_TEST_LOG: log,
       NPM_TEST_MODE: mode,
       NPM_TEST_PUBLISH_EXIT: String(publishExit),
+      NPM_TEST_INTEGRITY: integrity,
+      NPM_TEST_METADATA_VERSION: metadataVersion,
     },
   });
   return { ...result, calls: readFileSync(log, "utf8") };
 }
 
 describe("npm release recovery boundary", () => {
-  it("reuses only an existing publication from the exact release commit", () => {
+  it("reuses only an existing publication with the exact prepared bytes", () => {
     const result = runRelease("existing");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Verified existing npm publication");
-    expect(result.calls).not.toMatch(/^publish /m);
+    expect(result.calls).not.toMatch(/^npm publish /m);
+    expect(result.calls).not.toMatch(/^pnpm /m);
   });
 
-  it("rejects an existing package from another commit", () => {
+  it("rejects an existing package with different bytes", () => {
     const result = runRelease("conflict");
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("exists with gitHead");
-    expect(result.calls).not.toMatch(/^publish /m);
+    expect(result.stderr).toContain("different dist.integrity");
+    expect(result.calls).not.toMatch(/^npm publish /m);
   });
 
   it("publishes only after npm explicitly reports E404", () => {
     const result = runRelease("absent");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Confirmed @tower-org/cli@0.4.0 is absent");
-    expect(result.calls).toMatch(/^publish .*tower\.tgz/m);
+    expect(result.calls).toMatch(/^npm publish .*tower\.tgz/m);
+    expect(result.calls).not.toMatch(/^pnpm /m);
   });
 
   it("does not publish when the npm lookup fails ambiguously", () => {
     const result = runRelease("lookup-failure");
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("could not prove @tower-org/cli@0.4.0 is absent");
-    expect(result.calls).not.toMatch(/^publish /m);
+    expect(result.calls).not.toMatch(/^npm publish /m);
   });
 
   it("propagates npm publish failure without attempting another channel", () => {
     const result = runRelease("absent", 23);
     expect(result.status).toBe(23);
-    expect(result.calls.match(/^publish /gm)).toHaveLength(1);
+    expect(result.calls.match(/^npm publish /gm)).toHaveLength(1);
+  });
+
+  it("rejects a prepared tarball with a different package identity", () => {
+    const result = runRelease("absent", 0, "0.4.1");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Tarball identity mismatch");
+    expect(result.calls).not.toMatch(/^npm view /m);
+    expect(result.calls).not.toMatch(/^npm publish /m);
   });
 });
