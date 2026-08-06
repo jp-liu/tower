@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 import { getActualWsPort, getConfigValues } from "@/actions/config-actions";
 import { formatPathForInjection } from "@/lib/pty/paste-image";
+import { encodeTerminalClientInput } from "@/lib/pty/ws-input-protocol";
 import "@xterm/xterm/css/xterm.css";
 
 /** Imperative control handle exposed once the terminal is created/opened. */
@@ -273,7 +274,7 @@ export function TaskTerminal({
       dataDisposable?.dispose();
       dataDisposable = terminal.onData((data) => {
         if (socket.readyState === WebSocket.OPEN) {
-          socket.send(data);
+          socket.send(encodeTerminalClientInput(data));
         }
       });
 

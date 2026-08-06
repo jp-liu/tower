@@ -895,11 +895,13 @@ describe("Workbench durable coordinator", () => {
   it("refuses to write a claimed batch into a replacement PTY execution", async () => {
     const { getSession } = await import("@/lib/pty/session-store");
     const { deliverWorkbenchBatchToParent } = await import("@/lib/workbench/coordinator");
-    const write = vi.fn();
+    const writeRaw = vi.fn();
+    const writeSubmittedInput = vi.fn();
     vi.mocked(getSession).mockReturnValue({
       killed: false,
       executionId: "parent-exec-2",
-      write,
+      writeRaw,
+      writeSubmittedInput,
     } as never);
 
     await expect(deliverWorkbenchBatchToParent({
@@ -912,7 +914,8 @@ describe("Workbench durable coordinator", () => {
       events: [],
       prompt: "must not be delivered",
     })).rejects.toThrow("different execution");
-    expect(write).not.toHaveBeenCalled();
+    expect(writeRaw).not.toHaveBeenCalled();
+    expect(writeSubmittedInput).not.toHaveBeenCalled();
   });
 
   it("backs off a failed Workbench restart instead of retrying every scanner tick", async () => {
@@ -1107,13 +1110,90 @@ describe("Workbench durable coordinator", () => {
     expect(hasWorkbenchDrainBoundary("parent", "parent-exec")).toBe(true);
   });
 
-  it("does not restore an old Codex completion after newer terminal input", async () => {
-    const { getSession, markSessionTurnComplete } = await import("@/lib/pty/session-store");
-    const { restoreWorkbenchBoundaryFromProviderTranscript } = await import("@/lib/workbench/coordinator");
-    vi.mocked(getSession).mockReturnValue({
+  it("drains a queued Gateway discussion after xterm protocol bytes follow durable Codex completion", async () => {
+    const { getSession } = await import("@/lib/pty/session-store");
+    const { forwardTerminalClientMessage } = await import("@/lib/pty/ws-server");
+    const { encodeTerminalClientInput } = await import("@/lib/pty/ws-input-protocol");
+    const {
+      drainReadyWorkbenchParent,
+      enqueueWorkbenchEvent,
+      reconcilePendingWorkbenchEvents,
+    } = await import("@/lib/workbench/coordinator");
+    const live = {
       killed: false,
-      lastInputAt: Date.parse("2026-08-05T10:02:00.000Z"),
-    } as never);
+      executionId: "parent-exec",
+      isAtTurnBoundary: false,
+      lastInputAt: null,
+      resize: vi.fn(),
+      writeRaw: vi.fn(),
+      writeSubmittedInput: vi.fn(),
+    };
+    vi.mocked(getSession).mockReturnValue(live as never);
+    await prisma.$executeRawUnsafe(
+      `UPDATE "TaskExecution" SET "agent" = 'CODEX_CLI', "sessionId" = 'codex-thread' WHERE "id" = 'parent-exec'`,
+    );
+    const sessionsDir = join(tempDirs[0], "codex-sessions-gateway-discussion");
+    await mkdir(sessionsDir, { recursive: true });
+    await writeFile(join(sessionsDir, "rollout-codex-thread.jsonl"), [
+      JSON.stringify({ timestamp: "2026-08-06T10:30:00.000Z", type: "event_msg", payload: { type: "task_started" } }),
+      JSON.stringify({ timestamp: "2026-08-06T10:30:59.000Z", type: "event_msg", payload: { type: "task_complete" } }),
+      "",
+    ].join("\n"));
+
+    for (const bytes of ["\x1b[I", "\x1b[O", "\x1b[12;40R", "\x1b[?1;2c"]) {
+      forwardTerminalClientMessage(live, encodeTerminalClientInput(bytes));
+    }
+    expect(live.writeRaw).toHaveBeenCalledTimes(4);
+    expect(live.writeSubmittedInput).not.toHaveBeenCalled();
+    expect(live.lastInputAt).toBeNull();
+
+    await enqueueWorkbenchEvent({
+      parentTaskId: "parent",
+      sourceTaskId: "parent",
+      kind: "GATEWAY_DISCUSSION_REQUEST",
+      dedupKey: "gateway-discussion:cmsgwkn5e0015cpchjr40dz27",
+      payload: {
+        childTaskId: "parent",
+        childTitle: "Gateway discussion",
+        instruction: "[Gateway project discussion request]\nExplain the current state.",
+      },
+    });
+
+    await expect(reconcilePendingWorkbenchEvents(
+      vi.fn(),
+      new Date("2026-08-06T10:34:45.000Z"),
+      { codexSessionsDir: sessionsDir },
+    )).resolves.toEqual({ scanned: 1, woken: 1, busy: 0, failed: 0 });
+
+    const delivered: WorkbenchDrainBatch[] = [];
+    await drainReadyWorkbenchParent("parent", async (batch) => {
+      delivered.push(batch);
+    });
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0].prompt).toContain("Explain the current state.");
+    expect(await prisma.workbenchEvent.findUnique({
+      where: { dedupKey: "gateway-discussion:cmsgwkn5e0015cpchjr40dz27" },
+    })).toMatchObject({ state: "PROCESSING" });
+  });
+
+  it("does not restore an old Codex completion after a real user submit", async () => {
+    const { getSession, markSessionTurnComplete } = await import("@/lib/pty/session-store");
+    const { forwardTerminalClientMessage } = await import("@/lib/pty/ws-server");
+    const { encodeTerminalClientInput } = await import("@/lib/pty/ws-input-protocol");
+    const { restoreWorkbenchBoundaryFromProviderTranscript } = await import("@/lib/workbench/coordinator");
+    let lastInputAt = 0;
+    const live = {
+      killed: false,
+      get lastInputAt() {
+        return lastInputAt;
+      },
+      resize: vi.fn(),
+      writeRaw: vi.fn(),
+      writeSubmittedInput: vi.fn(() => {
+        lastInputAt = Date.parse("2026-08-05T10:02:00.000Z");
+      }),
+    };
+    vi.mocked(getSession).mockReturnValue(live as never);
     await prisma.$executeRawUnsafe(
       `UPDATE "TaskExecution" SET "agent" = 'CODEX_CLI', "sessionId" = 'codex-thread' WHERE "id" = 'parent-exec'`,
     );
@@ -1124,6 +1204,9 @@ describe("Workbench durable coordinator", () => {
       JSON.stringify({ timestamp: "2026-08-05T10:01:00.000Z", type: "event_msg", payload: { type: "task_complete" } }),
       "",
     ].join("\n"));
+
+    forwardTerminalClientMessage(live, encodeTerminalClientInput("\r"));
+    expect(live.writeSubmittedInput).toHaveBeenCalledWith("\r");
 
     await expect(restoreWorkbenchBoundaryFromProviderTranscript("parent", { codexSessionsDir: sessionsDir }))
       .resolves.toBe(false);

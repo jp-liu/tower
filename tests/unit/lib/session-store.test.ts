@@ -80,7 +80,7 @@ describe("session-store", () => {
       const session = createSession("task-boundary", "bash", [], "/tmp", vi.fn(), vi.fn());
       expect(markSessionTurnComplete("task-boundary")).toBe(true);
       expect(session.isAtTurnBoundary).toBe(true);
-      session.write("next turn");
+      session.writeSubmittedInput("\r");
       expect(session.isAtTurnBoundary).toBe(false);
       expect(markSessionTurnComplete("missing")).toBe(false);
     });
