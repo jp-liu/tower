@@ -141,6 +141,7 @@ function jobEnvelope(authorizationRef: string, overrides: Record<string, unknown
 }
 
 beforeEach(() => {
+  vi.stubEnv("TOWER_API_URL", "http://127.0.0.1:3000");
   vi.clearAllMocks();
   mocks.target.mockResolvedValue({
     id: "owner-route",
@@ -179,6 +180,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(clients.splice(0).map((client) => client.$disconnect()));
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
