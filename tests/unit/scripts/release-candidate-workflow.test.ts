@@ -56,6 +56,7 @@ function collectStrings(value: unknown, result: string[] = []): string[] {
 describe("Release Candidate workflow", () => {
   const candidate = workflow("release-candidate.yml");
   const release = workflow("release.yml");
+  const docs = workflow("docs.yml");
 
   it("is manually dispatched with read-only repository permissions", () => {
     expect(candidate.on).toHaveProperty("workflow_dispatch");
@@ -209,6 +210,15 @@ describe("Release Candidate workflow", () => {
     const publishText = collectStrings(release.jobs.publish).join("\n");
     expect(publishText).not.toMatch(/pnpm install|playwright install|release:prepare/);
     expect(publishText).toContain("scripts/release.sh --publish --tarball");
+  });
+
+  it("scopes Pages artifacts to one run attempt so retries cannot collide", () => {
+    const docsPush = docs.on?.push as { paths?: string[] };
+    const upload = docs.jobs["build-and-deploy"].steps.find((step) => step.uses === "actions/upload-pages-artifact@v3");
+    const deploy = docs.jobs["build-and-deploy"].steps.find((step) => step.uses === "actions/deploy-pages@v4");
+    expect(docsPush.paths).toContain(".github/workflows/docs.yml");
+    expect(upload?.with?.name).toBe("github-pages-${{ github.run_attempt }}");
+    expect(deploy?.with?.artifact_name).toBe("github-pages-${{ github.run_attempt }}");
   });
 
   it("contains no publication authority, environment, secret, or command", () => {

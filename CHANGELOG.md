@@ -16,6 +16,11 @@ The format follows Keep a Changelog and versions follow Semantic Versioning.
   before approval instead of rebuilding the application and rerunning release
   gates.
 
+### Fixed
+
+- GitHub Pages retries use attempt-scoped artifacts, preventing a failed
+  deployment retry from colliding with an artifact uploaded by the prior attempt.
+
 ## [0.4.0] - 2026-08-06
 
 ### Added
