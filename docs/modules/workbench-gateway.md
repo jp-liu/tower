@@ -63,10 +63,29 @@ OWNER 在当前群内通过 `manage_gateway_channel_access` 授权、绑定、�
 7. Outbox 以原平台消息为 parent 投递引用卡片，并使用稳定键去重。
 8. 只有 `resolve_workbench_batch` 成功后，关联事件才最终变为 `CONSUMED`。
 
+## 三层独立状态
+
+Workbench 不能用一套状态同时表示终端回合、可靠消费和运维健康：
+
+1. live PTY Provider 回合记录当前是否 `BUSY`；`writeRaw` 只透传终端字节，不更新
+   `lastInputAt`，也不改变回合状态。`writeSubmittedInput` 才是语义提交，会更新
+   `lastInputAt`、关闭一次性 drain boundary，并进入 `BUSY`。
+2. `WorkbenchEvent` / `WorkbenchBatch` 保存 durable delivery 状态。批次
+   `RESOLVED`、事件 `CONSUMED` 只表示处理责任已经释放，不表示 Provider 回合结束。
+3. `WorkbenchRuntime` 是持久化的运维投影。批次已 `RESOLVED` 时它仍可能是 `BUSY`；
+   只有 Provider Stop/turn-complete 才把它更新为 `IDLE`，开放一次 drain boundary，并
+   尝试下一条 `PENDING`。
+
+Stop hook 丢失时，可以用 Provider transcript 恢复边界：Claude 使用
+`stop_reason=end_turn`；Codex 的 `task_complete` 必须不早于 live session 最后一次语义
+提交。终端静默、output-idle 和终端协议字节都不是完成证据。当前实现没有持久化逐轮
+`turnId` / `turnSeq`。
+
 ## 可靠性不变量
 
 - 一个 inbound 最多关联一个外部工作任务。
 - PTY 收到文本和 ACK 都不代表事件已最终消费；只有 `RESOLVED` 才释放处理责任。
+- `RESOLVED` 不会把仍在运行的 Provider 回合提前标成 `IDLE`。
 - `CLAIMED`、`DISPATCHED`、`ACKED` 都有租约；租约过期会以同一 batch ID 安全重放。
 - ACK、heartbeat 和 resolve 必须携带当前 generation 的 lease token，旧终端不能确认新批次。
 - 未解决的批次每两分钟续租一次，不能等五分钟处理租约到期后才 heartbeat。

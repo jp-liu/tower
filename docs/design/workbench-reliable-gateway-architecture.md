@@ -101,6 +101,12 @@ Workbench 主动 ACK = ACKED，续租处理责任，事件仍是 PROCESSING
 10. 每一张飞书卡片都先写入 `GatewayDelivery`，再幂等发送到原消息线程。
 11. Workbench 完成当前批次中的所有事项或已稳定委派后，用同一 lease token 调用
     `resolve_workbench_batch`；批次与关联事件在同一事务变为 `RESOLVED + CONSUMED`。
+12. 此时 Provider 回合与 `WorkbenchRuntime` 仍可能是 `BUSY`。只有后续 Provider
+    Stop/turn-complete 才进入 `IDLE`、开放一次性 drain boundary，并尝试下一条 `PENDING`。
+
+投递也分成两个语义：`writeRaw` 只透传 batch 正文字节，不改变回合状态；最后的
+`writeSubmittedInput` 才提交回车、更新 `lastInputAt` 并进入 `BUSY`。因此终端生成的协议
+回复、普通输入片段或静默都不能伪造一次新回合或回合完成。
 
 ## 5. 超时与重启时会发生什么
 
@@ -116,6 +122,7 @@ Workbench 主动 ACK = ACKED，续租处理责任，事件仍是 PROCESSING
 | 飞书发送失败 | `GatewayDelivery` 按去重键重试，不重新执行任务 |
 | `DONE` 后发送前崩溃 | 同一事务已创建 `FINAL_RESULT/PENDING`，watchdog 继续发送 |
 | Workbench 卡住或终端丢失 | `WorkbenchRuntime` 显示 `BLOCKED` / `DEGRADED` 与具体原因 |
+| Provider Stop hook 丢失 | 仅从 Provider transcript 恢复：Claude `stop_reason=end_turn`；Codex `task_complete` 必须不早于最后一次语义提交 |
 | 无人值守外发前退出 | `HarnessOutbound=PENDING`，恢复 worker 继续发送 |
 | 平台已收但本地回执不完整 | `SENT_UNVERIFIED`，激活 ask/park 但不重复发送 |
 | 第二个 Tower 连接同一 DB | runtime leader lease 拒绝启动，避免双扫描器和双 PTY owner |
@@ -138,7 +145,7 @@ Workbench 主动 ACK = ACKED，续租处理责任，事件仍是 PROCESSING
 
 ## 7. 关键不变量
 
-1. 没有 Provider turn-complete 证据，不向忙碌 PTY 注入。
+1. 没有 Provider turn-complete 证据，不向忙碌 PTY 注入；终端静默和协议字节不算证据。
 2. PTY 写入成功不等于消费成功。
 3. `WorkbenchEvent` 只有在同批次 `RESOLVED` 的事务中才能进入 `CONSUMED`。
 4. `CLAIMED`、`DISPATCHED`、`ACKED` 都必须持有有界租约并可超时恢复。
@@ -147,12 +154,16 @@ Workbench 主动 ACK = ACKED，续租处理责任，事件仍是 PROCESSING
 7. 外部回复来自服务端持久化状态，不直接转发未经审查的终端输出。
 8. `Task=DONE` 与 `FINAL_RESULT/PENDING` 必须同事务提交。
 9. `WorkbenchRuntime` 只是运维投影；重放仍以 `WorkbenchEvent` / `WorkbenchBatch` 为准。
-10. 外部消息入口不能直接创建任务或启动执行；所有写操作必须有绑定 Workbench 和持久
+10. Batch/Event、live PTY Provider 回合、Runtime 投影是三层独立状态；`RESOLVED` 不等于
+    Provider 回合已经 `IDLE`。
+11. 外部消息入口不能直接创建任务或启动执行；所有写操作必须有绑定 Workbench 和持久
     `GatewayInbound`。
-11. trusted channel 必须同时受 sender/chat 速率限制和 queued-work 硬上限保护。
-12. 一个 SQLite 数据库同一时刻只能有一个 Tower runtime leader。
-13. 无人值守外发必须先写持久 outbox 与 ask intent，再访问外部平台。
-14. admission control 同时约束 chat、project、Workbench 与 global backlog。
+12. trusted channel 必须同时受 sender/chat 速率限制和 queued-work 硬上限保护。
+13. 一个 SQLite 数据库同一时刻只能有一个 Tower runtime leader。
+14. 无人值守外发必须先写持久 outbox 与 ask intent，再访问外部平台。
+15. admission control 同时约束 chat、project、Workbench 与 global backlog。
+
+当前实现没有逐轮持久化 `turnId` / `turnSeq`；这不是可靠批次协议的一部分。
 
 ## 8. 代码与数据位置
 

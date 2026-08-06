@@ -45,6 +45,9 @@ flowchart LR
   Ack --> Heartbeat["Heartbeat every 2 minutes\nwhile unresolved"]
   Heartbeat --> Resolved["Resolve transaction\nWorkbenchBatch RESOLVED"]
   Resolved --> Consumed["WorkbenchEvent CONSUMED"]
+  Consumed --> TurnBusy["Provider turn may still be BUSY"]
+  TurnBusy -->|Provider Stop / turn-complete| TurnIdle["Runtime IDLE\nopen one-shot drain boundary"]
+  TurnIdle --> Scanner
 
   Gateway["GatewayInbound\nQUEUED / PROCESSING"] --> Watchdog["Gateway watchdog\n10 second scan"]
   Watchdog --> Link["Recover task link / confirmation"]
@@ -66,22 +69,47 @@ longer the only trigger.
 
 ### 3.1 A busy Workbench must never receive injected input
 
-`PtySession.isAtTurnBoundary` is set only by a provider stop/turn-complete
-callback. The reconciler restores a boundary only when this flag is true.
-Output-idle time is not used as evidence of completion.
+Terminal transport and Provider-turn ownership are different concerns.
+`writeRaw` forwards terminal bytes without changing the turn state or
+`lastInputAt`. `writeSubmittedInput` represents a semantic submit: it records
+`lastInputAt`, marks the live PTY and Runtime projection `BUSY`, and closes the
+disposable drain boundary. The browser WebSocket protocol labels a standalone
+CR as `submit`; all other input frames are raw transport, with the same split for
+legacy clients.
 
-### 3.2 A pending event must survive every skipped attempt
+`PtySession.isAtTurnBoundary` becomes true only at a Provider Stop/turn-complete
+boundary. If the Stop hook was lost, recovery may use Claude
+`stop_reason=end_turn`; for Codex, `task_complete` is accepted only when its
+timestamp is not earlier than the live session's last semantic submit. Terminal
+silence, output-idle time, and terminal protocol replies are not evidence of
+completion.
+
+### 3.2 Durable batches do not own the Provider turn
+
+Three state layers remain independent:
+
+1. the live PTY Provider turn (`BUSY` or at a completed-turn boundary);
+2. durable `WorkbenchEvent` / `WorkbenchBatch` delivery state;
+3. the persisted `WorkbenchRuntime` health projection.
+
+`Batch=RESOLVED` and `Event=CONSUMED` release durable processing responsibility.
+They do not finish the current Provider turn. Runtime therefore remains `BUSY`
+until the Provider completion boundary moves it to `IDLE`, opens exactly one
+drain boundary, and allows the coordinator to try the next `PENDING` event.
+There is no persisted per-turn `turnId` / `turnSeq` in the current implementation.
+
+### 3.3 A pending event must survive every skipped attempt
 
 When the parent is busy, the reconciler does not claim or mutate the event.
 It remains `PENDING` with `attempts = 0`, ready for the next scan.
 
-### 3.3 Only delivery attempts increment `attempts`
+### 3.4 Only delivery attempts increment `attempts`
 
 An event moves to `PROCESSING` and increments `attempts` only inside the
 transactional claim performed by the drain. A scan that merely observes a busy
 parent is not a delivery attempt.
 
-### 3.4 One database has one runtime leader
+### 3.5 One database has one runtime leader
 
 The Next.js instrumentation entry uses a Node-runtime gate before loading the
 Node-only control loops, which still use process-local single-flight guards,
@@ -89,7 +117,7 @@ while `TowerRuntimeLease` fences scanner ownership across processes.
 Only the database lease holder may run the Workbench, Gateway, and Harness
 outbox recovery loops.
 
-### 3.5 Recovery is idempotent
+### 3.6 Recovery is idempotent
 
 - Workbench events use stable `dedupKey` values.
 - Gateway task confirmation uses a durable `GatewayTaskLink`.
@@ -104,7 +132,8 @@ outbox recovery loops.
 | Event arrives while Workbench is busy | Event stays `PENDING`; scanner retries after the next completed turn |
 | Tower server restarts | Scanner rediscovers every pending parent from SQLite |
 | Workbench PTY is missing | Scanner continues or starts the Workbench and opens its initial safe boundary |
-| PTY survives but memory boundary is lost | Scanner restores the boundary only if the provider marked the turn complete |
+| PTY survives but memory boundary is lost | Scanner restores the boundary only from live completed-turn state or Provider transcript evidence; Codex completion must pass the `task_complete >= lastInputAt` fence |
+| Batch resolves before Provider Stop | Batch becomes `RESOLVED` and events `CONSUMED`; Runtime remains `BUSY` until Stop/turn-complete opens the next drain boundary |
 | Task was created before confirmation crashed | Gateway watchdog verifies the durable link and task, confirms it, and wakes the Workbench |
 | A linked child task was deleted | Foreign-key cascade removes the link; recovery never accepts an orphan as task evidence |
 | Outbound delivery temporarily fails | Gateway watchdog invokes the existing durable delivery retry |
@@ -118,6 +147,7 @@ outbox recovery loops.
 | Event enqueue, claim, batch and reconciliation | `src/lib/workbench/coordinator.ts` |
 | Process-local safe-boundary optimization | `src/lib/workbench/boundary.ts` |
 | Provider-confirmed PTY turn state | `src/lib/pty/pty-session.ts` |
+| Browser raw/semantic input split | `src/lib/pty/ws-input-protocol.ts`, `src/lib/pty/ws-server.ts` |
 | Gateway workflow recovery | `src/lib/harness/gateway-router.ts` |
 | Runtime gate / Node control-loop startup | `src/instrumentation.ts`, `src/instrumentation-node.ts` |
 | Coordinator tests | `src/lib/workbench/__tests__/coordinator.test.ts` |

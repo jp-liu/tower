@@ -29,8 +29,8 @@
         <mxCell id="9" value="恢复条件&#xa;• PTY 写入 / 提交失败&#xa;• CLAIMED / DISPATCHED / ACKED 租约过期" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff5f5;strokeColor=#b85450;align=left;spacingLeft=12;fontSize=14;" vertex="1" parent="1">
           <mxGeometry x="890" y="410" width="260" height="130" as="geometry"/>
         </mxCell>
-        <mxCell id="10" value="可靠性边界&#xa;ACK 只确认接手并续租&#xa;RESOLVED 才释放处理责任&#xa;token 阻止旧终端确认新代际" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=12;fontSize=14;" vertex="1" parent="1">
-          <mxGeometry x="60" y="400" width="330" height="140" as="geometry"/>
+        <mxCell id="10" value="可靠性边界&#xa;ACK 只确认接手并续租&#xa;RESOLVED 才释放处理责任&#xa;Batch / Event 与 PTY turn / Runtime 独立&#xa;token 阻止旧终端确认新代际" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;spacingLeft=12;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="60" y="390" width="350" height="170" as="geometry"/>
         </mxCell>
         <mxCell id="11" value="原子领取&#xa;创建稳定 batch id" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=blockThin;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="3" target="4">
           <mxGeometry relative="1" as="geometry"/>

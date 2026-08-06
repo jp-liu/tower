@@ -118,11 +118,26 @@ idempotently.
 
 - A live busy Workbench receives no direct PTY write. The event remains pending
   until `openWorkbenchDrainBoundary` observes a completed turn.
-- The live PTY separately retains an authoritative `BUSY`/`IDLE` turn state:
-  every input marks it busy and a provider Stop/turn-complete callback marks it
-  idle. If a Tower route/module restart loses only the disposable drain token,
-  startup recovery recreates that token for `already_running + IDLE`; it never
-  infers safety from a quiet buffer or injects into `already_running + BUSY`.
+- The live PTY separately retains the authoritative Provider-turn state.
+  `writeRaw` only forwards terminal bytes: typing, paste fragments, and
+  terminal-generated protocol replies do not change the turn state or
+  `lastInputAt`. `writeSubmittedInput` is the semantic submit boundary; it
+  updates `lastInputAt`, closes the disposable drain boundary, and moves the PTY
+  and Runtime projection to `BUSY`.
+- A Provider Stop/turn-complete callback is the authoritative completion
+  boundary. If its hook is lost, transcript recovery accepts Claude
+  `stop_reason=end_turn`, or Codex `task_complete` only when its timestamp is not
+  earlier than the live session's last semantic submit. Terminal silence,
+  output-idle timers, and protocol bytes are never completion evidence.
+- Durable Event/Batch state is independent of that Provider turn. A successful
+  `resolve_workbench_batch` commits `Batch=RESOLVED` and `Event=CONSUMED`, but the
+  current Provider turn and `WorkbenchRuntime` may remain `BUSY`. Only the
+  completion boundary moves Runtime to `IDLE`, opens one disposable drain token,
+  and permits an attempt to deliver the next `PENDING` event.
+- If a Tower route/module restart loses only the disposable drain token, startup
+  recovery recreates it only from the live completed-turn state or the Provider
+  transcript evidence above. It never infers safety from a quiet buffer or
+  injects into `already_running + BUSY`.
 - A stopped Workbench is started or resumed, but the durable event still waits
   for that safe boundary.
 - Startup recovery reopens Workbenches with queued requests, restores one safe
@@ -130,6 +145,10 @@ idempotently.
   retries pending or failed outbound deliveries.
 - A repeated platform callback reuses the same inbound row, Workbench event,
   and delivery rows.
+
+Tower does not currently persist a per-turn `turnId` or `turnSeq`. The live turn
+state, Provider transcript evidence, durable Event/Batch protocol, and Runtime
+projection remain separate mechanisms rather than one combined state machine.
 
 ## Confirmation And Completion
 

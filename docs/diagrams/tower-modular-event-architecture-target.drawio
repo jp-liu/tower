@@ -19,7 +19,7 @@
         <mxCell id="ext-ui" value="Tower UI / API&#xa;用户操作与服务调用" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;" vertex="1" parent="external">
           <mxGeometry x="25" y="70" width="190" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="ext-provider" value="Provider / PTY&#xa;turn-complete 回调" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;" vertex="1" parent="external">
+        <mxCell id="ext-provider" value="Provider / PTY&#xa;raw bytes · semantic submit&#xa;turn-complete 回调" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" vertex="1" parent="external">
           <mxGeometry x="25" y="200" width="190" height="90" as="geometry" />
         </mxCell>
         <mxCell id="ext-platform" value="OpenClaw / 飞书&#xa;可选外部入口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;fontSize=14;" vertex="1" parent="external">
@@ -44,7 +44,7 @@
         <mxCell id="command-lane" value="Durable Workbench Commands&#xa;WorkbenchEvent: PENDING → PROCESSING → CONSUMED&#xa;唯一 Workbench owner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
           <mxGeometry x="670" y="90" width="260" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="event-lane" value="Process-local Lifecycle&#xa;PTY input-start / provider-turn-complete&#xa;Workbench batch-dispatched&#xa;无通用 Domain Event bus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
+        <mxCell id="event-lane" value="Process-local Lifecycle&#xa;PTY semantic-submit / turn-complete&#xa;Workbench batch-dispatched&#xa;无通用 Domain Event bus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
           <mxGeometry x="670" y="260" width="260" height="130" as="geometry" />
         </mxCell>
         <mxCell id="dispatcher" value="Workbench Coordinator&#xa;lease · coalesce · ACK · heartbeat · replay&#xa;仅在 provider-confirmed turn boundary 投递" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;" vertex="1" parent="tower">
@@ -214,8 +214,8 @@
         <mxCell id="claim" value="Claim Batch&#xa;CLAIMED + lease + generation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;" vertex="1" parent="dispatch-lane">
           <mxGeometry x="1080" y="60" width="260" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="dispatch" value="Deliver to Workbench PTY&#xa;DISPATCHED&#xa;Runtime = BUSY（RUNNING 语义）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;" vertex="1" parent="dispatch-lane">
-          <mxGeometry x="1440" y="60" width="270" height="110" as="geometry" />
+        <mxCell id="dispatch" value="Deliver to Workbench PTY&#xa;writeRaw(body)：回合不变&#xa;writeSubmittedInput(CR)：BUSY&#xa;Batch = DISPATCHED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" vertex="1" parent="dispatch-lane">
+          <mxGeometry x="1420" y="50" width="290" height="130" as="geometry" />
         </mxCell>
 
         <mxCell id="execute-lane" value="3  Workbench 单线程回合" style="swimlane;startSize=36;rounded=0;html=1;fillColor=#f9fafb;strokeColor=#6b7280;fontStyle=1;fontSize=15;pointerEvents=0;" vertex="1" parent="1">
@@ -269,7 +269,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="p2-e-claim-dispatch" value="write + submit" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="dispatch-lane" source="claim" target="dispatch">
+        <mxCell id="p2-e-claim-dispatch" value="raw body → semantic submit" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;fontSize=11;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="dispatch-lane" source="claim" target="dispatch">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="p2-e-dispatch-ack" value="Agent 读取并接手" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;fontSize=11;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="dispatch" target="ack">

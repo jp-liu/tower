@@ -70,11 +70,35 @@ final data-scope check from the versioned extension configuration.
 8. Associated events become `CONSUMED` only after
    `resolve_workbench_batch` succeeds.
 
+## Three independent state layers
+
+Workbench does not use one state machine for terminal turns, durable
+consumption, and operational health:
+
+1. The live PTY Provider turn records whether the current turn is `BUSY`.
+   `writeRaw` only forwards terminal bytes; it does not update `lastInputAt` or
+   change turn state. `writeSubmittedInput` is the semantic submit boundary: it
+   updates `lastInputAt`, closes the one-shot drain boundary, and enters `BUSY`.
+2. `WorkbenchEvent` / `WorkbenchBatch` store durable delivery state.
+   `Batch=RESOLVED` and `Event=CONSUMED` release processing responsibility; they
+   do not finish the Provider turn.
+3. `WorkbenchRuntime` is a persisted operational projection. It may remain
+   `BUSY` after the batch resolves. Only Provider Stop/turn-complete moves it to
+   `IDLE`, opens one drain boundary, and attempts the next `PENDING` event.
+
+If the Stop hook is lost, Provider transcript evidence can restore the boundary:
+Claude uses `stop_reason=end_turn`; Codex `task_complete` is accepted only when
+it is not earlier than the live session's last semantic submit. Terminal
+silence, output-idle time, and terminal protocol bytes are not completion
+evidence. The current implementation does not persist per-turn `turnId` or
+`turnSeq` values.
+
 ## Reliability invariants
 
 - One inbound can bind at most one external work task.
 - Neither a PTY write nor ACK finally consumes an event; only `RESOLVED`
   releases processing responsibility.
+- `RESOLVED` never marks a still-running Provider turn `IDLE` early.
 - `CLAIMED`, `DISPATCHED`, and `ACKED` are leased. An expired lease replays the
   same batch ID safely.
 - ACK, heartbeat, and resolve carry the current generation's lease token, so a

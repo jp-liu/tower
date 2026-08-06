@@ -23,7 +23,7 @@
 
 | 边界 | 代码位置 | 当前职责 |
 |---|---|---|
-| PTY lifecycle | `src/lib/pty/lifecycle.ts` + `src/lib/workbench/pty-lifecycle-adapter.ts` | PTY 只发布 input-start / provider-turn-complete；Workbench adapter 关闭或开放 disposable drain token，并更新 Runtime 投影 |
+| PTY lifecycle | `src/lib/pty/lifecycle.ts` + `src/lib/workbench/pty-lifecycle-adapter.ts` | PTY 只发布 semantic input-start / provider-turn-complete；Workbench adapter 关闭或开放 disposable drain token，并更新 Runtime 投影 |
 | Workbench command inbox | `src/lib/workbench/command-inbox.ts` | Gateway 与派生任务只通过公开发布/激活函数提交可靠命令，不 import coordinator |
 | Workbench delivery lifecycle | `src/lib/workbench/delivery-lifecycle.ts` + `src/lib/harness/workbench-delivery-adapter.ts` | coordinator 只报告 batch dispatched；Gateway adapter 自己解析 source reference 并更新 GatewayInbound |
 | Composition root | `src/instrumentation-node.ts` | 进程启动时注册上述两个 adapter，业务模块不互相做隐式初始化 |
@@ -31,12 +31,18 @@
 Gateway adapter 在启动时还会把未完成的旧版 `gatewayMessage / gatewayInboundId` payload 原地升级为
 通用 `instruction / sourceReference` envelope；历史 PENDING/PROCESSING 工作不会因边界升级丢失正文。
 
+PTY 输入也已拆成传输与回合语义两条路径：`writeRaw` 只透传字节，不改变 turn state 或
+`lastInputAt`；`writeSubmittedInput` 才发布 input-start lifecycle、更新 `lastInputAt` 并进入
+`BUSY`。浏览器协议把独立 CR 标成 `submit`，其余输入与协议回复保持 raw。
+
 Runtime 仍保留数据库枚举 `IDLE / BUSY`，避免只为改名产生迁移。当前语义明确为：
 
 - `BUSY`：provider 回合仍在执行，或存在 active batch；`resolveWorkbenchBatch` 不再宣称回合完成。
 - `IDLE`：live PTY 已收到 provider-confirmed stop/end_turn，可安全尝试下一次 drain。
 - `pendingEvents` 与 `activeBatchId` 是独立投影字段，不再用队列深度推导 provider 回合状态。
 - `lastTurnCompletedAt` 只由 provider-turn-complete lifecycle 更新。
+- `Batch=RESOLVED / Event=CONSUMED` 后 Provider 回合仍可能 `BUSY`；Stop 后才进入
+  `IDLE`、开放一次性 drain token 并尝试下一条 `PENDING`。
 
 可靠协议保持不变：
 
@@ -45,9 +51,12 @@ WorkbenchEvent: PENDING -> PROCESSING -> CONSUMED
 WorkbenchBatch:            CLAIMED -> DISPATCHED -> ACKED -> RESOLVED / FAILED
 ```
 
-`PTY write -> DISPATCHED` 之间仍是明确的 at-least-once 窗口。若进程在写入终端后崩溃，恢复会用同一稳定
+`PTY submit -> DISPATCHED` 之间仍是明确的 at-least-once 窗口。若进程在提交终端输入后崩溃，恢复会用同一稳定
 batch ID 和新 lease 重放，旧 lease 被 fencing；终端输入可能重复，但 TaskMessage、WorkbenchEvent 等
 持久副作用不会重复消费。测试按这条真实契约验收，不承诺 exactly-once terminal injection。
+
+当前没有持久化逐轮 `turnId` / `turnSeq`。live turn state、Provider transcript、durable
+Event/Batch 和 Runtime 投影仍是分层机制，不能合并解释。
 
 模块边界测试会阻止三类回归：PTY 重新 import Workbench、Gateway 重新 import coordinator、Workbench
 coordinator 重新写 Gateway-owned 表。
@@ -154,13 +163,14 @@ coordinator 重新写 Gateway-owned 表。
 | 层次 | 当前载体 | 语义 |
 |---|---|---|
 | live provider 回合状态 | `PtySession._turnState` / `isAtTurnBoundary` | 当前 PTY 是否收到 provider turn-complete，是 live session 内的强事实 |
-| provider 持久证据 | Claude transcript 的 `stop_reason=end_turn` | stop hook 丢失时用于恢复 turn boundary 的证据 |
+| provider 持久证据 | Claude transcript 的 `stop_reason=end_turn`；Codex transcript 中不早于 `lastInputAt` 的 `task_complete` | stop hook 丢失时用于恢复 turn boundary 的证据 |
 | 一次性调度许可 | `boundary.ts` 的内存 `Set` | 可丢失、可重建、消费一次即关闭的 drain token |
 
 `restoreWorkbenchDrainBoundary` 上方的代码注释已经明确称该 Set 为
 `disposable drain token`，并要求恢复前重新验证 live PTY 的 `isAtTurnBoundary`。
-`restoreWorkbenchBoundaryFromProviderTranscript` 也只在 transcript 最后一条有效消息是
-`stop_reason=end_turn` 时恢复 live session 状态和 token。
+`restoreWorkbenchBoundaryFromProviderTranscript` 只在 transcript 给出有效完成证据时恢复 live
+session 状态和 token。Claude 使用 `stop_reason=end_turn`；Codex 还用 `lastInputAt` 作时间栅栏，
+拒绝早于最后一次语义提交的旧 `task_complete`。
 
 因此，内存 Set 在进程重启后丢失本身不是“权威事实丢失”。完整进程重启时旧 PTY 同样不可恢复，
 startup 会把旧 `RUNNING` execution 清理为 `FAILED`；有 `PENDING` 工作时 reconciler 会启动或继续
@@ -174,26 +184,18 @@ fencing；不能只把当前 Set 搬进数据库。
 **处理意见：否决 Delta #1 作为第一优先级。** 先保留 live turn state、provider transcript 和
 disposable token 的现有分工；只有故障注入测试证明存在无法恢复的真实缺口后，再设计持久 TurnRecord。
 
-### 2. Runtime 确有语义问题，但不是调度双事实问题
+### 2. Runtime 语义问题已修复，且从来不是调度双事实问题
 
 `WorkbenchRuntime` 的 schema 注释明确说明它是 operational projection，不是 inbox 的事实来源。
 当前调度路径也不读取 `WorkbenchRuntime.state` 来决定是否注入，而是读取 live session 的
 `isAtTurnBoundary` 并消费 drain token。因此 `Runtime.IDLE` 和 boundary Set 并不是两个必须保持一致
 才能保证正确性的调度事实。
 
-不过当前实现存在一个真实偏差：`resolveWorkbenchBatch()` 在 batch 变成 `RESOLVED` 后立即调用：
+提交 `3d2cc7d` 已修复复核时发现的投影偏差：resolve 现在写 `BUSY`、清除 active batch；
+即使 Agent 已释放 durable batch responsibility，它仍可在当前 provider 回合里执行收尾。
+Provider completion lifecycle 才写 `IDLE` 并开放 drain boundary。
 
-```text
-recordWorkbenchRuntime(parentTaskId, "IDLE", {
-  activeBatchId: null,
-  turnCompleted: true,
-})
-```
-
-这时 Agent 可能仍在当前 provider 回合里执行收尾；真正的 turn-complete 只能来自后续 provider
-`stop/end_turn`。这与本文目标循环第 6、7 条直接冲突。
-
-**处理意见：修正 Delta #2。** 第一阶段应先让 Runtime 投影遵守以下规则：
+**已落地的处理：** Runtime 投影遵守以下规则：
 
 1. `resolveWorkbenchBatch` 只结束 batch responsibility，不写 `turnCompleted=true`。
 2. provider stop hook 才更新 `lastTurnCompletedAt` 和可投递状态。
@@ -229,7 +231,7 @@ WorkbenchBatch:            CLAIMED → DISPATCHED → ACKED → RESOLVED
 
 这里同意“不为单实现创建 interface 层级”，但薄端口可以只是命名清晰的函数和类型模块：
 
-- PTY 暴露通用的 input-start / provider-turn-complete 生命周期通知，不 import Workbench。
+- PTY 暴露通用的 semantic input-start / provider-turn-complete 生命周期通知，不 import Workbench。
 - Gateway 通过 Workbench command inbox 的发布函数提交工作，不直接操作 boundary。
 - Workbench coordinator 不解析 Gateway 私有 payload，也不直接写 Gateway 表。
 - Gateway 对 Workbench delivery lifecycle 的状态映射由 Gateway 自己拥有。
@@ -253,7 +255,7 @@ Port 而制造消费者。
 | 阶段 | 改动 | 验收标准 |
 |---|---|---|
 | A | 建立 PTY lifecycle、Workbench command inbox、Gateway lifecycle 三组薄函数边界 | PTY 不 import Workbench；Gateway 与 Workbench coordinator 不再双向依赖；Workbench 不直接写 Gateway 表 |
-| B | 修正 Runtime 投影语义 | Batch resolve 后 provider 回合仍显示运行中；只有 stop/end_turn 更新 turn-complete；调度行为不读取 Runtime 展示状态 |
+| B | 修正 Runtime 投影语义（已完成） | Batch resolve 后 provider 回合仍显示运行中；只有 stop/end_turn 更新 turn-complete；调度行为不读取 Runtime 展示状态 |
 | C | 收敛命名和模块目录 | Command inbox、Runtime、Gateway-owned data 的归属能从目录和类型名直接识别；不改变现有 Event/Batch 可靠协议 |
 | D | 用故障注入验证边界恢复 | stop hook 丢失、模块 reload、Tower 进程重启、PTY 写入前后崩溃均不会忙时注入或重复消费 |
 | E | 按真实需求引入 Domain Event | 只有出现至少两个独立事实消费者时才建立 `0..N` 订阅和 per-subscriber delivery |
@@ -271,14 +273,11 @@ Port 而制造消费者。
 Codex 复核的五条经逐条对代码核验全部成立，采纳其《修订后的实施顺序》A–E。上文《现状痛点》#1、#2
 已标注修正，《Delta 清单》已标注推翻。此处仅补两点验证中发现、双方均未说透的问题：
 
-### a. Runtime 投影修正（Codex 第 2 节）目前是“哑弹”，且不应排在阶段 A 之后
+### a. Runtime 投影修正（Codex 第 2 节）已独立落地
 
-`resolveWorkbenchBatch` 过早写 `turnCompleted:true`（`coordinator.ts:854-856`）确实与目标循环 6/7 冲突，
-但全库 grep 显示 `lastTurnCompletedAt` **无任何消费者**（仅写不读，见 `coordinator.ts:130` / `:202` / `:214`）——
-即“投影在撒谎，但今天没人信这个谎”，属潜伏/装饰性偏差，非活跃 bug。
-
-关键在于：这是个与端口重构**完全无关**的三行独立修正。建议把「`resolveWorkbenchBatch` 不再写
-`turnCompleted`」从阶段 B 抽出、**前置到阶段 A 之前**单独落地；让一个纯正确性修正卡在大重构后面属顺序倒置。
+这一修正与端口重构无关，当前实现已独立完成：resolve 只结束 durable batch responsibility，
+Provider completion lifecycle 才更新 `lastTurnCompletedAt`。调度仍直接校验 live PTY boundary，
+不依赖 Runtime 展示状态。
 
 ### b. 阶段 D 必须验证一个**已存在**的 fencing 窗口，而非只防持久化边界引入的新窗口
 
