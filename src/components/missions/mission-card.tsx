@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, ArrowUpRight, X, TerminalSquare, Check, Activity, AlertTriangle } from "lucide-react";
+import { GripVertical, ArrowUpRight, X, TerminalSquare, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import type { ActiveExecutionInfo } from "@/actions/agent-actions";
 import type { TerminalControls } from "@/components/task/task-terminal";
 import { TerminalOutlet } from "@/components/task/terminal-portal";
-import { inspectWorkbenchHealth } from "@/components/missions/workbench-health";
+import { WorkbenchHealthBadge } from "@/components/missions/workbench-health-badge";
 
 /**
  * Live "Xm Ys" running-time counter, isolated in its own component so the 1s
@@ -43,63 +43,6 @@ function ElapsedTime({ startedAt, paused }: { startedAt: string | null; paused: 
     <span className="text-[11px] text-muted-foreground ml-1 shrink-0">
       {minutes}m {seconds}s
     </span>
-  );
-}
-
-function WorkbenchHealthBadge({ execution }: { execution: ActiveExecutionInfo }) {
-  const { t } = useI18n();
-  const runtime = execution.workbenchRuntime;
-  if (!execution.isSystemTask) return null;
-  if (!runtime) {
-    return (
-      <Badge variant="outline" className="text-[10px] text-muted-foreground shrink-0">
-        <Activity className="h-3 w-3 mr-1" />
-        {t("missions.workbench.notReported")}
-      </Badge>
-    );
-  }
-  const health = inspectWorkbenchHealth(runtime);
-  const fallbackReason = health.providerTurnInProgress && !runtime.blockedReason
-    ? t("missions.workbench.providerTurn")
-    : null;
-  const detail = [
-    `Workbench generation ${runtime.generation}`,
-    `state=${runtime.state}`,
-    `pending=${runtime.pendingEvents}`,
-    runtime.activeBatchId ? `batch=${runtime.activeBatchId}` : null,
-    runtime.blockedReason,
-    fallbackReason,
-    runtime.lastError,
-    health.synchronizationStale ? t("missions.workbench.executionStale") : null,
-    health.heartbeatStale ? t("missions.workbench.heartbeatStale") : null,
-    runtime.lastHeartbeatAt ? `heartbeat=${new Date(runtime.lastHeartbeatAt).toLocaleString()}` : null,
-  ].filter(Boolean).join("\n");
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Badge
-            variant="outline"
-            className={
-              health.unhealthy
-                ? "text-[10px] text-amber-600 border-amber-500/40 bg-amber-500/10 shrink-0"
-                : "text-[10px] text-emerald-600 border-emerald-500/40 bg-emerald-500/10 shrink-0"
-            }
-          />
-        }
-      >
-        {health.unhealthy
-          ? <AlertTriangle className="h-3 w-3 mr-1" />
-          : <Activity className="h-3 w-3 mr-1" />}
-        G{runtime.generation} · {health.heartbeatStale
-          ? t("missions.workbench.stale")
-          : health.synchronizationStale
-            ? t("missions.workbench.syncing")
-            : runtime.state}
-        {runtime.pendingEvents > 0 ? ` · ${runtime.pendingEvents}` : ""}
-      </TooltipTrigger>
-      <TooltipContent className="max-w-sm whitespace-pre-line">{detail}</TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -192,7 +135,10 @@ export function MissionCard({
         </div>
 
         {/* Status badge */}
-        <WorkbenchHealthBadge execution={execution} />
+        <WorkbenchHealthBadge
+          isSystemTask={execution.isSystemTask}
+          workbenchRuntime={execution.workbenchRuntime}
+        />
         {isRemoving ? (
           <Badge
             variant="outline"
