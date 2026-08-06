@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const pkg = require(path.join(__dirname, "..", "package.json"));
+const CHANGELOG_PATH = path.join(__dirname, "..", "CHANGELOG.md");
 
 const TARGETS = [
   ["darwin", "arm64", "tar.gz"],
@@ -29,6 +30,17 @@ function findFiles(root, predicate, result = []) {
 
 function sha256(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+}
+
+function releaseChanges() {
+  const lines = fs.readFileSync(CHANGELOG_PATH, "utf8").split(/\r?\n/);
+  const heading = `## [${pkg.version}]`;
+  const start = lines.findIndex((line) => line === heading || line.startsWith(`${heading} - `));
+  if (start < 0) throw new Error(`CHANGELOG.md is missing a ${heading} section`);
+  const end = lines.findIndex((line, index) => index > start && /^## \[[^\]]+\]/.test(line));
+  const section = lines.slice(start + 1, end < 0 ? lines.length : end).join("\n").trim();
+  if (!section) throw new Error(`CHANGELOG.md ${heading} section is empty`);
+  return section;
 }
 
 function validateCandidateMetadata(candidate, commit) {
@@ -63,13 +75,14 @@ function validateCandidateMetadata(candidate, commit) {
   };
 }
 
-function candidateNotes(metadata, npmName, targetRows) {
+function candidateNotes(metadata, npmName, targetRows, changes) {
   return `# Tower Release Candidate\n\n` +
     `> **NOT A RELEASE:** This is an unpublished preview built from commit \`${metadata.commit}\`. No Git tag, npm publication, or GitHub Release was created.\n\n` +
     `Source ref: \`${metadata.ref}\`  \n` +
     `Package manifest: \`${metadata.packageName}@${metadata.packageVersion}\` (build identity only; this does not mean the commit was published under this version)  \n` +
     `Workflow run: \`${metadata.workflow.runId}\`, attempt \`${metadata.workflow.runAttempt}\`  \n` +
     `Generated: \`${metadata.generatedAt}\`\n\n` +
+    `## Changes under review\n\n${changes}\n\n` +
     `## Portable targets\n\n| OS | CPU | Asset |\n| --- | --- | --- |\n${targetRows}\n\n` +
     `Every listed target passed the native offline smoke on Node.js 22 and 24 with npm and Prisma download hosts blocked. Each adjacent \`.manifest.json\` file records its package, source commit, runtime policy, platform, and architecture.\n\n` +
     `## Verify and install this Candidate\n\n` +
@@ -80,6 +93,7 @@ function candidateNotes(metadata, npmName, targetRows) {
 function assemble(inputDir, outputDir, commit, options = {}) {
   if (!/^[0-9a-f]{40}$/.test(commit || "")) throw new Error("--commit must be a full Git SHA");
   const candidateMetadata = validateCandidateMetadata(options.candidate, commit);
+  const changes = releaseChanges();
   fs.mkdirSync(outputDir, { recursive: true });
   const copied = [];
   for (const [platform, arch, extension] of TARGETS) {
@@ -108,6 +122,8 @@ function assemble(inputDir, outputDir, commit, options = {}) {
     fs.copyFileSync(path.join(__dirname, installer), path.join(outputDir, installer));
     copied.push(installer);
   }
+  fs.copyFileSync(CHANGELOG_PATH, path.join(outputDir, "CHANGELOG.md"));
+  copied.push("CHANGELOG.md");
   if (candidateMetadata) {
     const metadataName = "CANDIDATE_METADATA.json";
     fs.writeFileSync(path.join(outputDir, metadataName), `${JSON.stringify(candidateMetadata, null, 2)}\n`);
@@ -118,9 +134,10 @@ function assemble(inputDir, outputDir, commit, options = {}) {
   fs.writeFileSync(path.join(outputDir, "SHA256SUMS"), `${sums}\n`);
 
   const targetRows = TARGETS.map(([platform, arch, extension]) => `| ${platform} | ${arch} | \`tower-portable-${platform}-${arch}.${extension}\` |`).join("\n");
-  const notes = candidateMetadata ? candidateNotes(candidateMetadata, npmName, targetRows) : `# Tower v${pkg.version}\n\n` +
+  const notes = candidateMetadata ? candidateNotes(candidateMetadata, npmName, targetRows, changes) : `# Tower v${pkg.version}\n\n` +
     `Package: [\`${pkg.name}@${pkg.version}\`](https://www.npmjs.com/package/${pkg.name}/v/${pkg.version})  \n` +
     `Source commit: \`${commit}\`\n\n` +
+    `## What's changed\n\n${changes}\n\n` +
     `The npm package with provenance remains the standard registry channel. The \`${npmName}\` asset is the exact npm pack input for audit and offline npm clients; it still requires npm dependency resolution. Use a platform portable asset for a registry-free installation. GitHub's automatic source archives are source code, not Tower installers.\n\n` +
     `## Portable targets\n\n| OS | CPU | Asset |\n| --- | --- | --- |\n${targetRows}\n\n` +
     `Every listed target passed a native runner smoke covering first database creation, migrations, Prisma Client/Query/Schema Engines, MCP startup, node-pty, ripgrep, and Tower HTTP startup with npm/Prisma download endpoints blocked. Targets that do not pass are not assembled or published.\n\n` +
@@ -149,5 +166,5 @@ function main() {
   console.log(`[release:assets] assembled ${result.copied.length} immutable assets`);
 }
 
-module.exports = { TARGETS, assemble, candidateNotes, sha256, validateCandidateMetadata };
+module.exports = { TARGETS, assemble, candidateNotes, releaseChanges, sha256, validateCandidateMetadata };
 if (require.main === module) main();

@@ -8,8 +8,9 @@ const { validatePortableDependencies } = require("./build-portable-release.js");
 const projectRoot = path.join(__dirname, "..");
 const EXPECTED_REGISTRY = "https://registry.npmjs.org/";
 const EXPECTED_REPOSITORY = "git+https://github.com/tower-org/tower.git";
+const RELEASE_VERSION = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8")).version;
 const EXPECTED_PACKAGES = new Map([
-  ["package.json", { name: "@tower-org/cli", version: "0.3.1", private: false }],
+  ["package.json", { name: "@tower-org/cli", version: RELEASE_VERSION, private: false }],
   ["packages/ai-sdk/package.json", { name: "@tower-org/ai-sdk", version: "0.1.0", private: true }],
   ["packages/ai-runtime/package.json", { name: "@tower-org/ai-runtime", version: "0.1.0", private: true }],
   ["packages/ai-provider-claude/package.json", { name: "@tower-org/ai-provider-claude", version: "0.1.0", private: true }],
@@ -114,5 +115,5 @@ function main() {
   console.log(`[release:gate] ${result.packageName}@${result.version} -> ${result.registry}`);
 }
 
-module.exports = { assertReleaseConfiguration, EXPECTED_PACKAGES, EXPECTED_REGISTRY };
+module.exports = { assertReleaseConfiguration, EXPECTED_PACKAGES, EXPECTED_REGISTRY, RELEASE_VERSION };
 if (require.main === module) main();

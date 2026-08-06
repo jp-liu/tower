@@ -8,7 +8,8 @@ const { execFileSync, spawn } = require("child_process");
 
 const projectRoot = path.join(__dirname, "..");
 const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf-8"));
-const publishedPackageSpec = process.env.TOWER_SMOKE_PACKAGE_SPEC?.trim() || null;
+const publishedPackageSpec = process.env.TOWER_SMOKE_PACKAGE_SPEC?.trim()
+  || (process.argv.includes("--published") ? `${pkg.name}@${pkg.version}` : null);
 let port = process.env.TOWER_SMOKE_PORT || null;
 const host = "127.0.0.1";
 const stamp = `${Date.now()}`;

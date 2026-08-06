@@ -52,7 +52,7 @@ export const qwenManifest = {
     supportedVersions: ">=0.18.0 <1.0.0",
     managedByTower: false,
   },
-  compatibility: { tower: ">=0.3.0 <0.4.0", node: ">=20" },
+  compatibility: { tower: ">=0.3.0 <1.0.0", node: ">=20" },
   capabilities: {
     sessions: { fresh: true, resume: true, continue: true },
     query: { generate: true, stream: true },

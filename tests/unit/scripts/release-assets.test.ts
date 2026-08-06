@@ -6,7 +6,16 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const { assemble, TARGETS } = require("../../../scripts/assemble-release-assets.js");
-const { assertReleaseIdentity, publish, resolveTagCommit, sha256, verifyExistingAsset } = require("../../../scripts/publish-github-release.js");
+const {
+  assertReleaseIdentity,
+  createRelease,
+  getRelease,
+  publish,
+  publishRelease,
+  resolveTagCommit,
+  sha256,
+  verifyExistingAsset,
+} = require("../../../scripts/publish-github-release.js");
 const roots: string[] = [];
 
 afterEach(() => {
@@ -23,15 +32,16 @@ describe("release asset assembly", () => {
       const name = `tower-portable-${platform}-${arch}.${extension}`;
       writeFileSync(path.join(input, name), `${platform}-${arch}`);
       writeFileSync(path.join(input, `${name}.manifest.json`), JSON.stringify({
-        version: "0.3.1", platform, arch, sourceCommit: commit,
+        version: "0.4.0", platform, arch, sourceCommit: commit,
       }));
     }
     mkdirSync(path.join(input, "npm"));
-    writeFileSync(path.join(input, "npm", "tower-org-cli-0.3.1.tgz"), "npm-pack");
+    writeFileSync(path.join(input, "npm", "tower-org-cli-0.4.0.tgz"), "npm-pack");
 
     const result = assemble(input, output, commit);
-    expect(result.copied).toHaveLength(9);
-    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(9);
+    expect(result.copied).toHaveLength(10);
+    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(10);
+    expect(readFileSync(path.join(output, "CHANGELOG.md"), "utf8")).toContain("## [0.4.0]");
     expect(readFileSync(path.join(output, "install.cmd"), "utf8")).toContain("%~dp0install.ps1");
     expect(readFileSync(path.join(output, "RELEASE_NOTES.md"), "utf8"))
       .toContain("Node.js >=22.0.0");
@@ -48,10 +58,10 @@ describe("release asset assembly", () => {
       const name = `tower-portable-${platform}-${arch}.${extension}`;
       writeFileSync(path.join(input, name), `${platform}-${arch}`);
       writeFileSync(path.join(input, `${name}.manifest.json`), JSON.stringify({
-        version: "0.3.1", platform, arch, sourceCommit: commit,
+        version: "0.4.0", platform, arch, sourceCommit: commit,
       }));
     }
-    writeFileSync(path.join(input, "tower-org-cli-0.3.1.tgz"), "npm-pack");
+    writeFileSync(path.join(input, "tower-org-cli-0.4.0.tgz"), "npm-pack");
 
     const result = assemble(input, output, commit, { candidate: {
       ref: "refs/heads/candidate-preview",
@@ -70,12 +80,12 @@ describe("release asset assembly", () => {
       ref: "refs/heads/candidate-preview",
       dispatchRef: "refs/heads/main",
       packageName: "@tower-org/cli",
-      packageVersion: "0.3.1",
+      packageVersion: "0.4.0",
       workflow: { runId: "123456789", runAttempt: "2" },
       generatedAt: "2026-08-05T04:03:02Z",
     });
-    expect(result.copied).toHaveLength(15);
-    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(15);
+    expect(result.copied).toHaveLength(16);
+    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(16);
     for (const [platform, arch, extension] of TARGETS) {
       expect(readFileSync(path.join(output, `tower-portable-${platform}-${arch}.${extension}.manifest.json`), "utf8"))
         .toContain(commit);
@@ -85,7 +95,7 @@ describe("release asset assembly", () => {
     expect(notes).toContain("build identity only");
     expect(notes).toContain("--asset-dir . --verify");
     expect(notes).not.toContain("releases/download");
-    expect(notes).not.toContain("0.4.0");
+    expect(notes).toContain("@tower-org/cli@0.4.0");
   });
 
   it("rejects incomplete or non-UTC Candidate identity", () => {
@@ -112,21 +122,51 @@ describe("release asset assembly", () => {
     })).toBe(commit);
   });
 
-  it("creates a missing release and uploads every immutable asset", () => {
+  it("creates a draft and only publishes it with a final patch", () => {
+    let created: Record<string, unknown> | undefined;
+    let patched: Record<string, unknown> | undefined;
+    const draft = createRelease("tower-org/tower", "v0.4.0", "a".repeat(40), "notes", (args: string[]) => {
+      created = JSON.parse(readFileSync(args.at(-1)!, "utf8"));
+      return { id: 42, ...created };
+    });
+    expect(created).toMatchObject({ tag_name: "v0.4.0", target_commitish: "a".repeat(40), draft: true });
+    publishRelease("tower-org/tower", draft, (args: string[]) => {
+      patched = JSON.parse(readFileSync(args.at(-1)!, "utf8"));
+      return { ...draft, draft: false };
+    });
+    expect(patched).toEqual({ draft: false });
+  });
+
+  it("finds an unpublished draft when the public tag endpoint returns 404", () => {
+    const error = Object.assign(new Error("missing"), { status: 1, stderr: "HTTP 404: Not Found" });
+    const draft = { id: 42, tag_name: "v0.4.0", draft: true };
+    expect(getRelease("tower-org/tower", "v0.4.0", (args: string[]) => {
+      if (args[1].includes("/releases/tags/")) throw error;
+      return [[draft]];
+    })).toEqual(draft);
+  });
+
+  it("creates a draft, uploads every immutable asset, then publishes it", () => {
     const root = mkdtempSync(path.join(tmpdir(), "tower-assets-publish-"));
     roots.push(root);
     const notesPath = path.join(root, "RELEASE_NOTES.md");
     writeFileSync(notesPath, "release notes\n");
     writeFileSync(path.join(root, "SHA256SUMS"), "checksums\n");
     const uploaded: string[] = [];
-    const release = { tag_name: "v0.3.1", body: "release notes\n", assets: [] };
-    publish({ repository: "tower-org/tower", tag: "v0.3.1", commit: "a".repeat(40), assetsDir: root, notesPath }, {
+    const published: number[] = [];
+    const release = { id: 42, tag_name: "v0.4.0", body: "release notes\n", assets: [], draft: true };
+    publish({ repository: "tower-org/tower", tag: "v0.4.0", commit: "a".repeat(40), assetsDir: root, notesPath }, {
       resolveTagCommit: () => "a".repeat(40),
       getRelease: () => null,
       createRelease: () => release,
       uploadAsset: (_repository: string, _tag: string, file: string) => uploaded.push(path.basename(file)),
+      publishRelease: (_repository: string, draft: { id: number }) => {
+        published.push(draft.id);
+        return { ...release, draft: false };
+      },
     });
     expect(uploaded).toEqual(["SHA256SUMS"]);
+    expect(published).toEqual([42]);
   });
 
   it("repairs a partial release but refuses a moved tag before any upload", () => {
@@ -137,18 +177,37 @@ describe("release asset assembly", () => {
     writeFileSync(notesPath, "release notes\n");
     writeFileSync(assetPath, "checksums\n");
     const uploaded: string[] = [];
-    publish({ repository: "tower-org/tower", tag: "v0.3.1", commit: "a".repeat(40), assetsDir: root, notesPath }, {
+    const published: number[] = [];
+    publish({ repository: "tower-org/tower", tag: "v0.4.0", commit: "a".repeat(40), assetsDir: root, notesPath }, {
       resolveTagCommit: () => "a".repeat(40),
-      getRelease: () => ({ tag_name: "v0.3.1", body: "release notes", assets: [{ name: "SHA256SUMS" }] }),
+      getRelease: () => ({ id: 43, tag_name: "v0.4.0", body: "release notes", draft: true, assets: [{ name: "SHA256SUMS" }] }),
       verifyExistingAsset: () => sha256(assetPath),
       uploadAsset: (_repository: string, _tag: string, file: string) => uploaded.push(file),
+      publishRelease: (_repository: string, draft: { id: number }) => {
+        published.push(draft.id);
+        return { ...draft, draft: false };
+      },
     });
     expect(uploaded).toEqual([]);
+    expect(published).toEqual([43]);
 
     expect(() => publish({ repository: "tower-org/tower", tag: "v0.3.1", commit: "a".repeat(40), assetsDir: root, notesPath }, {
       resolveTagCommit: () => "b".repeat(40),
       getRelease: () => { throw new Error("must not inspect a release for a moved tag"); },
     })).toThrow(/remote tag.*not release commit/);
+  });
+
+  it("does not mutate an immutable published release with missing assets", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "tower-assets-immutable-"));
+    roots.push(root);
+    const notesPath = path.join(root, "RELEASE_NOTES.md");
+    writeFileSync(notesPath, "release notes\n");
+    writeFileSync(path.join(root, "SHA256SUMS"), "checksums\n");
+    expect(() => publish({ repository: "tower-org/tower", tag: "v0.4.0", commit: "a".repeat(40), assetsDir: root, notesPath }, {
+      resolveTagCommit: () => "a".repeat(40),
+      getRelease: () => ({ tag_name: "v0.4.0", body: "release notes", draft: false, immutable: true, assets: [] }),
+      uploadAsset: () => { throw new Error("must not upload"); },
+    })).toThrow(/create a new version/);
   });
 
   it("does not assemble a release with a missing target", () => {

@@ -42,7 +42,7 @@ function fixture() {
   const manifest = {
     schema: 1,
     package: "@tower-org/cli",
-    version: "0.3.1",
+    version: "0.4.0",
     platform,
     arch: process.arch,
     node: { minimum: "22.0.0", tested: ["22", "24"], knownIncompatible: [] },
@@ -58,7 +58,7 @@ function fixture() {
     file(root, "install.ps1");
   }
   file(root, "bin/tower");
-  file(root, `${packageRoot}/package.json`, JSON.stringify({ name: "@tower-org/cli", version: "0.3.1" }));
+  file(root, `${packageRoot}/package.json`, JSON.stringify({ name: "@tower-org/cli", version: "0.4.0" }));
   file(root, `${packageRoot}/dist/mcp-server.cjs`);
   file(root, `${packageRoot}/.next/standalone/server.js`);
   file(root, `${packageRoot}/prisma/schema.prisma`);
@@ -166,8 +166,8 @@ describe("portable release npm installation", () => {
 
 describe("portable Prisma path normalization", () => {
   it("normalizes Windows short and long roots in slash and JSON-escaped forms", () => {
-    const shortRoot = String.raw`C:\Users\RUNNER~1\AppData\Local\Temp\tower-portable-build-yerjFc\tower-v0.3.1-windows-x64\runtime\package`;
-    const longRoot = String.raw`C:\Users\runneradmin\AppData\Local\Temp\tower-portable-build-yerjFc\tower-v0.3.1-windows-x64\runtime\package`;
+    const shortRoot = String.raw`C:\Users\RUNNER~1\AppData\Local\Temp\tower-portable-build-yerjFc\tower-v0.4.0-windows-x64\runtime\package`;
+    const longRoot = String.raw`C:\Users\runneradmin\AppData\Local\Temp\tower-portable-build-yerjFc\tower-v0.4.0-windows-x64\runtime\package`;
     const sources = [
       JSON.stringify({ sourceFilePath: `${shortRoot}\\prisma\\schema.prisma` }),
       `const sourceFilePath = String.raw\`${longRoot}\\prisma\\schema.prisma\`;`,
@@ -184,7 +184,7 @@ describe("portable Prisma path normalization", () => {
   });
 
   it("normalizes the relative traversal emitted by Prisma without consuming its suffix", () => {
-    const relativeRoot = String.raw`.\..\..\..\..\runneradmin\AppData\Local\Temp\tower-portable-build-84VlnQ\tower-v0.3.1-windows-x64\runtime\package`;
+    const relativeRoot = String.raw`.\..\..\..\..\runneradmin\AppData\Local\Temp\tower-portable-build-84VlnQ\tower-v0.4.0-windows-x64\runtime\package`;
     const sources = [
       JSON.stringify({ sourceFilePath: `${relativeRoot}\\prisma\\schema.prisma` }),
       `const sourceFilePath = String.raw\`${relativeRoot}\\prisma\\schema.prisma\`;`,
@@ -298,7 +298,7 @@ describe("portable release canary", () => {
   it("removes temporary build roots from every generated Prisma entry", () => {
     const { root, manifest } = fixture();
     const packageRoot = path.join(root, ...manifest.packageRoot.split("/"));
-    const relativeRoot = String.raw`.\..\..\..\..\..\..\..\..\runneradmin\AppData\Local\Temp\tower-portable-build-84VlnQ\tower-v0.3.1-windows-x64\runtime\package`;
+    const relativeRoot = String.raw`.\..\..\..\..\..\..\..\..\runneradmin\AppData\Local\Temp\tower-portable-build-84VlnQ\tower-v0.4.0-windows-x64\runtime\package`;
     const sources = {
       "edge.js": JSON.stringify({ sourceFilePath: `${relativeRoot}\\prisma\\schema.prisma` }),
       "index.js": `const sourceFilePath = String.raw\`${relativeRoot}\\prisma\\schema.prisma\`;`,

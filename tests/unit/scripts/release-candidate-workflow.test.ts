@@ -143,6 +143,18 @@ describe("Release Candidate workflow", () => {
     expect(assemble?.run).toContain("--run-id");
     expect(assemble?.run).toContain("--run-attempt");
     expect(assemble?.run).toContain("--generated-at");
+    expect(assemble?.env?.CANDIDATE_REF).toBe("${{ needs.prepare.outputs.source-ref }}");
+    expect(assemble?.run).toContain('--candidate-ref "$CANDIDATE_REF"');
+    expect(assemble?.run).not.toContain('${{ needs.prepare.outputs.source-ref }}');
+  });
+
+  it("requires exactly one npm tarball before production publication", () => {
+    const locate = release.jobs.publish.steps.find((step) => step.name === "Locate the exact npm pack artifact");
+    const publish = release.jobs.publish.steps.find((step) => step.name === "Publish or verify npm package with provenance");
+    expect(locate?.run).toContain('tarballs=("$RUNNER_TEMP"/npm-pack/*.tgz)');
+    expect(locate?.run).toContain('${#tarballs[@]}');
+    expect(publish?.run).toContain('${{ steps.npm-tarball.outputs.path }}');
+    expect(publish?.run).not.toContain("basename");
   });
 
   it("contains no publication authority, environment, secret, or command", () => {

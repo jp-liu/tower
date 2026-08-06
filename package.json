@@ -1,6 +1,6 @@
 {
   "name": "@tower-org/cli",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
   "license": "MIT",
   "repository": {
@@ -70,7 +70,7 @@
     "release:gate": "node scripts/release-gate.js",
     "release:prepare": "pnpm release:gate && pnpm test:e2e:release && pnpm release:pack:check && pnpm release:entrypoints:check && pnpm release:docs:check",
     "release:smoke": "node scripts/release-smoke.js",
-    "release:smoke:published": "TOWER_SMOKE_PACKAGE_SPEC='@tower-org/cli@0.3.1' node scripts/release-smoke.js",
+    "release:smoke:published": "node scripts/release-smoke.js --published",
     "release:pack:check": "node scripts/release-package-canary.js",
     "release:entrypoints:check": "node scripts/check-release-entrypoints.js",
     "release:portable:build": "node scripts/build-portable-release.js",

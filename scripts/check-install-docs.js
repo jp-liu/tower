@@ -5,7 +5,6 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const projectRoot = path.join(__dirname, "..");
-const pkg = require(path.join(projectRoot, "package.json"));
 const docs = ["docs/guide/getting-started.md", "docs/en/guide/getting-started.md"];
 const shellOptions = [
   "--version", "--download-base", "--asset-dir", "--prefix", "--bin-dir",
@@ -45,7 +44,7 @@ function main() {
     "tower-portable-linux-arm64.tar.gz", "tower-portable-linux-x64.tar.gz",
     "tower-portable-windows-x64.tar.gz", "binaries.prisma.sh", "node-pty",
     "service install", "install.cmd", "--asset-dir", "--download-base", "--rollback",
-    "--uninstall", "--verify", "--no-start", "~/.tower", `VERSION=${pkg.version}`,
+    "--uninstall", "--verify", "--no-start", "~/.tower", "VERSION=X.Y.Z",
   ];
   for (const relative of docs) {
     const source = fs.readFileSync(path.join(projectRoot, relative), "utf8");

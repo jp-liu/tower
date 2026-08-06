@@ -163,12 +163,15 @@ jobs:
           path: ${{ runner.temp }}/candidate-input/npm-pack
       - name: Assemble Candidate assets
         shell: bash
+        env:
+          CANDIDATE_COMMIT: ${{ needs.prepare.outputs.commit }}
+          CANDIDATE_REF: ${{ needs.prepare.outputs.source-ref }}
         run: |
           node scripts/assemble-release-assets.js \
             --input "$RUNNER_TEMP/candidate-input" \
             --output "$RUNNER_TEMP/candidate-assets" \
-            --commit "${{ needs.prepare.outputs.commit }}" \
-            --candidate-ref "${{ needs.prepare.outputs.source-ref }}" \
+            --commit "$CANDIDATE_COMMIT" \
+            --candidate-ref "$CANDIDATE_REF" \
             --dispatch-ref "$GITHUB_REF" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \

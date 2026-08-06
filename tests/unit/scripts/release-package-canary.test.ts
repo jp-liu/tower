@@ -10,7 +10,7 @@ const {
 
 const manifest = {
   name: "@tower-org/cli",
-  version: "0.3.1",
+  version: "0.4.0",
   publishConfig: {
     access: "public",
     registry: "https://registry.npmjs.org/",
@@ -25,7 +25,7 @@ const runtimeManifest = {
 function pack(extra: string[] = []) {
   return {
     name: "@tower-org/cli",
-    version: "0.3.1",
+    version: "0.4.0",
     size: 1,
     unpackedSize: 2,
     files: [...REQUIRED_FILES, "skills/tower/SKILL.md", "extensions/tower-agent/manifest.json", ...extra]

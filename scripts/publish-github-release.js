@@ -19,24 +19,42 @@ function ghJson(args, options = {}) {
   return JSON.parse(execFileSync("gh", args, { encoding: "utf8", ...options }));
 }
 
-function getRelease(repository, tag) {
+function getRelease(repository, tag, api = ghJson) {
   try {
-    return ghJson(["api", `repos/${repository}/releases/tags/${tag}`], { stdio: ["ignore", "pipe", "pipe"] });
+    return api(["api", `repos/${repository}/releases/tags/${tag}`], { stdio: ["ignore", "pipe", "pipe"] });
   } catch (error) {
-    if (error.status === 1 && String(error.stderr).includes("HTTP 404")) return null;
-    throw error;
+    if (error.status !== 1 || !String(error.stderr).includes("HTTP 404")) throw error;
   }
+  const pages = api(["api", `repos/${repository}/releases?per_page=100`, "--paginate", "--slurp"]);
+  return pages.flat().find((release) => release.draft && release.tag_name === tag) || null;
 }
 
-function createRelease(repository, tag, commit, notes) {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "tower-release-create-"));
+function withJsonInput(prefix, payload, callback) {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   const input = path.join(temporary, "release.json");
   try {
-    fs.writeFileSync(input, JSON.stringify({ tag_name: tag, target_commitish: commit, name: tag, body: notes, draft: false, prerelease: false }));
-    return ghJson(["api", "--method", "POST", `repos/${repository}/releases`, "--input", input]);
+    fs.writeFileSync(input, JSON.stringify(payload));
+    return callback(input);
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
+}
+
+function createRelease(repository, tag, commit, notes, api = ghJson) {
+  return withJsonInput("tower-release-create-", {
+    tag_name: tag,
+    target_commitish: commit,
+    name: tag,
+    body: notes,
+    draft: true,
+    prerelease: false,
+  }, (input) => api(["api", "--method", "POST", `repos/${repository}/releases`, "--input", input]));
+}
+
+function publishRelease(repository, release, api = ghJson) {
+  if (!release.draft) return release;
+  return withJsonInput("tower-release-publish-", { draft: false }, (input) =>
+    api(["api", "--method", "PATCH", `repos/${repository}/releases/${release.id}`, "--input", input]));
 }
 
 function resolveTagCommit(repository, tag, api = ghJson) {
@@ -92,7 +110,7 @@ function uploadAsset(repository, tag, file) {
 }
 
 function publish({ repository, tag, commit, assetsDir, notesPath }, operations = {}) {
-  const client = { createRelease, getRelease, resolveTagCommit, uploadAsset, verifyExistingAsset, ...operations };
+  const client = { createRelease, getRelease, publishRelease, resolveTagCommit, uploadAsset, verifyExistingAsset, ...operations };
   const notes = fs.readFileSync(notesPath, "utf8");
   const remoteCommit = client.resolveTagCommit(repository, tag);
   if (remoteCommit !== commit) {
@@ -114,9 +132,14 @@ function publish({ repository, tag, commit, assetsDir, notesPath }, operations =
       console.log(`[release:github] reuse ${name} (${localHash})`);
       continue;
     }
+    if (!release.draft && release.immutable) {
+      throw new Error(`published immutable release ${tag} is missing ${name}; create a new version instead of mutating it`);
+    }
     client.uploadAsset(repository, tag, file);
   }
-  console.log(`[release:github] ${tag} assets are complete`);
+  if (release.draft) release = client.publishRelease(repository, release);
+  console.log(`[release:github] ${tag} assets are complete and release is published`);
+  return release;
 }
 
 function main() {
@@ -129,5 +152,15 @@ function main() {
   publish({ repository, tag, commit, assetsDir: path.resolve(assetsDir), notesPath: path.resolve(notesPath) });
 }
 
-module.exports = { assertReleaseIdentity, existingAssetHash, publish, resolveTagCommit, sha256, verifyExistingAsset };
+module.exports = {
+  assertReleaseIdentity,
+  createRelease,
+  existingAssetHash,
+  getRelease,
+  publish,
+  publishRelease,
+  resolveTagCommit,
+  sha256,
+  verifyExistingAsset,
+};
 if (require.main === module) main();

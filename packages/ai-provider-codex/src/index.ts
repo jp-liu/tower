@@ -31,7 +31,7 @@ export const codexManifest = {
     supportedVersions: ">=0.1.0",
     managedByTower: false,
   },
-  compatibility: { tower: ">=0.3.0 <0.4.0", node: ">=18" },
+  compatibility: { tower: ">=0.3.0 <1.0.0", node: ">=18" },
   capabilities: {
     sessions: { fresh: true, resume: true, continue: true },
     query: { generate: true, stream: true },

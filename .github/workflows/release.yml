@@ -199,13 +199,24 @@ jobs:
           TOWER_RELEASE_TAG: ${{ inputs.tag }}
           TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
         run: node scripts/release-context.js --workflow-sha "$GITHUB_SHA" --workflow-definition-sha "$GITHUB_WORKFLOW_SHA" --ref "$GITHUB_REF"
+      - name: Locate the exact npm pack artifact
+        id: npm-tarball
+        shell: bash
+        run: |
+          shopt -s nullglob
+          tarballs=("$RUNNER_TEMP"/npm-pack/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ]; then
+            echo "Expected exactly one npm tarball, found ${#tarballs[@]}" >&2
+            exit 1
+          fi
+          printf 'path=%s\n' "${tarballs[0]}" >> "$GITHUB_OUTPUT"
       - name: Publish or verify npm package with provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           TOWER_RELEASE_APPROVED: ${{ inputs.confirmation }}
           TOWER_RELEASE_TAG: ${{ inputs.tag }}
           TOWER_RELEASE_COMMIT: ${{ github.sha }}
-        run: bash scripts/release.sh --publish --tarball "$RUNNER_TEMP/npm-pack/$(basename "$RUNNER_TEMP"/npm-pack/*.tgz)"
+        run: bash scripts/release.sh --publish --tarball "${{ steps.npm-tarball.outputs.path }}"
       - name: Create or repair GitHub Release without overwriting conflicts
         env:
           GH_TOKEN: ${{ github.token }}

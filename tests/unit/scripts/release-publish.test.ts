@@ -50,7 +50,7 @@ case "$1" in
         esac ;;
       *)
         case "$NPM_TEST_MODE" in
-          existing|conflict) printf '%s\\n' '0.3.1' ;;
+          existing|conflict) printf '%s\\n' '0.4.0' ;;
           absent) printf '%s\\n' 'npm error code E404' >&2; exit 1 ;;
           lookup-failure) printf '%s\\n' 'npm error code EAI_AGAIN' >&2; exit 1 ;;
         esac ;;
@@ -65,8 +65,8 @@ esac
     env: {
       ...process.env,
       PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
-      TOWER_RELEASE_APPROVED: "@tower-org/cli@0.3.1",
-      TOWER_RELEASE_TAG: "v0.3.1",
+      TOWER_RELEASE_APPROVED: "@tower-org/cli@0.4.0",
+      TOWER_RELEASE_TAG: "v0.4.0",
       TOWER_RELEASE_COMMIT: commit,
       NPM_TEST_LOG: log,
       NPM_TEST_MODE: mode,
@@ -94,14 +94,14 @@ describe("npm release recovery boundary", () => {
   it("publishes only after npm explicitly reports E404", () => {
     const result = runRelease("absent");
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Confirmed @tower-org/cli@0.3.1 is absent");
+    expect(result.stdout).toContain("Confirmed @tower-org/cli@0.4.0 is absent");
     expect(result.calls).toMatch(/^publish .*tower\.tgz/m);
   });
 
   it("does not publish when the npm lookup fails ambiguously", () => {
     const result = runRelease("lookup-failure");
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("could not prove @tower-org/cli@0.3.1 is absent");
+    expect(result.stderr).toContain("could not prove @tower-org/cli@0.4.0 is absent");
     expect(result.calls).not.toMatch(/^publish /m);
   });
 

@@ -12,7 +12,7 @@ describe("release configuration gate", () => {
   it("accepts the fixed organization migration matrix", () => {
     expect(assertReleaseConfiguration()).toEqual({
       packageName: "@tower-org/cli",
-      version: "0.3.1",
+      version: "0.4.0",
       registry: EXPECTED_REGISTRY,
     });
     expect([...EXPECTED_PACKAGES.values()]).toContainEqual({

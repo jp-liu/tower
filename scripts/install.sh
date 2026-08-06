@@ -15,7 +15,7 @@ usage() {
 Usage: install.sh [options]
 
 Options:
-  --version VERSION       Release version (for example 0.3.1 or latest)
+  --version VERSION       Release version (for example X.Y.Z or latest)
   --download-base URL     HTTPS directory containing release assets
   --asset-dir DIR         Install from already-downloaded offline assets
   --prefix DIR            User installation root

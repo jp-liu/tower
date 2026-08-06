@@ -1,3 +1,75 @@
+# Changelog
+
+All notable changes to Tower are documented here. Release pages use the matching
+section from this file and attach the complete changelog as an immutable asset.
+
+The format follows Keep a Changelog and versions follow Semantic Versioning.
+
+## [0.4.0] - 2026-08-06
+
+### Added
+
+- Registry-free portable distributions for macOS arm64/x64, Linux arm64/x64,
+  and Windows x64, with installers, platform manifests, and SHA-256 checksums.
+- A five-platform Release Candidate workflow that produces reviewable artifacts
+  without creating a tag, publishing npm, or creating a GitHub Release.
+- Durable Gateway-to-Workbench project discussions, work requests, completion
+  delivery, and bounded OWNER capability routing.
+- Guaranteed final OWNER notification and recovery states for unattended goals.
+- A Windows CMD installer entry point alongside PowerShell installation.
+
+### Changed
+
+- Workbench availability now follows provider turns and durable pending work;
+  terminal lifetime and delayed stop hooks no longer keep an idle Workbench busy.
+- Assistant sessions use bounded Tower-owned history, preserve explicit
+  workspace/project bindings per session, and hide internal CLI carrier sessions.
+- Missions presents localized Workbench status, pending count, and heartbeat
+  without exposing internal generation numbers.
+- Backups remain an explicit Settings action; Tower no longer starts an
+  undocumented, default-enabled scheduled backup loop in the server process.
+- GitHub Pages documentation now separates product features, Gateway,
+  Workbench, durable protocol, MCP, OpenClaw integration, and AI Provider
+  extensions. Version-specific guide pages moved into this changelog.
+
+### Fixed
+
+- Restored Workbench queue draining after idle resume and fenced delayed provider
+  callbacks from newer turns.
+- Hardened Windows portable builds, Prisma path normalization, npm invocation,
+  and native probe shutdown.
+- Restored Assistant attachment/goal-mode tools and built-in CLI Provider
+  registration after the runtime refactor.
+- Removed a company-environment Feishu screenshot from the public documentation.
+
+### Security
+
+- Production startup now rejects wildcard and LAN bind addresses; supported CLI
+  and unattended-service startup paths remain loopback-only.
+- Release identity is bound to one tag, commit, package version, repository, and
+  explicit approval value; recovery refuses moved tags or conflicting assets.
+- Candidate metadata is passed through environment variables rather than direct
+  workflow expression interpolation in shell commands.
+- GitHub publication uploads and verifies assets on a recoverable draft, then
+  publishes once so repository-level immutable releases can lock the tag and assets.
+
+## [0.3.1] - 2026-08-04
+
+### Added
+
+- Recoverable Workbench inbox batches with ACK, leases, heartbeat, recovery
+  scans, and generation fencing.
+- Gateway queue, task-created, reviewed-result, and delivery-outbox flow.
+- OWNER/NON_OWNER routing, scoped channel authorization, remote repository
+  review, and user-managed unattended services.
+
+### Fixed
+
+- Empty Workbench queues no longer report false busy states or resurrect an idle
+  coordinator.
+- Platform delivery failures retry independently without rolling back completed
+  Tower work.
+
 ## [0.3.0](https://github.com/tower-org/tower/compare/v0.2.60...v0.3.0) (2026-07-26)
 
 ### User-visible capabilities
