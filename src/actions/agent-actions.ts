@@ -33,6 +33,7 @@ import {
   executeTerminalPrestartFallback,
   normalizeCapabilityError,
 } from "@tower-org/ai-runtime";
+import type { TaskMessage } from "@prisma/client";
 
 export interface ActiveExecutionInfo {
   executionId: string;
@@ -70,6 +71,54 @@ export interface TerminalExecutionResult extends TerminalTargetSnapshot {
 }
 
 const log = logger.create("agent-actions");
+const RECENT_CONVERSATION_LIMIT = 10;
+
+function isWorkbenchEventBatchMessage(message: Pick<TaskMessage, "metadata">): boolean {
+  if (!message.metadata) return false;
+
+  try {
+    const metadata: unknown = JSON.parse(message.metadata);
+    return (
+      typeof metadata === "object"
+      && metadata !== null
+      && !Array.isArray(metadata)
+      && "type" in metadata
+      && metadata.type === "workbench_event_batch"
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function getRecentConversationMessages(
+  taskId: string,
+  isWorkbench: boolean,
+): Promise<TaskMessage[]> {
+  const query = {
+    where: { taskId },
+    orderBy: { createdAt: "desc" as const },
+    take: RECENT_CONVERSATION_LIMIT,
+  };
+  if (!isWorkbench) return db.taskMessage.findMany(query);
+
+  const messages: TaskMessage[] = [];
+  let cursor: { id: string } | undefined;
+  while (messages.length < RECENT_CONVERSATION_LIMIT) {
+    const page = await db.taskMessage.findMany({
+      where: query.where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: query.take,
+      ...(cursor ? { cursor, skip: 1 } : {}),
+    });
+    for (const message of page) {
+      if (!isWorkbenchEventBatchMessage(message)) messages.push(message);
+      if (messages.length === RECENT_CONVERSATION_LIMIT) break;
+    }
+    if (page.length < RECENT_CONVERSATION_LIMIT) break;
+    cursor = { id: page[page.length - 1].id };
+  }
+  return messages;
+}
 
 async function reportUnattendedGoalLifecycle(
   taskId: string,
@@ -809,6 +858,9 @@ export async function startPtyExecution(
       "REVIEW_ONLY projects cannot start terminal execution. The owner must explicitly change the project to FULL_WORK first.",
     );
   }
+  const isWorkbench = task.labels.some(
+    (tl) => tl.label.name === TOWER_LABEL_NAME && tl.label.isBuiltin
+  );
 
   // 1a. Enforce concurrency limit
   const maxConcurrent = await readConfigValue<number>("system.maxConcurrentExecutions", 20);
@@ -830,11 +882,7 @@ export async function startPtyExecution(
   // When cleanStart is true, skip all context — user wants a pure CLI terminal.
   let fullPrompt = "";
   if (!cleanStart) {
-    const messages = await db.taskMessage.findMany({
-      where: { taskId },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    });
+    const messages = await getRecentConversationMessages(taskId, isWorkbench);
     const contextParts = [
       `Task: ${task.title}`,
       task.description ? `Description: ${task.description}` : "",
@@ -975,9 +1023,6 @@ export async function startPtyExecution(
     // and review work rather than doing it. Either/or, never both.
     let appendSystemPrompt = "";
     const { CONFIG_DEFAULTS } = await import("@/lib/config-defaults");
-    const isWorkbench = task.labels.some(
-      (tl) => tl.label.name === TOWER_LABEL_NAME && tl.label.isBuiltin
-    );
     const directiveKey = isWorkbench ? "task.workbenchDirective" : "task.systemDirective";
     const systemDirective = await readConfigValue<string>(
       directiveKey,

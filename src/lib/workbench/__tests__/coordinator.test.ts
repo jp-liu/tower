@@ -815,7 +815,17 @@ describe("Workbench durable coordinator", () => {
       await drainReadyWorkbenchParent("parent", async (batch) => {
         deliveries.push(batch.prompt);
       });
+      await expect(reconcilePendingWorkbenchEvents(ensure)).resolves.toEqual({
+        scanned: 0,
+        woken: 0,
+        busy: 0,
+        failed: 0,
+      });
+      await drainReadyWorkbenchParent("parent", async (batch) => {
+        deliveries.push(batch.prompt);
+      });
       expect(deliveries).toHaveLength(1);
+      expect(ensure).toHaveBeenCalledTimes(1);
       expect(await prisma.workbenchEvent.findFirst()).toMatchObject({ state: "PROCESSING" });
       expect(await prisma.workbenchRuntime.findUnique({ where: { taskId: "parent" } }))
         .toMatchObject({ executionId: "parent-exec-2", state: "BUSY" });

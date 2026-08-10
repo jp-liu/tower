@@ -159,6 +159,7 @@ function terminalTarget(
       commandPath: providerName,
       adapter: {
         buildSessionProcess: ({ cwd, envPatch, systemPrompt }: {
+          prompt: string;
           cwd: string;
           envPatch?: Record<string, string | null>;
           systemPrompt?: string;
@@ -180,6 +181,48 @@ function injectedDirective(): string {
   return args[args.indexOf("--append-system-prompt") + 1];
 }
 
+function message(
+  id: string,
+  content: string,
+  metadata: string | null = null,
+  role: "USER" | "ASSISTANT" | "SYSTEM" = "USER",
+) {
+  return {
+    id,
+    taskId: "t1",
+    executionId: null,
+    role,
+    content,
+    metadata,
+    createdAt: new Date(),
+  };
+}
+
+function captureTargetPrompts(target: ReturnType<typeof terminalTarget>): string[] {
+  const prompts: string[] = [];
+  target.cli.adapter.buildSessionProcess = ({ prompt, cwd, envPatch, systemPrompt }) => {
+    prompts.push(prompt);
+    return {
+      command: target.cli.commandPath,
+      args: systemPrompt ? ["--append-system-prompt", systemPrompt] : [],
+      cwd,
+      envPatch,
+      startsAtInputBoundary: !prompt,
+    };
+  };
+  return prompts;
+}
+
+function captureFreshPrompts(target = terminalTarget()): string[] {
+  const prompts = captureTargetPrompts(target);
+  vi.mocked(resolveTerminalTargetPlan).mockResolvedValue({
+    slot: "terminal",
+    targets: [target],
+    migrationStatus: "complete",
+  } as never);
+  return prompts;
+}
+
 describe("startPtyExecution directive selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -189,6 +232,7 @@ describe("startPtyExecution directive selection", () => {
     fsMocks.rm.mockResolvedValue(undefined);
     vi.mocked(readConfigValue).mockImplementation(async (_key, fallback) => fallback);
     mockDb.taskExecution.create.mockResolvedValue({ id: "exec1" });
+    mockDb.taskMessage.findMany.mockResolvedValue([]);
     mockDb.cliProfile.findFirst.mockResolvedValue(null);
     vi.mocked(resolveTerminalTargetPlan).mockResolvedValue({
       slot: "terminal",
@@ -263,6 +307,91 @@ describe("startPtyExecution directive selection", () => {
     await startPtyExecution("t1", "");
 
     expect(injectedDirective()).toContain("## About Tower");
+  });
+
+  it("excludes resolved, failed, and stale-lease Workbench batches by structured metadata", async () => {
+    mockDb.task.findUnique.mockResolvedValue(
+      taskWithLabels([{ label: { name: "Tower", isBuiltin: true } }]),
+    );
+    mockDb.taskMessage.findMany.mockResolvedValue([
+      message(
+        "resolved-batch",
+        "RESOLVED_BATCH_MUST_NOT_REPLAY",
+        JSON.stringify({ type: "workbench_event_batch", batchKey: "resolved" }),
+        "SYSTEM",
+      ),
+      message(
+        "failed-batch",
+        "FAILED_STALE_LEASE_MUST_NOT_REPLAY",
+        JSON.stringify({ type: "workbench_event_batch", batchKey: "failed", leaseToken: "stale" }),
+        "SYSTEM",
+      ),
+      message("ordinary", "[Workbench durable event batch] ordinary user text"),
+    ]);
+    const prompts = captureFreshPrompts();
+
+    await startPtyExecution("t1", "");
+
+    expect(prompts[0]).toContain("[Workbench durable event batch] ordinary user text");
+    expect(prompts[0]).not.toContain("RESOLVED_BATCH_MUST_NOT_REPLAY");
+    expect(prompts[0]).not.toContain("FAILED_STALE_LEASE_MUST_NOT_REPLAY");
+  });
+
+  it("continues scanning until it has ten ordinary Workbench messages", async () => {
+    mockDb.task.findUnique.mockResolvedValue(
+      taskWithLabels([{ label: { name: "Tower", isBuiltin: true } }]),
+    );
+    const batchPage = Array.from({ length: 10 }, (_, index) => message(
+      `batch-${index}`,
+      `OLD_BATCH_${index}`,
+      JSON.stringify({ type: "workbench_event_batch", batchKey: `batch-${index}` }),
+      "SYSTEM",
+    ));
+    const ordinaryPage = Array.from({ length: 10 }, (_, index) => message(
+      `ordinary-${index}`,
+      `ORDINARY_CONTEXT_${index}`,
+      null,
+      index % 2 === 0 ? "USER" : "ASSISTANT",
+    ));
+    mockDb.taskMessage.findMany.mockImplementation(async (args) => (
+      args.cursor ? ordinaryPage : batchPage
+    ));
+    const prompts = captureFreshPrompts();
+
+    await startPtyExecution("t1", "");
+
+    expect(mockDb.taskMessage.findMany).toHaveBeenCalledTimes(2);
+    expect(mockDb.taskMessage.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      cursor: { id: "batch-9" },
+      skip: 1,
+      take: 10,
+    }));
+    for (let index = 0; index < 10; index += 1) {
+      expect(prompts[0]).toContain(`ORDINARY_CONTEXT_${index}`);
+      expect(prompts[0]).not.toContain(`OLD_BATCH_${index}`);
+    }
+  });
+
+  it("keeps the ordinary task history query and context behavior unchanged", async () => {
+    mockDb.task.findUnique.mockResolvedValue(taskWithLabels([]));
+    mockDb.taskMessage.findMany.mockResolvedValue([
+      message(
+        "unexpected-batch-metadata",
+        "ORDINARY_TASK_CONTEXT",
+        JSON.stringify({ type: "workbench_event_batch" }),
+        "SYSTEM",
+      ),
+    ]);
+    const prompts = captureFreshPrompts();
+
+    await startPtyExecution("t1", "");
+
+    expect(mockDb.taskMessage.findMany).toHaveBeenCalledWith({
+      where: { taskId: "t1" },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+    expect(prompts[0]).toContain("SYSTEM: ORDINARY_TASK_CONTEXT");
   });
 
   it("marks the execution failed when the PTY cannot be started", async () => {
@@ -842,6 +971,7 @@ describe("startPtyExecution directive selection", () => {
     (fixedTarget.cli.adapter as typeof fixedTarget.cli.adapter & {
       classifySessionFailure: () => { retryableWithFresh: boolean };
     }).classifySessionFailure = () => ({ retryableWithFresh: true });
+    const prompts = captureTargetPrompts(fixedTarget);
     const previous = {
       id: "exec-resume",
       taskId: "t1",
@@ -855,7 +985,18 @@ describe("startPtyExecution directive selection", () => {
       modelId: "claude-model",
       targetId: "target-claude",
     };
-    mockDb.task.findUnique.mockResolvedValue(taskWithLabels([]));
+    mockDb.task.findUnique.mockResolvedValue(
+      taskWithLabels([{ label: { name: "Tower", isBuiltin: true } }]),
+    );
+    mockDb.taskMessage.findMany.mockResolvedValue([
+      message(
+        "old-resolved-batch",
+        "RESUME_FALLBACK_MUST_NOT_REPLAY",
+        JSON.stringify({ type: "workbench_event_batch", batchKey: "old-resolved-batch" }),
+        "SYSTEM",
+      ),
+      message("recent-user", "RESUME_FALLBACK_USER_CONTEXT"),
+    ]);
     mockDb.taskExecution.findFirst.mockResolvedValue(previous);
     mockDb.taskExecution.findUnique.mockResolvedValue({ ...previous, status: "RUNNING" });
     mockDb.taskExecution.update.mockResolvedValue({ ...previous, status: "RUNNING" });
@@ -872,6 +1013,10 @@ describe("startPtyExecution directive selection", () => {
       "claude-model",
       { cwd: process.cwd(), targetId: "target-claude" },
     );
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toBe("");
+    expect(prompts[1]).toContain("RESUME_FALLBACK_USER_CONTEXT");
+    expect(prompts[1]).not.toContain("RESUME_FALLBACK_MUST_NOT_REPLAY");
   });
 
   it("backfills a uniquely mapped legacy execution and never reads the slot", async () => {
