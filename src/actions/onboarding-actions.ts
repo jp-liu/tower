@@ -58,7 +58,10 @@ export async function setOnboardingProgress(step: number): Promise<void> {
   revalidatePath("/", "layout");
 }
 
-export async function completeOnboarding(username?: string, lastStep: number = 4): Promise<void> {
+export async function completeOnboarding(
+  username?: string,
+  lastStep: number = 4
+): Promise<{ workspaceId: string | null }> {
   await db.systemConfig.upsert({
     where: { key: "onboarding.completed" },
     create: { key: "onboarding.completed", value: "true" },
@@ -81,6 +84,12 @@ export async function completeOnboarding(username?: string, lastStep: number = 4
   }
 
   revalidatePath("/", "layout");
+
+  const workspace = await db.workspace.findFirst({
+    orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
+    select: { id: true },
+  });
+  return { workspaceId: workspace?.id ?? null };
 }
 
 export async function setOnboardingExtensions(

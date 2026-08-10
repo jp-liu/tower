@@ -631,7 +631,9 @@ export default function OnboardingPage() {
             {step === 4 && (
               <WizardStepExtensions
                 username={username}
-                onComplete={() => router.replace("/workspaces")}
+                onComplete={(workspaceId) => router.replace(
+                  workspaceId ? `/workspaces/${workspaceId}` : "/workspaces"
+                )}
               />
             )}
         </div>

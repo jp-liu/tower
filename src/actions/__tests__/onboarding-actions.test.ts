@@ -7,6 +7,9 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(),
       upsert: vi.fn(),
     },
+    workspace: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -51,11 +54,15 @@ const mockDb = db as unknown as {
     findMany: ReturnType<typeof vi.fn>;
     upsert: ReturnType<typeof vi.fn>;
   };
+  workspace: {
+    findFirst: ReturnType<typeof vi.fn>;
+  };
 };
 
 describe("onboarding-actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockDb.workspace.findFirst.mockResolvedValue({ id: "workspace-1" });
   });
 
   describe("getOnboardingStatus", () => {
@@ -216,6 +223,30 @@ describe("onboarding-actions", () => {
       await completeOnboarding();
 
       expect(revalidatePath).toHaveBeenCalledWith("/", "layout");
+    });
+
+    it("returns the default workspace so the client can bypass the redirect-only index route", async () => {
+      mockDb.systemConfig.upsert.mockResolvedValue({});
+
+      const result = await completeOnboarding();
+
+      expect(mockDb.workspace.findFirst).toHaveBeenCalledWith({
+        orderBy: [{ order: "asc" }, { updatedAt: "desc" }],
+        select: { id: true },
+      });
+      expect(result).toEqual({ workspaceId: "workspace-1" });
+    });
+
+    it("returns null after completion when no workspace exists", async () => {
+      mockDb.systemConfig.upsert.mockResolvedValue({});
+      mockDb.workspace.findFirst.mockResolvedValueOnce(null);
+
+      const result = await completeOnboarding();
+
+      expect(result).toEqual({ workspaceId: null });
+      expect(mockDb.workspace.findFirst.mock.invocationCallOrder[0]).toBeGreaterThan(
+        mockDb.systemConfig.upsert.mock.invocationCallOrder.at(-1)!
+      );
     });
   });
 

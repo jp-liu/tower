@@ -16,7 +16,11 @@ vi.mock("@/actions/extension-actions", () => ({
 
 vi.mock("@/actions/onboarding-actions", () => ({
   setOnboardingExtensions: vi.fn().mockResolvedValue(undefined),
-  completeOnboarding: vi.fn().mockResolvedValue(undefined),
+  completeOnboarding: vi.fn().mockResolvedValue({ workspaceId: "workspace-1" }),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn() },
 }));
 
 beforeEach(() => {
@@ -47,30 +51,30 @@ describe("WizardStepExtensions", () => {
     });
   });
 
-  it("starts with all checkboxes checked by default", () => {
+  it("starts with all extensions unchecked by default", () => {
     renderStep();
     const checkboxes = screen.getAllByRole("checkbox");
     expect(checkboxes.length).toBe(EXTENSION_COUNT);
     for (const cb of checkboxes) {
-      expect(cb).toBeChecked();
+      expect(cb).not.toBeChecked();
     }
   });
 
-  it("unchecking shows the skip hint", async () => {
-    const user = userEvent.setup();
+  it("shows the skip hint before the user selects an extension", () => {
     renderStep();
-    const checkboxes = screen.getAllByRole("checkbox");
-    await user.click(checkboxes[0]);
     expect(screen.getByText(/设置 → Extensions|Settings → Extensions/i)).toBeInTheDocument();
   });
 
-  it("clicking 完成 with all checked installs all in parallel and completes", async () => {
+  it("installs every extension when the user explicitly selects all", async () => {
     const onComplete = vi.fn();
     const user = userEvent.setup();
     const actions = await import("@/actions/extension-actions");
     const onboarding = await import("@/actions/onboarding-actions");
 
     renderStep(onComplete);
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      await user.click(checkbox);
+    }
     const finishBtn = screen.getByRole("button", { name: /完成|Finish/i });
     await user.click(finishBtn);
 
@@ -81,22 +85,17 @@ describe("WizardStepExtensions", () => {
         expect.arrayContaining(["rg", "monaco"])
       );
       expect(onboarding.completeOnboarding).toHaveBeenCalledWith("tester");
-      expect(onComplete).toHaveBeenCalled();
+      expect(onComplete).toHaveBeenCalledWith("workspace-1");
     });
   });
 
-  it("clicking 跳过并完成 with none checked installs nothing and completes", async () => {
+  it("skips installation and enters the app when nothing is selected", async () => {
     const onComplete = vi.fn();
     const user = userEvent.setup();
     const actions = await import("@/actions/extension-actions");
     const onboarding = await import("@/actions/onboarding-actions");
 
     renderStep(onComplete);
-    // Uncheck all
-    const checkboxes = screen.getAllByRole("checkbox");
-    for (const cb of checkboxes) {
-      await user.click(cb);
-    }
     const finishBtn = screen.getByRole("button", { name: /跳过|Skip/i });
     await user.click(finishBtn);
 
@@ -104,7 +103,44 @@ describe("WizardStepExtensions", () => {
       expect(actions.installExtension).not.toHaveBeenCalled();
       expect(onboarding.setOnboardingExtensions).toHaveBeenCalledWith([], []);
       expect(onboarding.completeOnboarding).toHaveBeenCalledWith("tester");
-      expect(onComplete).toHaveBeenCalled();
+      expect(onComplete).toHaveBeenCalledWith("workspace-1");
+    });
+  });
+
+  it("passes null to the page callback when onboarding completes without a workspace", async () => {
+    const onComplete = vi.fn();
+    const user = userEvent.setup();
+    const onboarding = await import("@/actions/onboarding-actions");
+    vi.mocked(onboarding.completeOnboarding).mockResolvedValueOnce({ workspaceId: null });
+
+    renderStep(onComplete);
+    await user.click(screen.getByRole("button", { name: /跳过|Skip/i }));
+
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalledWith(null);
+    });
+  });
+
+  it("restores the finish action after persistence fails so the user can retry", async () => {
+    const onComplete = vi.fn();
+    const user = userEvent.setup();
+    const onboarding = await import("@/actions/onboarding-actions");
+    const { toast } = await import("sonner");
+    vi.mocked(onboarding.setOnboardingExtensions).mockRejectedValueOnce(new Error("Save failed"));
+
+    renderStep(onComplete);
+    const finishButton = screen.getByRole("button", { name: /跳过|Skip/i });
+    await user.click(finishButton);
+
+    await waitFor(() => {
+      expect(finishButton).toBeEnabled();
+      expect(toast.error).toHaveBeenCalledWith("Save failed");
+      expect(onComplete).not.toHaveBeenCalled();
+    });
+
+    await user.click(finishButton);
+    await waitFor(() => {
+      expect(onComplete).toHaveBeenCalledWith("workspace-1");
     });
   });
 });

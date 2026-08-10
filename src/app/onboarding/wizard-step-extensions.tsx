@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Loader2, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useI18n } from "@/lib/i18n";
@@ -15,22 +16,23 @@ import type { ExtensionId } from "@/lib/extensions/types";
 
 interface WizardStepExtensionsProps {
   username: string;
-  onComplete: () => void;
+  onComplete: (workspaceId: string | null) => void;
 }
 
 export function WizardStepExtensions({ username, onComplete }: WizardStepExtensionsProps) {
   const { t } = useI18n();
   const extensions = listExtensionMetadata();
 
-  // Default: all extensions checked. State is the set of currently-checked ids.
+  // Extensions are opt-in so first-run setup can finish without download cost.
   const [selected, setSelected] = useState<Set<ExtensionId>>(
-    () => new Set(extensions.map((e) => e.id))
+    () => new Set<ExtensionId>()
   );
   const [installing, setInstalling] = useState(false);
+  const submittingRef = useRef(false);
 
   const allCount = extensions.length;
   const selectedCount = selected.size;
-  const someUnchecked = selectedCount < allCount;
+  const hasUnselected = selectedCount < allCount;
 
   const toggle = (id: ExtensionId) => {
     setSelected((prev) => {
@@ -45,33 +47,42 @@ export function WizardStepExtensions({ username, onComplete }: WizardStepExtensi
   };
 
   async function handleFinish() {
+    if (submittingRef.current) return;
+
+    submittingRef.current = true;
     setInstalling(true);
     const requested = Array.from(selected);
     const completed: string[] = [];
 
-    if (requested.length > 0) {
-      // Install in parallel; collect successes
-      const results = await Promise.all(
-        requested.map(async (id) => {
-          try {
-            const result = await installExtension(id);
-            return { id, success: result.success };
-          } catch {
-            return { id, success: false };
-          }
-        })
-      );
-      for (const r of results) {
-        if (r.success) completed.push(r.id);
+    try {
+      if (requested.length > 0) {
+        // Install in parallel; collect successes
+        const results = await Promise.all(
+          requested.map(async (id) => {
+            try {
+              const result = await installExtension(id);
+              return { id, success: result.success };
+            } catch {
+              return { id, success: false };
+            }
+          })
+        );
+        for (const r of results) {
+          if (r.success) completed.push(r.id);
+        }
       }
-    }
 
-    // Persist selections + actual results
-    await setOnboardingExtensions(requested, completed);
-    // Mark onboarding done with username
-    await completeOnboarding(username);
-    setInstalling(false);
-    onComplete();
+      // Persist selections + actual results
+      await setOnboardingExtensions(requested, completed);
+      // Mark onboarding done with username
+      const { workspaceId } = await completeOnboarding(username);
+      onComplete(workspaceId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      submittingRef.current = false;
+      setInstalling(false);
+    }
   }
 
   return (
@@ -129,7 +140,7 @@ export function WizardStepExtensions({ username, onComplete }: WizardStepExtensi
         })}
       </div>
 
-      {someUnchecked && (
+      {hasUnselected && (
         <p className="text-xs text-muted-foreground italic">
           {t("onboarding.step4.skipHint")}
         </p>
