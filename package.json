@@ -1,6 +1,6 @@
 {
   "name": "@tower-org/cli",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "AI Task Orchestration Platform — Kanban + Terminal + Code Editor + MCP",
   "license": "MIT",
   "repository": {

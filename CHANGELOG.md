@@ -5,7 +5,7 @@ section from this file as their release notes.
 
 The format follows Keep a Changelog and versions follow Semantic Versioning.
 
-## [Unreleased]
+## [0.4.1] - 2026-08-10
 
 ### Changed
 
@@ -18,11 +18,28 @@ The format follows Keep a Changelog and versions follow Semantic Versioning.
 - Production Releases publish `install.sh`, `install.ps1`, and `SHA256SUMS` as
   top-level helper assets. The changelog remains the release-notes source, and
   the CMD compatibility wrapper remains inside the Windows portable archive.
+  Installers now report clear download, verification, extraction, and activation
+  progress.
 
 ### Fixed
 
 - GitHub Pages retries use attempt-scoped artifacts, preventing a failed
   deployment retry from colliding with an artifact uploaded by the prior attempt.
+- Fresh Workbench sessions no longer re-inject resolved historical batches and
+  trigger duplicate reviews.
+- Completing a task from Missions now preserves its running execution, terminal,
+  and worktree when a merge conflict occurs, sends resolution instructions to
+  the current agent, and allows completion to be retried after the conflict is
+  resolved.
+- Codex connection checks now use isolated, ephemeral probes with user settings
+  and execution tools disabled, preventing checks from affecting normal sessions.
+- First-run setup keeps optional extensions unselected by default, opens the first
+  workspace directly after completion, and restores the finish action after a
+  save error so setup can be retried.
+- Guided Tour highlights and actions now follow the active primary theme instead
+  of using a fixed amber accent.
+- Development type checks now include Next.js declarations generated under the
+  custom `.next-dev` output directory.
 
 ## [0.4.0] - 2026-08-06
 

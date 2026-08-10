@@ -32,11 +32,11 @@ describe("release asset assembly", () => {
       const name = `tower-portable-${platform}-${arch}.${extension}`;
       writeFileSync(path.join(input, name), `${platform}-${arch}`);
       writeFileSync(path.join(input, `${name}.manifest.json`), JSON.stringify({
-        version: "0.4.0", platform, arch, sourceCommit: commit,
+        version: "0.4.1", platform, arch, sourceCommit: commit,
       }));
     }
     mkdirSync(path.join(input, "npm"));
-    writeFileSync(path.join(input, "npm", "tower-org-cli-0.4.0.tgz"), "npm-pack");
+    writeFileSync(path.join(input, "npm", "tower-org-cli-0.4.1.tgz"), "npm-pack");
 
     const result = assemble(input, output, commit);
     expect(result.copied).toHaveLength(8);
@@ -58,10 +58,10 @@ describe("release asset assembly", () => {
       const name = `tower-portable-${platform}-${arch}.${extension}`;
       writeFileSync(path.join(input, name), `${platform}-${arch}`);
       writeFileSync(path.join(input, `${name}.manifest.json`), JSON.stringify({
-        version: "0.4.0", platform, arch, sourceCommit: commit,
+        version: "0.4.1", platform, arch, sourceCommit: commit,
       }));
     }
-    writeFileSync(path.join(input, "tower-org-cli-0.4.0.tgz"), "npm-pack");
+    writeFileSync(path.join(input, "tower-org-cli-0.4.1.tgz"), "npm-pack");
 
     const result = assemble(input, output, commit, { candidate: {
       ref: "refs/heads/candidate-preview",
@@ -80,7 +80,7 @@ describe("release asset assembly", () => {
       ref: "refs/heads/candidate-preview",
       dispatchRef: "refs/heads/main",
       packageName: "@tower-org/cli",
-      packageVersion: "0.4.0",
+      packageVersion: "0.4.1",
       workflow: { runId: "123456789", runAttempt: "2" },
       generatedAt: "2026-08-05T04:03:02Z",
     });
@@ -96,7 +96,7 @@ describe("release asset assembly", () => {
     expect(notes).toContain("--asset-dir . --verify");
     expect(notes).not.toContain("install.cmd");
     expect(notes).not.toContain("releases/download");
-    expect(notes).toContain("@tower-org/cli@0.4.0");
+    expect(notes).toContain("@tower-org/cli@0.4.1");
   });
 
   it("rejects incomplete or non-UTC Candidate identity", () => {
@@ -126,11 +126,11 @@ describe("release asset assembly", () => {
   it("creates a draft and only publishes it with a final patch", () => {
     let created: Record<string, unknown> | undefined;
     let patched: Record<string, unknown> | undefined;
-    const draft = createRelease("tower-org/tower", "v0.4.0", "a".repeat(40), "notes", (args: string[]) => {
+    const draft = createRelease("tower-org/tower", "v0.4.1", "a".repeat(40), "notes", (args: string[]) => {
       created = JSON.parse(readFileSync(args.at(-1)!, "utf8"));
       return { id: 42, ...created };
     });
-    expect(created).toMatchObject({ tag_name: "v0.4.0", target_commitish: "a".repeat(40), draft: true });
+    expect(created).toMatchObject({ tag_name: "v0.4.1", target_commitish: "a".repeat(40), draft: true });
     publishRelease("tower-org/tower", draft, (args: string[]) => {
       patched = JSON.parse(readFileSync(args.at(-1)!, "utf8"));
       return { ...draft, draft: false };
@@ -140,8 +140,8 @@ describe("release asset assembly", () => {
 
   it("finds an unpublished draft when the public tag endpoint returns 404", () => {
     const error = Object.assign(new Error("missing"), { status: 1, stderr: "HTTP 404: Not Found" });
-    const draft = { id: 42, tag_name: "v0.4.0", draft: true };
-    expect(getRelease("tower-org/tower", "v0.4.0", (args: string[]) => {
+    const draft = { id: 42, tag_name: "v0.4.1", draft: true };
+    expect(getRelease("tower-org/tower", "v0.4.1", (args: string[]) => {
       if (args[1].includes("/releases/tags/")) throw error;
       return [[draft]];
     })).toEqual(draft);
@@ -155,8 +155,8 @@ describe("release asset assembly", () => {
     writeFileSync(path.join(root, "SHA256SUMS"), "checksums\n");
     const uploaded: string[] = [];
     const published: number[] = [];
-    const release = { id: 42, tag_name: "v0.4.0", body: "release notes\n", assets: [], draft: true };
-    publish({ repository: "tower-org/tower", tag: "v0.4.0", commit: "a".repeat(40), assetsDir: root, notesPath }, {
+    const release = { id: 42, tag_name: "v0.4.1", body: "release notes\n", assets: [], draft: true };
+    publish({ repository: "tower-org/tower", tag: "v0.4.1", commit: "a".repeat(40), assetsDir: root, notesPath }, {
       resolveTagCommit: () => "a".repeat(40),
       getRelease: () => null,
       createRelease: () => release,
@@ -179,9 +179,9 @@ describe("release asset assembly", () => {
     writeFileSync(assetPath, "checksums\n");
     const uploaded: string[] = [];
     const published: number[] = [];
-    publish({ repository: "tower-org/tower", tag: "v0.4.0", commit: "a".repeat(40), assetsDir: root, notesPath }, {
+    publish({ repository: "tower-org/tower", tag: "v0.4.1", commit: "a".repeat(40), assetsDir: root, notesPath }, {
       resolveTagCommit: () => "a".repeat(40),
-      getRelease: () => ({ id: 43, tag_name: "v0.4.0", body: "release notes", draft: true, assets: [{ name: "SHA256SUMS" }] }),
+      getRelease: () => ({ id: 43, tag_name: "v0.4.1", body: "release notes", draft: true, assets: [{ name: "SHA256SUMS" }] }),
       verifyExistingAsset: () => sha256(assetPath),
       uploadAsset: (_repository: string, _tag: string, file: string) => uploaded.push(file),
       publishRelease: (_repository: string, draft: { id: number }) => {
@@ -204,9 +204,9 @@ describe("release asset assembly", () => {
     const notesPath = path.join(root, "RELEASE_NOTES.md");
     writeFileSync(notesPath, "release notes\n");
     writeFileSync(path.join(root, "SHA256SUMS"), "checksums\n");
-    expect(() => publish({ repository: "tower-org/tower", tag: "v0.4.0", commit: "a".repeat(40), assetsDir: root, notesPath }, {
+    expect(() => publish({ repository: "tower-org/tower", tag: "v0.4.1", commit: "a".repeat(40), assetsDir: root, notesPath }, {
       resolveTagCommit: () => "a".repeat(40),
-      getRelease: () => ({ tag_name: "v0.4.0", body: "release notes", draft: false, immutable: true, assets: [] }),
+      getRelease: () => ({ tag_name: "v0.4.1", body: "release notes", draft: false, immutable: true, assets: [] }),
       uploadAsset: () => { throw new Error("must not upload"); },
     })).toThrow(/create a new version/);
   });
