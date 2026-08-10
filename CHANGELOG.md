@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to Tower are documented here. Release pages use the matching
-section from this file and attach the complete changelog as an immutable asset.
+section from this file as their release notes.
 
 The format follows Keep a Changelog and versions follow Semantic Versioning.
 
@@ -15,6 +15,9 @@ The format follows Keep a Changelog and versions follow Semantic Versioning.
 - The protected publication job validates and publishes the npm tarball built
   before approval instead of rebuilding the application and rerunning release
   gates.
+- Production Releases publish `install.sh`, `install.ps1`, and `SHA256SUMS` as
+  top-level helper assets. The changelog remains the release-notes source, and
+  the CMD compatibility wrapper remains inside the Windows portable archive.
 
 ### Fixed
 

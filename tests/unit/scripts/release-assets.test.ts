@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,10 +39,10 @@ describe("release asset assembly", () => {
     writeFileSync(path.join(input, "npm", "tower-org-cli-0.4.0.tgz"), "npm-pack");
 
     const result = assemble(input, output, commit);
-    expect(result.copied).toHaveLength(10);
-    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(10);
-    expect(readFileSync(path.join(output, "CHANGELOG.md"), "utf8")).toContain("## [0.4.0]");
-    expect(readFileSync(path.join(output, "install.cmd"), "utf8")).toContain("%~dp0install.ps1");
+    expect(result.copied).toHaveLength(8);
+    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(8);
+    expect(existsSync(path.join(output, "CHANGELOG.md"))).toBe(false);
+    expect(existsSync(path.join(output, "install.cmd"))).toBe(false);
     expect(readFileSync(path.join(output, "RELEASE_NOTES.md"), "utf8"))
       .toContain("Node.js >=22.0.0");
     expect(readFileSync(path.join(output, "RELEASE_NOTES.md"), "utf8"))
@@ -84,8 +84,8 @@ describe("release asset assembly", () => {
       workflow: { runId: "123456789", runAttempt: "2" },
       generatedAt: "2026-08-05T04:03:02Z",
     });
-    expect(result.copied).toHaveLength(16);
-    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(16);
+    expect(result.copied).toHaveLength(14);
+    expect(readFileSync(path.join(output, "SHA256SUMS"), "utf8").trim().split("\n")).toHaveLength(14);
     for (const [platform, arch, extension] of TARGETS) {
       expect(readFileSync(path.join(output, `tower-portable-${platform}-${arch}.${extension}.manifest.json`), "utf8"))
         .toContain(commit);
@@ -94,6 +94,7 @@ describe("release asset assembly", () => {
     expect(notes).toContain("NOT A RELEASE");
     expect(notes).toContain("build identity only");
     expect(notes).toContain("--asset-dir . --verify");
+    expect(notes).not.toContain("install.cmd");
     expect(notes).not.toContain("releases/download");
     expect(notes).toContain("@tower-org/cli@0.4.0");
   });

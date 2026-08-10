@@ -86,14 +86,12 @@ less install.sh
 sh install.sh --no-start
 ```
 
-On Windows, download `install.cmd` beside `install.ps1`. The CMD file only
-forwards arguments to Windows PowerShell:
+On Windows, download and inspect the PowerShell installer:
 
 ```powershell
-Invoke-WebRequest https://github.com/tower-org/tower/releases/latest/download/install.cmd -OutFile install.cmd
 Invoke-WebRequest https://github.com/tower-org/tower/releases/latest/download/install.ps1 -OutFile install.ps1
 Get-Content .\install.ps1
-.\install.cmd -ConfirmNonInteractive -NoStart
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ConfirmNonInteractive -NoStart
 ```
 
 ## Offline, mirror, and recovery options

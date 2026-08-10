@@ -12,7 +12,7 @@ Tower 的正式发布以一个已经推送、不可移动的 `v<version>` tag �
 | 通道 | 入口 | 输出 |
 |---|---|---|
 | Release Candidate | 手动运行 `release-candidate.yml` | 五个平台的 portable 包、manifest、npm pack、校验和、Candidate 元数据和说明；仅作为 workflow artifact |
-| 正式 Release | 推送与包版本一致的 `v<version>` tag | 带 provenance 的 npm 包、GitHub Release、portable 包、安装器、`SHA256SUMS`、`CHANGELOG.md` |
+| 正式 Release | 推送与包版本一致的 `v<version>` tag | 带 provenance 的 npm 包、GitHub Release、portable 包、两种安装器与 `SHA256SUMS` |
 
 ## 正式发布顺序
 
@@ -29,7 +29,7 @@ Tower 的正式发布以一个已经推送、不可移动的 `v<version>` tag �
 
 ## 产物契约
 
-每个正式 Release 包含五个平台包、三个安装入口、npm pack 原件、`SHA256SUMS` 和 `CHANGELOG.md`。GitHub 自动生成的 Source code 压缩包不是 Tower 安装包。
+每个正式 Release 包含五个平台包、`install.sh`、`install.ps1`、npm pack 原件与 `SHA256SUMS`。`CHANGELOG.md` 中对应版本的内容会生成 Release notes，但不再作为重复附件上传。GitHub 自动生成的 Source code 压缩包不是 Tower 安装包。
 
 发布脚本不会覆盖同名但内容不同的远端资产，也不会修改内容不同的既有 Release notes。npm 已成功但 GitHub 上传中断时，恢复流程会比较 npm registry 的 `dist.integrity` 与本次已验证 tarball；只有字节完全一致才继续补齐 GitHub Release。不得复用版本或移动 tag。tag ruleset 保护发布前的 tag，Immutable Releases 保护公开后的 tag 与附件，两者承担不同阶段的防线。
 

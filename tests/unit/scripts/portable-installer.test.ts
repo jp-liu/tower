@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import { isWindows } from "@/lib/platform";
 
@@ -70,7 +70,7 @@ describe.runIf(!isWindows())("portable user installer", () => {
     const digest = createHash("sha256").update(readFileSync(path.join(temp, asset))).digest("hex");
     writeFileSync(path.join(temp, "SHA256SUMS"), `${digest}  ${asset}\n`);
 
-    const output = execFileSync("sh", [
+    const result = spawnSync("sh", [
       path.join(projectRoot, "scripts/install.sh"),
       "--asset-dir", temp,
       "--version", "0.3.1",
@@ -78,7 +78,22 @@ describe.runIf(!isWindows())("portable user installer", () => {
       "--yes",
       "--no-start",
     ], { encoding: "utf8" });
-    expect(output).toContain("Portable Tower payload verified.");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Portable Tower payload verified.");
+    expect(result.stderr).toContain("==> Checking system requirements");
+    expect(result.stderr).toContain("==> Loading local release assets");
+    expect(result.stderr).toContain("==> Verifying download");
+    expect(result.stderr).toContain("==> Extracting Tower");
+    expect(result.stderr).toContain("==> Verifying portable runtime");
+    expect(result.stderr).toContain("Checking bundled runtime");
+  });
+
+  it("shows curl download progress in an interactive terminal", () => {
+    const installer = readFileSync(path.join(projectRoot, "scripts/install.sh"), "utf8");
+    expect(installer).toContain("if [ -t 2 ]");
+    expect(installer).toContain("--progress-bar --show-error");
+    expect(installer).toContain("Package: $ASSET");
+    expect(installer).toContain("Checksums: SHA256SUMS");
   });
 });
 

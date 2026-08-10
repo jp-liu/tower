@@ -83,14 +83,12 @@ less install.sh
 sh install.sh --no-start
 ```
 
-Windows 可以同时下载 `install.cmd` 与 `install.ps1`。两者必须位于同一目录；
-`install.cmd` 只是把参数转发给 Windows PowerShell：
+Windows 下载并审阅 PowerShell 安装器：
 
 ```powershell
-Invoke-WebRequest https://github.com/tower-org/tower/releases/latest/download/install.cmd -OutFile install.cmd
 Invoke-WebRequest https://github.com/tower-org/tower/releases/latest/download/install.ps1 -OutFile install.ps1
 Get-Content .\install.ps1
-.\install.cmd -ConfirmNonInteractive -NoStart
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ConfirmNonInteractive -NoStart
 ```
 
 ## 离线、镜像与恢复

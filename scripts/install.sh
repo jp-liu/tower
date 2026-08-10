@@ -10,6 +10,26 @@ PREFIX=${TOWER_INSTALL_DIR:-"${XDG_DATA_HOME:-$HOME/.local/share}/tower"}
 BIN_DIR=${TOWER_BIN_DIR:-"$HOME/.local/bin"}
 ACTION=install
 
+step() {
+  printf '\n==> %s\n' "$1" >&2
+}
+
+detail() {
+  printf '    %s\n' "$1" >&2
+}
+
+download_file() {
+  label=$1
+  url=$2
+  output=$3
+  detail "$label"
+  if [ -t 2 ]; then
+    curl --proto '=https' --tlsv1.2 -fL --progress-bar --show-error -o "$output" "$url"
+  else
+    curl --proto '=https' --tlsv1.2 -fsSLo "$output" "$url"
+  fi
+}
+
 usage() {
   cat <<'EOF'
 Usage: install.sh [options]
@@ -54,6 +74,7 @@ if [ "$ACTION" = rollback ] || [ "$ACTION" = uninstall ]; then
   exec "$PREFIX/current/install" "--$ACTION" --prefix "$PREFIX" --bin-dir "$BIN_DIR" --yes
 fi
 
+step "Checking system requirements"
 if ! command -v node >/dev/null 2>&1; then
   printf '%s\n' 'TOWER_ERROR=NODE_NOT_FOUND minimum=22.0.0 tested=22|24 action="Install Node.js 22 LTS or newer and retry."' >&2
   exit 1
@@ -72,10 +93,13 @@ esac
 case "$(uname -s)" in Darwin) PLATFORM=darwin ;; Linux) PLATFORM=linux ;; *) printf 'Unsupported OS: %s\n' "$(uname -s)" >&2; exit 1 ;; esac
 case "$(uname -m)" in x86_64|amd64) ARCH=x64 ;; arm64|aarch64) ARCH=arm64 ;; *) printf 'Unsupported architecture: %s\n' "$(uname -m)" >&2; exit 1 ;; esac
 ASSET="tower-portable-$PLATFORM-$ARCH.tar.gz"
+detail "Node $(node --version) | $PLATFORM-$ARCH"
 
 TEMP=$(mktemp -d "${TMPDIR:-/tmp}/tower-install.XXXXXX")
 trap 'rm -rf "$TEMP"' EXIT HUP INT TERM
 if [ -n "$ASSET_DIR" ]; then
+  step "Loading local release assets"
+  detail "$ASSET_DIR/$ASSET"
   cp "$ASSET_DIR/$ASSET" "$TEMP/$ASSET"
   cp "$ASSET_DIR/SHA256SUMS" "$TEMP/SHA256SUMS"
 else
@@ -88,17 +112,21 @@ else
   fi
   case "$DOWNLOAD_BASE" in https://*) ;; *) printf 'Download base must use HTTPS: %s\n' "$DOWNLOAD_BASE" >&2; exit 1 ;; esac
   command -v curl >/dev/null 2>&1 || { printf 'curl is required for online installation.\n' >&2; exit 1; }
-  curl --proto '=https' --tlsv1.2 -fsSLo "$TEMP/$ASSET" "$DOWNLOAD_BASE/$ASSET"
-  curl --proto '=https' --tlsv1.2 -fsSLo "$TEMP/SHA256SUMS" "$DOWNLOAD_BASE/SHA256SUMS"
+  step "Downloading Tower"
+  download_file "Package: $ASSET" "$DOWNLOAD_BASE/$ASSET" "$TEMP/$ASSET"
+  download_file "Checksums: SHA256SUMS" "$DOWNLOAD_BASE/SHA256SUMS" "$TEMP/SHA256SUMS"
 fi
 
+step "Verifying download"
 EXPECTED=$(awk -v name="$ASSET" '$2 == name || $2 == "*" name { print $1 }' "$TEMP/SHA256SUMS")
 [ "${#EXPECTED}" -eq 64 ] || { printf 'No valid checksum for %s\n' "$ASSET" >&2; exit 1; }
 if command -v sha256sum >/dev/null 2>&1; then ACTUAL=$(sha256sum "$TEMP/$ASSET" | awk '{print $1}')
 elif command -v shasum >/dev/null 2>&1; then ACTUAL=$(shasum -a 256 "$TEMP/$ASSET" | awk '{print $1}')
 else ACTUAL=$(openssl dgst -sha256 "$TEMP/$ASSET" | awk '{print $NF}'); fi
 [ "$ACTUAL" = "$EXPECTED" ] || { printf 'SHA-256 mismatch for %s\n' "$ASSET" >&2; exit 1; }
+detail "SHA-256 verified"
 
+step "Extracting Tower"
 tar -tzf "$TEMP/$ASSET" | awk '/^\// || /(^|\/)\.\.($|\/)/ { bad=1 } END { exit bad }' || { printf 'Unsafe archive paths detected.\n' >&2; exit 1; }
 tar -xzf "$TEMP/$ASSET" -C "$TEMP"
 ROOT=$(find "$TEMP" -mindepth 1 -maxdepth 1 -type d -name 'tower-v*' -print)
@@ -110,5 +138,9 @@ if [ "$VERSION" != latest ]; then
 fi
 ACTUAL_TARGET=$(node -p "const m=require(process.argv[1]); m.platform + '-' + m.arch" "$ROOT/portable-manifest.json")
 [ "$ACTUAL_TARGET" = "$PLATFORM-$ARCH" ] || { printf 'Archive target %s does not match this machine %s\n' "$ACTUAL_TARGET" "$PLATFORM-$ARCH" >&2; exit 1; }
-if [ "$ACTION" = verify ]; then exec "$ROOT/install" --verify --prefix "$PREFIX" --bin-dir "$BIN_DIR" --yes; fi
+if [ "$ACTION" = verify ]; then
+  step "Verifying portable runtime"
+  exec "$ROOT/install" --verify --prefix "$PREFIX" --bin-dir "$BIN_DIR" --yes
+fi
+step "Installing Tower"
 exec "$ROOT/install" --prefix "$PREFIX" --bin-dir "$BIN_DIR" --yes --no-start

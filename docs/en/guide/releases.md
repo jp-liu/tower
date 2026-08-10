@@ -12,7 +12,7 @@ A production Tower release is identified by one already-pushed, immutable `v<ver
 | Channel | Entry point | Output |
 |---|---|---|
 | Release Candidate | Manually run `release-candidate.yml` | Five portable targets, manifests, npm pack, checksums, Candidate metadata, and notes as workflow artifacts only |
-| Production Release | Push the `v<version>` tag matching the package version | npm with provenance, GitHub Release, portable archives, installers, `SHA256SUMS`, and `CHANGELOG.md` |
+| Production Release | Push the `v<version>` tag matching the package version | npm with provenance, GitHub Release, portable archives, two installers, and `SHA256SUMS` |
 
 ## Production sequence
 
@@ -29,7 +29,7 @@ A production Tower release is identified by one already-pushed, immutable `v<ver
 
 ## Asset contract
 
-Every production Release includes five portable archives, three installer entry points, the exact npm pack input, `SHA256SUMS`, and `CHANGELOG.md`. GitHub's automatic source archives are not Tower installers.
+Every production Release includes five portable archives, `install.sh`, `install.ps1`, the exact npm pack input, and `SHA256SUMS`. The matching `CHANGELOG.md` section generates the Release notes but is not uploaded as a duplicate asset. GitHub's automatic source archives are not Tower installers.
 
 The publisher never overwrites a same-name asset with different bytes and never edits conflicting existing release notes. If npm succeeds but GitHub upload stops, recovery compares npm registry `dist.integrity` with the verified tarball and continues only when the bytes are identical. Never reuse the version or move the tag. The tag ruleset protects the pre-publication window; Immutable Releases protects the published tag and assets.
 

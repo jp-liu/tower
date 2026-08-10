@@ -6,6 +6,10 @@ INSTALL_ROOT=${TOWER_INSTALL_DIR:-"${XDG_DATA_HOME:-$HOME/.local/share}/tower"}
 BIN_DIR=${TOWER_BIN_DIR:-"$HOME/.local/bin"}
 ACTION=install
 
+step() {
+  printf '    %s\n' "$1" >&2
+}
+
 usage() {
   cat <<'EOF'
 Usage: ./install [--yes] [--prefix DIR] [--bin-dir DIR]
@@ -32,6 +36,7 @@ done
 case "$INSTALL_ROOT" in ""|/|"$HOME") printf 'Unsafe install directory: %s\n' "$INSTALL_ROOT" >&2; exit 1 ;; esac
 
 if [ "$ACTION" = verify ]; then
+  step "Checking bundled runtime"
   "$SOURCE_ROOT/bin/tower" --version
   node -e "const m=require(process.argv[1]); if(m.node.minimum !== '22.0.0') process.exit(1)" "$SOURCE_ROOT/portable-manifest.json"
   printf 'Portable Tower payload verified.\n'
@@ -63,6 +68,7 @@ ARCH=$(node -p "require(process.argv[1]).arch" "$SOURCE_ROOT/portable-manifest.j
 TARGET="$INSTALL_ROOT/versions/$VERSION-$PLATFORM-$ARCH"
 STAGING="$INSTALL_ROOT/.staging-$VERSION-$$"
 
+step "Copying Tower $VERSION application files"
 mkdir -p "$INSTALL_ROOT/versions" "$BIN_DIR"
 : > "$INSTALL_ROOT/.tower-portable-install"
 rm -rf "$STAGING"
@@ -83,6 +89,7 @@ fi
 if [ -n "$old_current" ] && [ "$old_current" != "versions/$VERSION-$PLATFORM-$ARCH" ]; then
   ln -sfn "$old_current" "$INSTALL_ROOT/previous"
 fi
+step "Activating Tower $VERSION"
 ln -sfn "versions/$VERSION-$PLATFORM-$ARCH" "$INSTALL_ROOT/current"
 ln -sfn "$INSTALL_ROOT/current/bin/tower" "$BIN_DIR/tower"
 

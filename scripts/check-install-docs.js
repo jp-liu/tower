@@ -43,12 +43,15 @@ function main() {
     "SHA256SUMS", "tower-portable-darwin-arm64.tar.gz", "tower-portable-darwin-x64.tar.gz",
     "tower-portable-linux-arm64.tar.gz", "tower-portable-linux-x64.tar.gz",
     "tower-portable-windows-x64.tar.gz", "binaries.prisma.sh", "node-pty",
-    "service install", "install.cmd", "--asset-dir", "--download-base", "--rollback",
+    "service install", "--asset-dir", "--download-base", "--rollback",
     "--uninstall", "--verify", "--no-start", "~/.tower", "VERSION=X.Y.Z",
   ];
   for (const relative of docs) {
     const source = fs.readFileSync(path.join(projectRoot, relative), "utf8");
     for (const value of requiredDocText) assertContains(source, value, relative);
+    if (source.includes("releases/latest/download/install.cmd")) {
+      throw new Error(`${relative} must not document install.cmd as a top-level Release asset`);
+    }
     if (!source.includes("NODE_TLS_REJECT_UNAUTHORIZED=0") || !source.includes("strict-ssl=false")) {
       throw new Error(`${relative} must explicitly reject unsafe TLS workarounds`);
     }
