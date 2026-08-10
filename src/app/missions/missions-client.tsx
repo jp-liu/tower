@@ -11,6 +11,14 @@ import { checkWorktreeClean, updateTaskStatus } from "@/actions/task-actions";
 import { TaskMergeConfirmDialog } from "@/components/task/task-merge-confirm-dialog";
 import { MissionCompleteCommitDialog } from "@/components/missions/mission-complete-commit-dialog";
 import {
+  MissionMergeConflictFeedback,
+  type MergeConflictFeedbackState,
+} from "@/components/missions/mission-merge-conflict-feedback";
+import {
+  buildMissionMergeConflictFeedback,
+  submitMissionMergeConflictFeedback,
+} from "@/components/missions/merge-conflict-feedback";
+import {
   GRID_PRESETS,
   DEFAULT_PRESET_ID,
 } from "@/components/missions/grid-layout-presets";
@@ -129,11 +137,13 @@ export function MissionsClient({
     commitLog: string[];
     commitCount: number;
     baseBranch: string;
+    conflictFeedback?: MergeConflictFeedbackState;
   } | null>(null);
   const [commitDialog, setCommitDialog] = useState<{
     execution: ActiveExecutionInfo;
     files: string[];
   } | null>(null);
+  const submittedConflictKeysRef = useRef<Set<string>>(new Set());
   // Ref mirror to avoid stale closures in polling and startFadeOut callbacks
   const removingIdsRef = useRef(removingIds);
   // Keep ref in sync with state
@@ -327,6 +337,38 @@ export function MissionsClient({
       }
     },
     [startFadeOut, t]
+  );
+
+  const handleMergeConflict = useCallback(
+    async (conflict: { taskId: string; baseBranch: string; conflictFiles: string[] }) => {
+      const draft = buildMissionMergeConflictFeedback(conflict);
+      setMergeDialog((current) => current?.execution.taskId === conflict.taskId
+        ? { ...current, conflictFeedback: { status: "sending", message: draft.message } }
+        : current);
+
+      try {
+        const delivered = await submitMissionMergeConflictFeedback({
+          conflict,
+          submittedKeys: submittedConflictKeysRef.current,
+        });
+        setMergeDialog((current) => current?.execution.taskId === conflict.taskId
+          ? { ...current, conflictFeedback: { status: "sent", message: delivered.message } }
+          : current);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setMergeDialog((current) => current?.execution.taskId === conflict.taskId
+          ? {
+              ...current,
+              conflictFeedback: {
+                status: "failed",
+                message: draft.message,
+                error: message,
+              },
+            }
+          : current);
+      }
+    },
+    [],
   );
 
   // handleSessionEnd — terminal exit = natural completion
@@ -648,6 +690,10 @@ export function MissionsClient({
           fileCount={0}
           commitCount={mergeDialog.commitCount}
           commitLog={mergeDialog.commitLog}
+          onMergeConflict={handleMergeConflict}
+          conflictFeedback={mergeDialog.conflictFeedback
+            ? <MissionMergeConflictFeedback feedback={mergeDialog.conflictFeedback} />
+            : null}
           onMergeComplete={() => {
             startFadeOut(mergeDialog.execution.executionId, "completed");
             setMergeDialog(null);

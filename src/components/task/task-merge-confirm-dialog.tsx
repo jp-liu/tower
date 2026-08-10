@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -14,6 +14,12 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { GitMerge, Loader2 } from "lucide-react";
 
+export interface MergeConflictDetails {
+  taskId: string;
+  baseBranch: string;
+  conflictFiles: string[];
+}
+
 interface TaskMergeConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -24,6 +30,8 @@ interface TaskMergeConfirmDialogProps {
   commitCount: number;
   commitLog?: string[];
   onMergeComplete: () => void;
+  onMergeConflict?: (details: MergeConflictDetails) => void | Promise<void>;
+  conflictFeedback?: ReactNode;
 }
 
 export function TaskMergeConfirmDialog({
@@ -35,6 +43,8 @@ export function TaskMergeConfirmDialog({
   commitCount,
   commitLog = [],
   onMergeComplete,
+  onMergeConflict,
+  conflictFeedback,
 }: TaskMergeConfirmDialogProps) {
   const router = useRouter();
   const { t } = useI18n();
@@ -73,7 +83,16 @@ export function TaskMergeConfirmDialog({
         Array.isArray(files) && files.length ? files.join(", ") : t("merge.unknownFiles");
 
       if (res.status === 409) {
-        setErrorMessage(t("merge.conflictFilesError", { files: fileList(data.conflictFiles) }));
+        const conflictFiles = Array.isArray(data.conflictFiles)
+          ? data.conflictFiles.filter((file: unknown): file is string => typeof file === "string")
+          : [];
+        setErrorMessage(t("merge.conflictFilesError", { files: fileList(conflictFiles) }));
+        try {
+          await onMergeConflict?.({ taskId, baseBranch, conflictFiles });
+        } catch {
+          // The caller owns conflict-delivery feedback. Merge remains blocked
+          // and the dialog stays open regardless of that secondary side effect.
+        }
       } else if (res.status === 400 && Array.isArray(data.files)) {
         // WorktreeDirtyError — the only 400 carrying a file list. The route's
         // other 400s (bad id, no base branch, …) fall through to data.error.
@@ -136,6 +155,8 @@ export function TaskMergeConfirmDialog({
               <p className="text-xs text-red-400">{errorMessage}</p>
             </div>
           )}
+
+          {conflictFeedback}
         </div>
 
         <DialogFooter>

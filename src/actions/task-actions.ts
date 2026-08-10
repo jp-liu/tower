@@ -66,21 +66,6 @@ export async function updateTaskStatus(
 ) {
   taskStatusSchema.parse(status);
 
-  // Completing/cancelling a task whose execution is still RUNNING (e.g. Mission
-  // Control's Complete/merge on a live card): finalize the execution
-  // synchronously so getActiveExecutionsAcrossWorkspaces() stops returning it
-  // immediately. Otherwise the PTY's async onExit is the only thing that flips
-  // RUNNING→COMPLETED, and the 4s Missions poll re-adds the just-closed card as
-  // an empty box until it fires. Runs before completeWorktreeReturn so its
-  // COMPLETED-execution lookup (merge-commit recording) also finds this row.
-  // Mirrors stopPtyExecution; the PTY onExit guard then no-ops (status !== RUNNING).
-  if (status === "DONE" || status === "CANCELLED") {
-    await db.taskExecution.updateMany({
-      where: { taskId, status: "RUNNING" },
-      data: { status: "COMPLETED", endedAt: new Date() },
-    });
-  }
-
   // Worktree completion: a worktree task reaching DONE runs the unified return
   // flow (merge into base + tear down worktree) BEFORE the status flip, so a
   // merge conflict / uncommitted changes abort (throw) without marking the task
@@ -105,6 +90,18 @@ export async function updateTaskStatus(
       worktreeCompleted = outcome.completed;
       warning = outcome.warning;
     }
+  }
+
+  // Worktree completion finalizes its live execution after merge and before PTY
+  // teardown, closing the onExit race at that boundary. Direct DONE and
+  // CANCELLED still finalize here before their own PTY teardown. Any worktree
+  // merge failure throws above and reaches neither path, so RUNNING + endedAt
+  // remain untouched.
+  if ((status === "DONE" && !worktreeCompleted) || status === "CANCELLED") {
+    await db.taskExecution.updateMany({
+      where: { taskId, status: "RUNNING" },
+      data: { status: "COMPLETED", endedAt: new Date() },
+    });
   }
 
   const statusData = {

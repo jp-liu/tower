@@ -97,7 +97,7 @@ export async function completeWorktreeReturn(
   }
 
   const latestExecution = await db.taskExecution.findFirst({
-    where: { taskId, status: "COMPLETED" },
+    where: { taskId },
     orderBy: { createdAt: "desc" },
   });
   // The name recorded at creation time is the only truth: a label-based naming
@@ -149,6 +149,9 @@ export async function completeWorktreeReturn(
 
   // Persist mergeCommit/branchTipCommit for the diff archive, and null out
   // worktreePath so it isn't a dangling reference once the dir is removed.
+  // A live execution must become COMPLETED before destroySession: PTY onExit
+  // checks this status and otherwise races the successful Complete flow by
+  // writing the task back to IN_REVIEW.
   if (latestExecution) {
     try {
       await db.taskExecution.update({
@@ -156,11 +159,15 @@ export async function completeWorktreeReturn(
         data: {
           ...(commitHash ? { mergeCommit: commitHash } : {}),
           ...(branchTipCommit ? { branchTipCommit } : {}),
+          ...(latestExecution.status === "RUNNING"
+            ? { status: "COMPLETED" as const, endedAt: new Date() }
+            : {}),
           worktreePath: null,
         },
       });
     } catch (error) {
       log.error("Failed to record merge commit", error, { taskId });
+      if (latestExecution.status === "RUNNING") throw error;
     }
   }
 

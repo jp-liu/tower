@@ -123,7 +123,9 @@ export function checkConflicts(
       .map((line) => {
         // Lines look like: "CONFLICT (content): Merge conflict in path/to/file"
         const match = line.match(/CONFLICT.*?:\s*(.+)$/);
-        return match ? match[1].trim() : line.trim();
+        const detail = match ? match[1].trim() : line.trim();
+        const contentConflict = detail.match(/^Merge conflict in (.+)$/);
+        return contentConflict ? contentConflict[1].trim() : detail;
       })
       .filter(Boolean);
     return { hasConflicts: true, conflictFiles };

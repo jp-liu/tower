@@ -14,7 +14,9 @@ vi.setConfig({ testTimeout: 30_000 });
 // imports so the real merge + worktree teardown run against a real repo without
 // touching a DB, PTY, or the AI overview pipeline.
 const execUpdate = vi.fn();
-let latestExecution: { id: string; worktreeBranch: string } | null;
+const destroySession = vi.hoisted(() => vi.fn());
+const lifecycleEvents: string[] = [];
+let latestExecution: { id: string; worktreeBranch: string; status: string } | null;
 
 vi.mock("@/lib/db", () => ({
   db: {
@@ -24,7 +26,7 @@ vi.mock("@/lib/db", () => ({
     },
   },
 }));
-vi.mock("@/lib/pty/session-store", () => ({ destroySession: vi.fn() }));
+vi.mock("@/lib/pty/session-store", () => ({ destroySession }));
 vi.mock("@/lib/task-overview", () => ({ captureTaskOverview: vi.fn(async () => {}) }));
 
 import { completeWorktreeReturn, WorktreeDirtyError, MergeConflictError } from "@/lib/task-completion";
@@ -74,7 +76,15 @@ describe("completeWorktreeReturn", () => {
   let repo: string;
   beforeEach(() => {
     execUpdate.mockReset();
-    latestExecution = { id: "exec1", worktreeBranch: `task/${TASK_ID}` };
+    destroySession.mockReset();
+    lifecycleEvents.length = 0;
+    execUpdate.mockImplementation(async () => {
+      lifecycleEvents.push("execution-completed");
+    });
+    destroySession.mockImplementation(() => {
+      lifecycleEvents.push("session-destroyed");
+    });
+    latestExecution = { id: "exec1", worktreeBranch: `task/${TASK_ID}`, status: "RUNNING" };
     repo = initRepo();
   });
   afterEach(() => rmSync(repo, { recursive: true, force: true }));
@@ -98,15 +108,23 @@ describe("completeWorktreeReturn", () => {
     expect(branches).toBe("");
     // dangling worktreePath was nulled out on the execution
     expect(execUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ worktreePath: null }) })
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "COMPLETED",
+          endedAt: expect.any(Date),
+          worktreePath: null,
+        }),
+      })
     );
+    expect(destroySession).toHaveBeenCalledWith(TASK_ID);
+    expect(lifecycleEvents).toEqual(["execution-completed", "session-destroyed"]);
   });
 
   it("merges and tears down a branch whose name came from a naming rule", async () => {
     // A label-based rule gave this worktree a custom prefix; the name is only
     // knowable from the execution record, never re-derivable from the taskId.
     const branch = `feat/${TASK_ID}`;
-    latestExecution = { id: "exec1", worktreeBranch: branch };
+    latestExecution = { id: "exec1", worktreeBranch: branch, status: "RUNNING" };
     const wt = addWorktree(repo, true, branch);
 
     const res = await completeWorktreeReturn(TASK_ID, repo, "main");
@@ -125,5 +143,32 @@ describe("completeWorktreeReturn", () => {
 
     await expect(completeWorktreeReturn(TASK_ID, repo, "main")).rejects.toBeInstanceOf(WorktreeDirtyError);
     expect(existsSync(wt)).toBe(true); // not torn down — no data loss
+  });
+
+  it("preserves the live worktree on conflict and completes after the conflict is committed", async () => {
+    const wt = addWorktree(repo, false);
+    writeFileSync(path.join(wt, "a.txt"), "task change\n");
+    execFileSync("git", ["add", "a.txt"], { cwd: wt });
+    execFileSync("git", ["commit", "-qm", "task change"], { cwd: wt });
+
+    writeFileSync(path.join(repo, "a.txt"), "base change\n");
+    execFileSync("git", ["add", "a.txt"], { cwd: repo });
+    execFileSync("git", ["commit", "-qm", "base change"], { cwd: repo });
+
+    await expect(completeWorktreeReturn(TASK_ID, repo, "main"))
+      .rejects.toMatchObject({ conflictFiles: ["a.txt"] });
+    expect(existsSync(wt)).toBe(true);
+    expect(destroySession).not.toHaveBeenCalled();
+    expect(execUpdate).not.toHaveBeenCalled();
+
+    expect(() => execFileSync("git", ["merge", "main"], { cwd: wt })).toThrow();
+    writeFileSync(path.join(wt, "a.txt"), "resolved change\n");
+    execFileSync("git", ["add", "a.txt"], { cwd: wt });
+    execFileSync("git", ["commit", "-qm", "resolve main conflict"], { cwd: wt });
+
+    const result = await completeWorktreeReturn(TASK_ID, repo, "main");
+    expect(result.completed).toBe(true);
+    expect(existsSync(wt)).toBe(false);
+    expect(destroySession).toHaveBeenCalledTimes(1);
   });
 });
