@@ -286,7 +286,20 @@ export class CodexCliAdapter implements CliAdapter {
   }
 
   buildHelloProbe(options: { command: string; cwd: string; prompt: string }): CliProcessSpec {
-    return { command: options.command, args: ["exec", options.prompt], cwd: options.cwd };
+    return {
+      command: options.command,
+      args: [
+        "exec", "--ignore-user-config", "--json", "--skip-git-repo-check", "--ephemeral",
+        "--disable", "shell_tool",
+        "--disable", "unified_exec",
+        "--disable", "web_search",
+        "--disable", "search_tool",
+        ...this.connectionConfigArgs(),
+        "-c", 'model_reasoning_effort="low"',
+        options.prompt,
+      ],
+      cwd: options.cwd,
+    };
   }
 
   classifySessionFailure(input: CliSessionFailureInput): CliSessionFailure {

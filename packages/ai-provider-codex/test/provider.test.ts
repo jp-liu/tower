@@ -74,7 +74,19 @@ describe("Codex provider", () => {
     expect(resumed.args).not.toContain("--append-system-prompt");
     expect(resumed.startsAtInputBoundary).toBe(true);
     expect(adapter.buildHelloProbe({ command: "/bin/codex", cwd: "/work", prompt: "hello" }))
-      .toEqual({ command: "/bin/codex", args: ["exec", "hello"], cwd: "/work" });
+      .toEqual({
+        command: "/bin/codex",
+        args: [
+          "exec", "--ignore-user-config", "--json", "--skip-git-repo-check", "--ephemeral",
+          "--disable", "shell_tool",
+          "--disable", "unified_exec",
+          "--disable", "web_search",
+          "--disable", "search_tool",
+          "-c", 'model_reasoning_effort="low"',
+          "hello",
+        ],
+        cwd: "/work",
+      });
   });
 
   it("uses resume --last and preserves a long quoted prompt without shell syntax", () => {
