@@ -186,7 +186,7 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
 
           {/* Highlight ring around target */}
           <div
-            className="pointer-events-none fixed z-[10001] rounded-lg ring-2 ring-amber-400 ring-offset-2 ring-offset-background"
+            className="pointer-events-none fixed z-[10001] rounded-lg ring-2 ring-primary ring-offset-2 ring-offset-background"
             style={{
               left: targetRect.left - 4,
               top: targetRect.top - 4,
@@ -224,7 +224,7 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
                   <div
                     key={i}
                     className={`h-1.5 w-1.5 rounded-full ${
-                      i === currentStep ? "bg-amber-400" : i < currentStep ? "bg-amber-400/40" : "bg-muted"
+                      i === currentStep ? "bg-primary" : i < currentStep ? "bg-primary/40" : "bg-muted"
                     }`}
                   />
                 ))}
@@ -239,7 +239,7 @@ export function GuidedTour({ onComplete }: GuidedTourProps) {
                   {t("tour.skip" as Parameters<typeof t>[0])}
                 </Button>
                 <Button
-                  className="h-7 px-3 text-xs bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25 hover:bg-amber-500/25"
+                  className="h-7 px-3 text-xs"
                   onClick={handleNext}
                 >
                   {currentStep < TOUR_STEPS.length - 1
